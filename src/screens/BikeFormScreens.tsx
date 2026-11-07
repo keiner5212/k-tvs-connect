@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { PrimaryButton, SegmentedControl, TextField, showConfirm } from '@components/controls';
@@ -44,6 +46,7 @@ export const BikeForm = ({
     }) => Promise<void>;
 }) => {
     const { colors } = useTheme();
+        const insets = useSafeAreaInsets();
     const [nickname, setNickname] = useState(initialNickname ?? '');
     const [model, setModel] = useState<BikeModel>(initialModel ?? 'apache');
     const [frameNumber, setFrameNumber] = useState(initialFrameNumber ?? '');
@@ -108,7 +111,13 @@ export const BikeForm = ({
     };
 
     return (
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: insets.bottom + layout.screenPadding },
+      ]}
+      keyboardShouldPersistTaps="handled"
+    >
             <TextField
                 autoCapitalize="words"
                 label="Name"

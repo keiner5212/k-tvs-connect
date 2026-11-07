@@ -1,10 +1,12 @@
 import { BikeTelemetry } from '@typings/types';
 import { START_BYTE_5A, START_BYTE_9B } from './constants';
 import { frameForDataId } from './frames';
+import { decryptFrame, isValidChecksum } from './protocol';
 
 export interface ParsedFrame {
     dataId: number;
     values: Record<string, number>;
+    checksumValid: boolean;
 }
 
 const readField = (bytes: Uint8Array, start: number, length: number): number => {
@@ -19,10 +21,16 @@ const readField = (bytes: Uint8Array, start: number, length: number): number => 
     return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-export const parseFrame = (bytes: Uint8Array): ParsedFrame | null => {
-    if (bytes.length < 4) {
+export const parseFrame = (raw: Uint8Array): ParsedFrame | null => {
+    if (raw.length < 4) {
         return null;
     }
+
+    const bytes = decryptFrame(raw);
+    if (!bytes) {
+        return null;
+    }
+
     if (bytes[0] !== START_BYTE_5A && bytes[0] !== START_BYTE_9B) {
         return null;
     }
@@ -35,11 +43,11 @@ export const parseFrame = (bytes: Uint8Array): ParsedFrame | null => {
 
     const values: Record<string, number> = {};
     for (const field of spec.fields) {
-        const raw = readField(bytes, field.start, field.length);
-        values[field.name] = field.scale ? raw / field.scale : raw;
+        const value = readField(bytes, field.start, field.length);
+        values[field.name] = field.scale ? value / field.scale : value;
     }
 
-    return { dataId, values };
+    return { dataId, values, checksumValid: isValidChecksum(bytes) };
 };
 
 const SIDE_STAND_BIT = 0x01;

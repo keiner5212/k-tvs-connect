@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
@@ -19,6 +21,7 @@ export const PinScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'Pin'>>();
     const { colors } = useTheme();
+          const insets = useSafeAreaInsets();
     const update = useSettingsStore((state) => state.update);
 
     const [pin, setPinValue] = useState('');
@@ -77,7 +80,13 @@ export const PinScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + layout.screenPadding },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
                 <Text style={[styles.title, { color: colors.foreground }]}>
                     {route.params.mode === 'remove' ? 'Remove pin' : 'Set a pin'}
                 </Text>
@@ -143,6 +152,7 @@ export const PinScreen = () => {
 
 export const ExportDataScreen = () => {
     const { colors } = useTheme();
+          const insets = useSafeAreaInsets();
     const [summary, setSummary] = useState<string | null>(null);
 
     const exportData = async () => {
@@ -163,7 +173,12 @@ export const ExportDataScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + layout.screenPadding },
+        ]}
+      >
                 <Text style={[styles.title, { color: colors.foreground }]}>Export data</Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>
                     Shares a copy of the scooters, routes and rides stored on this device.
@@ -178,6 +193,7 @@ export const ExportDataScreen = () => {
 export const DeleteDataScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
+          const insets = useSafeAreaInsets();
     const [confirmation, setConfirmation] = useState('');
     const [error, setError] = useState<string | null>(null);
 
@@ -196,7 +212,13 @@ export const DeleteDataScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + layout.screenPadding },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
                 <Text style={[styles.title, { color: colors.foreground }]}>Delete all data</Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>
                     This permanently removes every scooter, ride, route and setting on this device.
@@ -216,6 +238,7 @@ export const DeleteDataScreen = () => {
 
 export const PermissionsScreen = () => {
     const { colors } = useTheme();
+          const insets = useSafeAreaInsets();
     const [status, setStatus] = useState<string>('Checking...');
 
     const check = async () => {
@@ -230,7 +253,12 @@ export const PermissionsScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + layout.screenPadding },
+        ]}
+      >
                 <Text style={[styles.title, { color: colors.foreground }]}>Permissions</Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>{status}</Text>
                 <PrimaryButton label="Request permissions" onPress={() => void check()} />

@@ -50,11 +50,14 @@ the bundle.
 
 ## First run on the phone
 
-1. Open the app, go to **Garage** and tap **Add scooter**.
-2. Turn the scooter on and tap **Scan for scooters**. The bike shows up as a
-   bluetooth device, tap it to fill the address. Or type the address yourself.
-3. Fill the name and the frame number, then **Add scooter**.
-4. The scooter becomes the active one. Go to **Dashboard** and turn the ignition
+1. Open the app. The development client shows its own welcome sheet the first
+   time, tap **Continue** to close it.
+2. Go to **Garage** and tap **Add scooter**.
+3. Turn the scooter on and tap **Scan for scooters**. The phone asks for the
+   bluetooth permission the first time. The bike shows up as a bluetooth device,
+   tap it to fill the address. Or type the address yourself.
+4. Fill the name and the frame number, then **Add scooter**.
+5. The scooter becomes the active one. Go to **Dashboard** and turn the ignition
    on: the app connects on its own and the live values start to arrive.
 
 ## Local routing service

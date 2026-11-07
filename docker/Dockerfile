@@ -7,9 +7,9 @@ RUN yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses > /dev/null || true
 RUN sdkmanager --sdk_root=$ANDROID_HOME \
     "platform-tools" \
     "platforms;android-36" \
-    "build-tools;36.0.0" \
-    "ndk;27.1.12297006" \
-    "cmake;3.30.5"
+    "build-tools;35.0.0" \
+    "ndk;27.0.12077973" \
+    "cmake;3.22.1"
 
 WORKDIR /app
 

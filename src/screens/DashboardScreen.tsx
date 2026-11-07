@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { AlertBanner, EmptyState, StaleNotice } from '@components/feedback';
@@ -21,6 +22,7 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 export const DashboardScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const activeBike = useGarageStore((state) => state.bikes.find((bike) => bike.isActive) ?? null);
     const connectionState = useBleStore((state) => state.state);
     const telemetry = useBleStore((state) => state.telemetry);
@@ -109,10 +111,12 @@ export const DashboardScreen = () => {
     if (!activeBike) {
         return (
             <View style={[styles.screen, { backgroundColor: colors.background }]}>
-                <EmptyState
-                    title="No scooter selected"
-                    description="Add a scooter in the Garage to see its live data here."
-                />
+                <View style={{ paddingTop: insets.top + spacing.lg }}>
+                    <EmptyState
+                        title="No scooter selected"
+                        description="Add a scooter in the Garage to see its live data here."
+                    />
+                </View>
             </View>
         );
     }
@@ -128,7 +132,12 @@ export const DashboardScreen = () => {
                 state={connectionState}
             />
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + layout.screenPadding },
+        ]}
+      >
                 {stale && lastUpdateAt ? (
                     <StaleNotice
                         ageSeconds={Math.round((now - lastUpdateAt) / 1000)}

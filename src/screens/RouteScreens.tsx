@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -21,6 +23,7 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 export const PlaceSearchScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
+                const insets = useSafeAreaInsets();
     const { settings } = useSettingsStore();
     const setDestination = useMapStore((state) => state.setDestination);
 
@@ -48,7 +51,13 @@ export const PlaceSearchScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerStyle={[
+                styles.content,
+                { paddingBottom: insets.bottom + layout.screenPadding },
+              ]}
+              keyboardShouldPersistTaps="handled"
+            >
                 <TextField
                     autoCapitalize="words"
                     label="Where to"
@@ -91,6 +100,7 @@ export const PlaceSearchScreen = () => {
 export const SavedRoutesScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
+                    const insets = useSafeAreaInsets();
     const [routes, setRoutes] = useState<SavedRoute[]>([]);
     const [renaming, setRenaming] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
@@ -115,7 +125,12 @@ export const SavedRoutesScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+                contentContainerStyle={[
+                    styles.content,
+                    { paddingBottom: insets.bottom + layout.screenPadding },
+                ]}
+            >
                 <Text style={[styles.title, { color: colors.foreground }]}>Saved routes</Text>
 
                 {routes.length === 0 ? (
@@ -217,6 +232,7 @@ export const RoutePreviewScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'RoutePreview'>>();
     const { colors } = useTheme();
+                    const insets = useSafeAreaInsets();
     const setReplayRoute = useMapStore((state) => state.setReplayRoute);
     const [saved, setSaved] = useState<SavedRoute | null>(null);
 
@@ -229,7 +245,12 @@ export const RoutePreviewScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+                contentContainerStyle={[
+                    styles.content,
+                    { paddingBottom: insets.bottom + layout.screenPadding },
+                ]}
+            >
                 {saved ? (
                     <>
                         <Text style={[styles.title, { color: colors.foreground }]}>{saved.name}</Text>

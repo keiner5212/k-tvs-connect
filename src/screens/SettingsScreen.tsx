@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { SegmentedControl, TextField, showConfirm } from '@components/controls';
@@ -22,6 +23,7 @@ const MAP_STYLES = [
 export const SettingsScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const { settings, load, update } = useSettingsStore();
 
     const [photonUrl, setPhotonUrl] = useState(settings.photonBaseUrl);
@@ -50,7 +52,12 @@ export const SettingsScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + layout.screenPadding },
+        ]}
+      >
                 <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
 
                 <SettingsSection title="Units">

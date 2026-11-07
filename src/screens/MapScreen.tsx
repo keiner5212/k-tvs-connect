@@ -7,6 +7,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AvoidPointList, MapCanvas, RoutePreviewCard } from '@components/map';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@hooks/useTheme';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
@@ -25,6 +26,7 @@ export const MapScreen = () => {
     const { colors } = useTheme();
     const { settings } = useSettingsStore();
     const now = useNow();
+    const insets = useSafeAreaInsets();
     const {
         addAvoidPoint,
         avoidPoints,
@@ -156,7 +158,7 @@ export const MapScreen = () => {
                 zoom={13}
             />
 
-            <View style={styles.toolbar}>
+            <View style={[styles.toolbar, { top: insets.top + spacing.sm }]}>
                 <TouchableOpacity
                     accessibilityLabel="Search for a place"
                     accessibilityRole="button"
@@ -196,7 +198,7 @@ export const MapScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.bottom}>
+            <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.md }]}>
                 {locationError ? <Banner tone="warning" message={locationError} /> : null}
                 {error ? (
                     <Banner
@@ -266,7 +268,6 @@ const styles = StyleSheet.create({
     bottom: {
         bottom: 0,
         left: 0,
-        paddingBottom: spacing.md,
         position: 'absolute',
         right: 0,
     },
@@ -322,7 +323,6 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         position: 'absolute',
         right: layout.screenPadding,
-        top: spacing.xl,
     },
 });
 

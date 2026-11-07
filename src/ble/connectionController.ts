@@ -21,6 +21,8 @@ export class ConnectionController {
 
     private lastDataAt: number | null = null;
 
+    private invalidFrames = 0;
+
     private reconnectAttempt = 0;
 
     private running = false;

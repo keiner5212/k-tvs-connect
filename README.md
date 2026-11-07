@@ -14,6 +14,16 @@ contacted.
 | Storage | expo-sqlite with SQLCipher, the key in the android keystore |
 | Build | debug apk from Docker, no EAS |
 
+## Icon
+
+The launcher icon follows the family of the original app, a green tile with a grid and
+a white glyph, but the glyph is our own: a scooter. The sources are an svg rendered
+with sharp, the output goes to `src/assets/images`.
+
+```sh
+npx expo prebuild --clean    # the native resources need to pick the new assets up
+```
+
 ## Features
 
 - **Garage** with full CRUD: add a scooter by scanning for it or by typing its

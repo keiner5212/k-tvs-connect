@@ -27,6 +27,32 @@ hardcoded and the service uuid is derived on the phone. The older bike families
 server api that needs a login, and their payloads are obfuscated with a xor
 against `0xEA`. Those are not supported yet.
 
+## Encryption
+
+The frame that arrives over ble is **not** the frame the parser sees. The original
+decrypts it first, in `BluetoothUtil.decryptDataForApache`:
+
+```
+out[0]        = in[0]                 the start byte, kept
+out[1]        = in[1]                 the data id, kept
+out[2..n-2]   = in[2..n-2] XOR 0xEA   the payload
+out[n-1]      = 0xFF                  the end byte, the incoming tail is dropped
+```
+
+The key is a constant `0xEA` for the newer families. The legacy families use `0xEB`
+in `BluetoothUtil.decryptData`. Without this step every field reads as noise.
+
+The checksum lives in the second to last slot of the **decrypted** frame. The original
+sums every byte except the last two and requires:
+
+```
+checksum + (sum of the first n-2 bytes) % 256 == 255
+```
+
+so the checksum of a frame is `255 - (sum of the first n-2 bytes) % 256`. The same
+rule builds an outbound packet: payload, then the checksum, then the end byte, then
+the same xor envelope.
+
 ## Frame format
 
 Every frame starts with `0x5A` (the original also accepts `0x9B`), then a data id,
@@ -87,6 +113,7 @@ and falls back to the switch status.
 | File | Role |
 | --- | --- |
 | `src/ble/constants.ts` | uuids, data ids, start bytes, timeouts |
+| `src/ble/protocol.ts` | the xor envelope and the checksum |
 | `src/ble/serviceUuid.ts` | the imei derivation |
 | `src/ble/frames.ts` | the offset tables |
 | `src/ble/parser.ts` | the parser and the telemetry mapping |
@@ -96,13 +123,15 @@ and falls back to the switch status.
 ## Still to confirm
 
 - Whether the newer bikes answer on the imei derived service uuid or only on the
-  hardcoded one. The implementation scans for both.
-- Whether the link is encrypted or paired. The legacy family uses xor obfuscation,
-  the newer one may use a handshake that is not visible in the Java layer.
+  hardcoded one. The implementation scans for both and reads the characteristics of
+  every service it finds, so either works.
 - The exact bit layout of the switch status and the turn indicator fields. The
   port uses bit 1 for the side stand and bits 2 and 4 for the turn signals, taken
   from the original frame model, but the bit order has not been verified against a
   real frame.
+- Whether the bike expects anything else before it starts streaming, for example a
+  handshake packet. The original app writes to the cluster for the phone pairing and
+  the music commands, so a connection may need a first packet from the phone.
 - The frames of the other families, Ntorq, Jupiter, U388 and IQUBE, live in the same
   package with their own tables and are not ported yet.
 

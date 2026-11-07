@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { BikeCard } from '@components/garage';
@@ -17,6 +18,7 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 export const GarageScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const { bikes, load } = useGarageStore();
     const connectionState = useBleStore((state) => state.state);
     const lastUpdateAt = useBleStore((state) => state.lastUpdateAt);
@@ -41,7 +43,7 @@ export const GarageScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <View style={styles.header}>
+            <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
                 <Text style={[styles.title, { color: colors.foreground }]}>Garage</Text>
                 <PrimaryButton
                     label="Add scooter"

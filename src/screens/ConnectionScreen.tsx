@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
@@ -21,6 +23,7 @@ export const ConnectionScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'Connection'>>();
     const { colors } = useTheme();
+        const insets = useSafeAreaInsets();
     const bike = useGarageStore((state) => state.bikes.find((item) => item.id === route.params.bikeId));
     const state = useBleStore((store) => store.state);
     const lastUpdateAt = useBleStore((store) => store.lastUpdateAt);
@@ -55,7 +58,9 @@ export const ConnectionScreen = () => {
                 state={state}
             />
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + layout.screenPadding }]}
+      >
                 <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
                     {`${bike.model} · ${bike.frameNumber}`}
@@ -109,6 +114,7 @@ export const BikeDetailsScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'Connection'>>();
     const { colors } = useTheme();
+        const insets = useSafeAreaInsets();
     const bike = useGarageStore((state) => state.bikes.find((item) => item.id === route.params.bikeId));
 
     if (!bike) {
@@ -121,7 +127,9 @@ export const BikeDetailsScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + layout.screenPadding }]}
+      >
                 <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
                     {`${bike.model} · ${bike.frameNumber}`}
