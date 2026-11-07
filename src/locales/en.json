@@ -1,0 +1,16 @@
+{
+    "home": {
+        "title": "K Tvs Connect",
+        "subtitle": "Connected vehicle companion."
+    },
+    "login": {
+        "title": "Sign in",
+        "phonePlaceholder": "Phone number",
+        "submit": "Continue"
+    },
+    "common": {
+        "cancel": "Cancel",
+        "retry": "Retry",
+        "loading": "Loading"
+    }
+}

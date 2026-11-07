@@ -1,0 +1,64 @@
+{
+    "extends": "expo/tsconfig.base",
+    "compilerOptions": {
+        "jsx": "react-native",
+        "strict": true,
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ],
+            "@ble/*": [
+                "./src/ble/*"
+            ],
+            "@components/*": [
+                "./src/components/*"
+            ],
+            "@hooks/*": [
+                "./src/hooks/*"
+            ],
+            "@screens/*": [
+                "./src/screens/*"
+            ],
+            "@navigation/*": [
+                "./src/navigation/*"
+            ],
+            "@config/*": [
+                "./src/config/*"
+            ],
+            "@stores/*": [
+                "./src/stores/*"
+            ],
+            "@locales/*": [
+                "./src/locales/*"
+            ],
+            "@utils/*": [
+                "./src/utils/*"
+            ],
+            "@services/*": [
+                "./src/services/*"
+            ],
+            "@constants/*": [
+                "./src/constants/*"
+            ],
+            "@contexts/*": [
+                "./src/contexts/*"
+            ],
+            "@typings/*": [
+                "./src/types/*"
+            ]
+        },
+        "types": [
+            "node",
+            "jest"
+        ]
+    },
+    "include": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.d.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        ".tmp"
+    ]
+}
