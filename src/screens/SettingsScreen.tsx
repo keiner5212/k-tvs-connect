@@ -157,18 +157,18 @@ export const SettingsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-    },
     content: {
         padding: layout.screenPadding,
+    },
+    padded: {
+        paddingTop: spacing.md,
+    },
+    screen: {
+        flex: 1,
     },
     title: {
         ...typography.title,
         marginBottom: layout.sectionGap,
-    },
-    padded: {
-        paddingTop: spacing.md,
     },
 });
 

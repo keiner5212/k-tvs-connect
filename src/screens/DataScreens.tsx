@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 
 import { PinDots, PrimaryButton, TextField, showConfirm } from '@components/controls';
 import { EmptyState } from '@components/feedback';
 import { useTheme } from '@hooks/useTheme';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
-import { isPinConfigured, lockoutRemainingMs, removePin, setPin, verifyPin } from '@services/auth/garageLock';
+import { lockoutRemainingMs, removePin, setPin, verifyPin } from '@services/auth/garageLock';
 import { getDatabase } from '@services/db/database';
 import { layout, spacing, typography } from '@config/theme';
 
@@ -16,7 +17,7 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 export const PinScreen = () => {
     const navigation = useNavigation<Navigation>();
-    const route = useRoute<{ params: { mode: 'create' | 'change' | 'remove' } }>();
+    const route = useRoute<RouteProp<RootStackParamList, 'Pin'>>();
     const { colors } = useTheme();
     const update = useSettingsStore((state) => state.update);
 
@@ -201,7 +202,7 @@ export const DeleteDataScreen = () => {
                     This permanently removes every scooter, ride, route and setting on this device.
                 </Text>
                 <TextField
-                    autoCapitalize="characters"
+                    autoCapitalize="none"
                     errorText={error ?? undefined}
                     label="Type DELETE to confirm"
                     onChangeText={setConfirmation}
@@ -242,19 +243,19 @@ export const PermissionsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-    },
     content: {
         padding: layout.screenPadding,
-    },
-    title: {
-        ...typography.title,
-        marginBottom: spacing.sm,
     },
     help: {
         ...typography.body,
         marginBottom: spacing.lg,
         marginTop: spacing.sm,
+    },
+    screen: {
+        flex: 1,
+    },
+    title: {
+        ...typography.title,
+        marginBottom: spacing.sm,
     },
 });

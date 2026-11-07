@@ -86,6 +86,14 @@ export const BikeCard = ({
 };
 
 const styles = StyleSheet.create({
+    activeBadge: {
+        borderRadius: radii.full,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+    },
+    activeLabel: {
+        ...typography.caption,
+    },
     card: {
         borderRadius: radii.lg,
         borderWidth: 1,
@@ -97,36 +105,28 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
     },
-    nickname: {
-        ...typography.subheading,
-    },
-    activeBadge: {
-        borderRadius: radii.full,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: spacing.xs,
-    },
-    activeLabel: {
-        ...typography.caption,
-    },
     meta: {
         ...typography.body,
         marginTop: spacing.xs,
+    },
+    nickname: {
+        ...typography.subheading,
+    },
+    setActive: {
+        justifyContent: 'center',
+        marginTop: spacing.md,
+        minHeight: layout.buttonHeight,
+    },
+    setActiveLabel: {
+        ...typography.label,
+    },
+    status: {
+        ...typography.caption,
     },
     statusRow: {
         alignItems: 'center',
         flexDirection: 'row',
         gap: spacing.sm,
         marginTop: spacing.md,
-    },
-    status: {
-        ...typography.caption,
-    },
-    setActive: {
-        marginTop: spacing.md,
-        minHeight: layout.buttonHeight,
-        justifyContent: 'center',
-    },
-    setActiveLabel: {
-        ...typography.label,
     },
 });

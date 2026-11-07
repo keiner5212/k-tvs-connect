@@ -9,7 +9,7 @@ import { Banner } from '@components/feedback';
 import { useTheme } from '@hooks/useTheme';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
-import { RootStackParamList } from '@typings/types';
+import { Place, RootStackParamList } from '@typings/types';
 import { formatDistance, formatDuration } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -78,22 +78,22 @@ export const MapScreen = () => {
         if (!route || !destination) {
             return;
         }
-        void saveRoute(route, destination.name);
+        void saveRoute(route, destination);
     };
 
     const saveRoute = async (
         result: NonNullable<typeof route>,
-        destinationName: string,
+        target: Place,
     ) => {
         const { insertRoute } = await import('@services/db/routeRepository');
         await insertRoute({
-            name: destinationName,
+            name: target.name,
             originName: position ? 'Current position' : 'Start',
-            destinationName,
-            originLat: position?.[0] ?? destination.latitude,
-            originLon: position?.[1] ?? destination.longitude,
-            destinationLat: destination.latitude,
-            destinationLon: destination.longitude,
+            destinationName: target.name,
+            originLat: position?.[0] ?? target.latitude,
+            originLon: position?.[1] ?? target.longitude,
+            destinationLat: target.latitude,
+            destinationLon: target.longitude,
             distanceMeters: result.distanceMeters,
             durationSeconds: result.durationSeconds,
             geometry: result.geometry,
@@ -175,14 +175,15 @@ export const MapScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    bottom: {
+        bottom: 0,
+        left: 0,
+        paddingBottom: spacing.md,
+        position: 'absolute',
+        right: 0,
+    },
     screen: {
         flex: 1,
-    },
-    toolbar: {
-        gap: spacing.sm,
-        position: 'absolute',
-        right: layout.screenPadding,
-        top: spacing.xl,
     },
     tool: {
         alignItems: 'center',
@@ -196,12 +197,11 @@ const styles = StyleSheet.create({
     toolLabel: {
         ...typography.label,
     },
-    bottom: {
-        bottom: 0,
-        left: 0,
-        paddingBottom: spacing.md,
+    toolbar: {
+        gap: spacing.sm,
         position: 'absolute',
-        right: 0,
+        right: layout.screenPadding,
+        top: spacing.xl,
     },
 });
 

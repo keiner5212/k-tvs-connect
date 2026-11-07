@@ -67,9 +67,6 @@ export const GarageScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-    },
     header: {
         alignItems: 'center',
         flexDirection: 'row',
@@ -77,11 +74,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: layout.screenPadding,
         paddingTop: spacing.xl,
     },
-    title: {
-        ...typography.title,
-    },
     list: {
         padding: layout.screenPadding,
+    },
+    screen: {
+        flex: 1,
+    },
+    title: {
+        ...typography.title,
     },
 });
 

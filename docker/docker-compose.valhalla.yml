@@ -1,0 +1,32 @@
+# Local routing service, no account and no key.
+#
+#   docker compose -f docker/docker-compose.valhalla.yml up -d
+#
+# The first start downloads the region extract and builds the routing tiles,
+# that takes a while. After that the app can use http://127.0.0.1:8002 as the
+# routing url, and http://localhost:8002 for the tile server on port 8002.
+
+services:
+    valhalla:
+        image: ghcr.io/valhalla/valhalla-scripted:latest
+        container_name: valhalla
+        ports:
+            - "8002:8002"
+        environment:
+            - tile_urls=https://download.geofabrik.de/south-america/colombia-latest.osm.pbf
+            - serve_tiles=True
+            - serve_tiles_ogr=True
+        volumes:
+            - custom_files:/custom_files
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -s http://localhost:8002/status | grep -q 'available'",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 20
+
+volumes:
+    custom_files:

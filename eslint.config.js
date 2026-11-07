@@ -75,11 +75,24 @@ module.exports = [
             'react/prop-types': 'off',
             'react-native/no-raw-text': 'off',
             'react-native/no-inline-styles': 'off',
+            'no-console': 'error',
         },
         settings: {
             react: {
                 version: 'detect',
             },
+        },
+    },
+    {
+        files: ['src/ble/**/*.ts'],
+        rules: {
+            'react-native/split-platform-components': 'off',
+        },
+    },
+    {
+        files: ['src/utils/logger.ts'],
+        rules: {
+            'no-console': 'off',
         },
     },
 ];

@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { AlertBanner, EmptyState, StaleNotice } from '@components/feedback';
 import { ConnectionRail, MetricTile, SpeedGauge } from '@components/dashboard';
+import { useNow } from '@hooks/useNow';
 import { useTheme } from '@hooks/useTheme';
 import { useBleStore } from '@stores/bleStore';
 import { useGarageStore } from '@stores/garageStore';
@@ -24,6 +25,7 @@ export const DashboardScreen = () => {
     const telemetry = useBleStore((state) => state.telemetry);
     const lastUpdateAt = useBleStore((state) => state.lastUpdateAt);
     const { settings } = useSettingsStore();
+    const now = useNow();
 
     useEffect(() => {
         const unbind = useBleStore.getState().bind();
@@ -106,7 +108,7 @@ export const DashboardScreen = () => {
         );
     }
 
-    const stale = isStale(lastUpdateAt);
+    const stale = isStale(lastUpdateAt, now);
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -120,7 +122,7 @@ export const DashboardScreen = () => {
             <ScrollView contentContainerStyle={styles.content}>
                 {stale && lastUpdateAt ? (
                     <StaleNotice
-                        ageSeconds={Math.round((Date.now() - lastUpdateAt) / 1000)}
+                        ageSeconds={Math.round((now - lastUpdateAt) / 1000)}
                         onRetry={() => void connectionController.reconnectNow()}
                     />
                 ) : null}
@@ -174,7 +176,7 @@ export const DashboardScreen = () => {
                 </View>
 
                 <Text style={[styles.footer, { color: colors.mutedForeground }]}>
-                    {`Last update ${formatAge(lastUpdateAt)}`}
+                    {`Last update ${formatAge(lastUpdateAt, now)}`}
                 </Text>
             </ScrollView>
         </View>
@@ -182,21 +184,21 @@ export const DashboardScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-    },
     content: {
         padding: layout.screenPadding,
+    },
+    footer: {
+        ...typography.caption,
+        marginTop: spacing.lg,
+        textAlign: 'center',
     },
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: spacing.md,
     },
-    footer: {
-        ...typography.caption,
-        marginTop: spacing.lg,
-        textAlign: 'center',
+    screen: {
+        flex: 1,
     },
 });
 

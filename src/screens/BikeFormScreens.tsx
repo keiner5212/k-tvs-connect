@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -12,7 +12,7 @@ import { BleService, DiscoveredDevice } from '@ble/bleService';
 import { BLE_SERVICE_UUIDS } from '@ble/constants';
 import { serviceUuidCandidates } from '@ble/serviceUuid';
 import { isValidMac, normalizeMac } from '@services/db/bikeRepository';
-import { layout, radii, spacing, typography } from '@config/theme';
+import { layout, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
@@ -126,14 +126,14 @@ export const BikeForm = ({
             </View>
 
             <TextField
-                autoCapitalize="characters"
+                autoCapitalize="none"
                 label="Frame number"
                 onChangeText={setFrameNumber}
                 value={frameNumber}
             />
 
             <TextField
-                autoCapitalize="characters"
+                autoCapitalize="none"
                 errorText={error ?? undefined}
                 label="Bluetooth address"
                 onChangeText={setMac}
@@ -231,11 +231,22 @@ export const EditBikeScreen = ({ route }: { route: { params: { bikeId: string } 
 };
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-    },
     content: {
         padding: layout.screenPadding,
+    },
+    found: {
+        marginTop: spacing.md,
+    },
+    foundMac: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
+    foundName: {
+        ...typography.body,
+    },
+    foundRow: {
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        paddingVertical: spacing.md,
     },
     label: {
         ...typography.label,
@@ -244,25 +255,11 @@ const styles = StyleSheet.create({
     modelWrap: {
         marginBottom: spacing.lg,
     },
-    found: {
-        marginTop: spacing.md,
-    },
-    foundRow: {
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        paddingVertical: spacing.md,
-    },
-    foundName: {
-        ...typography.body,
-    },
-    foundMac: {
-        ...typography.caption,
-        marginTop: spacing.xs,
+    screen: {
+        flex: 1,
     },
     submit: {
         marginTop: spacing.xl,
-    },
-    radius: {
-        borderRadius: radii.md,
     },
 });
 

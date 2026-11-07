@@ -148,6 +148,33 @@ export const SpeedGauge = ({ value, unit, overspeedLimitKmh, isStale }: SpeedGau
 };
 
 const styles = StyleSheet.create({
+    gauge: {
+        marginBottom: spacing.lg,
+    },
+    gaugeFill: {
+        height: spacing.xs,
+    },
+    gaugeTrack: {
+        borderRadius: radii.full,
+        height: spacing.xs,
+        marginTop: spacing.md,
+        overflow: 'hidden',
+    },
+    gaugeUnit: {
+        ...typography.label,
+    },
+    gaugeValue: {
+        ...typography.metric,
+    },
+    gaugeValueRow: {
+        alignItems: 'baseline',
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    gaugeWarning: {
+        ...typography.caption,
+        marginTop: spacing.sm,
+    },
     rail: {
         alignItems: 'center',
         borderBottomWidth: 1,
@@ -157,71 +184,44 @@ const styles = StyleSheet.create({
         paddingHorizontal: layout.screenPadding,
         paddingVertical: spacing.md,
     },
+    railCaption: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
     railText: {
         flex: 1,
     },
     railTitle: {
         ...typography.label,
     },
-    railCaption: {
-        ...typography.caption,
-        marginTop: spacing.xs,
+    stale: {
+        opacity: 0.6,
     },
     tile: {
         borderRadius: radii.lg,
         borderWidth: 1,
-        flexGrow: 1,
         flexBasis: '46%',
+        flexGrow: 1,
         minHeight: 88,
         padding: layout.cardPadding,
-    },
-    tileLabel: {
-        ...typography.caption,
-    },
-    tileValueRow: {
-        alignItems: 'baseline',
-        flexDirection: 'row',
-        gap: spacing.xs,
-        marginTop: spacing.sm,
-    },
-    tileValue: {
-        ...typography.readout,
-    },
-    tileUnit: {
-        ...typography.caption,
     },
     tileHint: {
         ...typography.caption,
         marginTop: spacing.xs,
     },
-    stale: {
-        opacity: 0.6,
+    tileLabel: {
+        ...typography.caption,
     },
-    gauge: {
-        marginBottom: spacing.lg,
+    tileUnit: {
+        ...typography.caption,
     },
-    gaugeValueRow: {
+    tileValue: {
+        ...typography.readout,
+    },
+    tileValueRow: {
         alignItems: 'baseline',
         flexDirection: 'row',
-        gap: spacing.sm,
-    },
-    gaugeValue: {
-        ...typography.metric,
-    },
-    gaugeUnit: {
-        ...typography.label,
-    },
-    gaugeTrack: {
-        borderRadius: radii.full,
-        height: spacing.xs,
-        marginTop: spacing.md,
-        overflow: 'hidden',
-    },
-    gaugeFill: {
-        height: spacing.xs,
-    },
-    gaugeWarning: {
-        ...typography.caption,
+        gap: spacing.xs,
         marginTop: spacing.sm,
     },
 });

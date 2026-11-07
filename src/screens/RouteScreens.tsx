@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 
 import { PlaceSearchList } from '@components/map';
 import { EmptyState } from '@components/feedback';
@@ -28,7 +29,6 @@ export const PlaceSearchScreen = () => {
 
     useEffect(() => {
         if (query.trim().length < 3) {
-            setResults([]);
             return;
         }
 
@@ -73,7 +73,7 @@ export const PlaceSearchScreen = () => {
                             navigation.goBack();
                         }
                     }}
-                    results={results}
+                    results={query.trim().length >= 3 ? results : []}
                 />
 
                 <View style={styles.footer}>
@@ -134,7 +134,7 @@ export const SavedRoutesScreen = () => {
 export const RoutePreviewScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
-    const route = useRoute<{ params: { routeId: string } }>();
+    const route = useRoute<RouteProp<RootStackParamList, 'RoutePreview'>>();
     const [summary, setSummary] = useState<{ name: string; distanceMeters: number; durationSeconds: number } | null>(null);
 
     useEffect(() => {
@@ -174,22 +174,18 @@ export const RoutePreviewScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-    },
     content: {
         padding: layout.screenPadding,
-    },
-    title: {
-        ...typography.title,
-        marginBottom: spacing.sm,
-    },
-    meta: {
-        ...typography.body,
     },
     error: {
         ...typography.caption,
         marginBottom: spacing.md,
+    },
+    footer: {
+        marginTop: layout.sectionGap,
+    },
+    meta: {
+        ...typography.body,
     },
     routeRow: {
         ...typography.body,
@@ -197,7 +193,11 @@ const styles = StyleSheet.create({
         minHeight: 56,
         paddingVertical: spacing.md,
     },
-    footer: {
-        marginTop: layout.sectionGap,
+    screen: {
+        flex: 1,
+    },
+    title: {
+        ...typography.title,
+        marginBottom: spacing.sm,
     },
 });

@@ -166,74 +166,6 @@ export const SettingsChoice = ({ label, description, selected, onSelect }: Setti
 export const unitLabel = (unit: UnitSystem): string => (unit === 'imperial' ? 'Miles' : 'Kilometres');
 
 const styles = StyleSheet.create({
-    section: {
-        marginBottom: layout.sectionGap,
-    },
-    sectionTitle: {
-        ...typography.label,
-        letterSpacing: 0.08,
-        marginBottom: spacing.md,
-        textTransform: 'uppercase',
-    },
-    sectionBody: {
-        borderRadius: radii.lg,
-        borderWidth: 1,
-        overflow: 'hidden',
-        paddingHorizontal: layout.cardPadding,
-    },
-    footer: {
-        ...typography.caption,
-        marginTop: spacing.sm,
-    },
-    row: {
-        alignItems: 'center',
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        flexDirection: 'row',
-        gap: spacing.md,
-        minHeight: 48,
-        paddingVertical: spacing.sm,
-    },
-    rowText: {
-        flex: 1,
-    },
-    rowLabel: {
-        ...typography.body,
-    },
-    rowDescription: {
-        ...typography.caption,
-        marginTop: spacing.xs,
-    },
-    rowValue: {
-        ...typography.body,
-    },
-    stepperRow: {
-        alignItems: 'center',
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        minHeight: 56,
-        paddingVertical: spacing.sm,
-    },
-    stepperControls: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: spacing.md,
-    },
-    stepperButton: {
-        alignItems: 'center',
-        borderRadius: radii.md,
-        height: 44,
-        justifyContent: 'center',
-        width: 44,
-    },
-    stepperSymbol: {
-        ...typography.heading,
-    },
-    stepperValue: {
-        ...typography.heading,
-        minWidth: 72,
-        textAlign: 'center',
-    },
     choice: {
         alignItems: 'center',
         borderBottomWidth: StyleSheet.hairlineWidth,
@@ -241,6 +173,10 @@ const styles = StyleSheet.create({
         gap: spacing.md,
         minHeight: 56,
         paddingVertical: spacing.sm,
+    },
+    footer: {
+        ...typography.caption,
+        marginTop: spacing.sm,
     },
     radio: {
         alignItems: 'center',
@@ -254,5 +190,69 @@ const styles = StyleSheet.create({
         borderRadius: radii.full,
         height: 10,
         width: 10,
+    },
+    row: {
+        alignItems: 'center',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        flexDirection: 'row',
+        gap: spacing.md,
+        minHeight: 48,
+        paddingVertical: spacing.sm,
+    },
+    rowDescription: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
+    rowLabel: {
+        ...typography.body,
+    },
+    rowText: {
+        flex: 1,
+    },
+    rowValue: {
+        ...typography.body,
+    },
+    section: {
+        marginBottom: layout.sectionGap,
+    },
+    sectionBody: {
+        borderRadius: radii.lg,
+        borderWidth: 1,
+        overflow: 'hidden',
+        paddingHorizontal: layout.cardPadding,
+    },
+    sectionTitle: {
+        ...typography.label,
+        letterSpacing: 0.08,
+        marginBottom: spacing.md,
+        textTransform: 'uppercase',
+    },
+    stepperButton: {
+        alignItems: 'center',
+        borderRadius: radii.md,
+        height: 44,
+        justifyContent: 'center',
+        width: 44,
+    },
+    stepperControls: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+    },
+    stepperRow: {
+        alignItems: 'center',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        minHeight: 56,
+        paddingVertical: spacing.sm,
+    },
+    stepperSymbol: {
+        ...typography.heading,
+    },
+    stepperValue: {
+        ...typography.heading,
+        minWidth: 72,
+        textAlign: 'center',
     },
 });

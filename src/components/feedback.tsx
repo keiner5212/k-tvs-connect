@@ -53,6 +53,15 @@ export const EmptyState = ({ title, description, actionLabel, onAction }: EmptyS
             {description ? (
                 <Text style={[styles.description, { color: colors.mutedForeground }]}>{description}</Text>
             ) : null}
+            {actionLabel && onAction ? (
+                <Text
+                    accessibilityRole="button"
+                    onPress={onAction}
+                    style={[styles.action, { color: colors.primary }]}
+                >
+                    {actionLabel}
+                </Text>
+            ) : null}
         </View>
     );
 };
@@ -166,26 +175,16 @@ export const AlertBanner = ({ alerts }: AlertBannerProps) => {
 };
 
 const styles = StyleSheet.create({
-    dot: {
-        borderRadius: radii.full,
-    },
-    centered: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: spacing.xl,
-    },
-    title: {
-        ...typography.heading,
-        marginBottom: spacing.sm,
-        textAlign: 'center',
-    },
-    description: {
-        ...typography.body,
-        textAlign: 'center',
-    },
     action: {
         ...typography.label,
         marginTop: spacing.md,
+    },
+    alertList: {
+        marginBottom: spacing.md,
+    },
+    alertTitle: {
+        ...typography.label,
+        marginBottom: spacing.xs,
     },
     banner: {
         borderLeftWidth: 3,
@@ -196,11 +195,21 @@ const styles = StyleSheet.create({
     bannerText: {
         ...typography.body,
     },
-    alertTitle: {
-        ...typography.label,
-        marginBottom: spacing.xs,
+    centered: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: spacing.xl,
     },
-    alertList: {
-        marginBottom: spacing.md,
+    description: {
+        ...typography.body,
+        textAlign: 'center',
+    },
+    dot: {
+        borderRadius: radii.full,
+    },
+    title: {
+        ...typography.heading,
+        marginBottom: spacing.sm,
+        textAlign: 'center',
     },
 });

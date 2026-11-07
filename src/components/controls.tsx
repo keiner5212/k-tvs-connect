@@ -238,10 +238,17 @@ const styles = StyleSheet.create({
         height: layout.inputHeight,
         paddingHorizontal: layout.cardPadding,
     },
-    segmentTrack: {
+    pinDot: {
         borderRadius: radii.full,
+        borderWidth: 1,
+        height: 12,
+        marginHorizontal: spacing.xs,
+        width: 12,
+    },
+    pinRow: {
         flexDirection: 'row',
-        padding: spacing.xs,
+        justifyContent: 'center',
+        marginVertical: spacing.lg,
     },
     segment: {
         alignItems: 'center',
@@ -252,16 +259,9 @@ const styles = StyleSheet.create({
     segmentLabel: {
         ...typography.label,
     },
-    pinRow: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginVertical: spacing.lg,
-    },
-    pinDot: {
+    segmentTrack: {
         borderRadius: radii.full,
-        borderWidth: 1,
-        height: 12,
-        marginHorizontal: spacing.xs,
-        width: 12,
+        flexDirection: 'row',
+        padding: spacing.xs,
     },
 });

@@ -55,7 +55,8 @@ export const MapCanvas = ({
             onLongPress={
                 onLongPress
                     ? (feature: GeoJSON.Feature) => {
-                        const coordinates = feature.geometry?.coordinates ?? [];
+                        const geometry = feature.geometry as GeoJSON.Point | undefined;
+                        const coordinates = geometry?.coordinates ?? [];
                         if (coordinates.length >= 2) {
                             onLongPress(coordinates[1], coordinates[0]);
                         }
@@ -130,7 +131,6 @@ interface RoutePreviewCardProps {
 
 export const RoutePreviewCard = ({
     distanceMeters,
-    durationSeconds,
     distanceLabel,
     durationLabel,
     isComputing,
@@ -266,61 +266,6 @@ export const PlaceSearchList = ({ results, isSearching, onSelect }: PlaceSearchL
 };
 
 const styles = StyleSheet.create({
-    map: {
-        flex: 1,
-    },
-    pin: {
-        alignItems: 'center',
-        borderRadius: radii.full,
-        height: 28,
-        justifyContent: 'center',
-        width: 28,
-    },
-    pinLabel: {
-        ...typography.caption,
-        fontWeight: '700',
-    },
-    avoidPin: {
-        alignItems: 'center',
-        borderRadius: radii.full,
-        height: 24,
-        justifyContent: 'center',
-        width: 24,
-    },
-    avoidPinLabel: {
-        ...typography.caption,
-        fontWeight: '700',
-    },
-    card: {
-        borderRadius: radii.lg,
-        borderWidth: 1,
-        marginHorizontal: layout.screenPadding,
-        marginTop: spacing.sm,
-        padding: layout.cardPadding,
-    },
-    summaryRow: {
-        alignItems: 'baseline',
-        flexDirection: 'row',
-        gap: spacing.md,
-    },
-    distance: {
-        ...typography.readout,
-    },
-    duration: {
-        ...typography.body,
-    },
-    computing: {
-        ...typography.body,
-    },
-    error: {
-        ...typography.caption,
-        marginTop: spacing.sm,
-    },
-    actions: {
-        flexDirection: 'row',
-        gap: spacing.sm,
-        marginTop: spacing.md,
-    },
     action: {
         alignItems: 'center',
         borderRadius: radii.md,
@@ -331,22 +276,10 @@ const styles = StyleSheet.create({
     actionLabel: {
         ...typography.button,
     },
-    avoidHeader: {
-        alignItems: 'center',
+    actions: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    avoidTitle: {
-        ...typography.label,
-    },
-    clearAll: {
-        ...typography.caption,
-    },
-    avoidRow: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: spacing.md,
-        minHeight: layout.buttonHeight,
+        gap: spacing.sm,
+        marginTop: spacing.md,
     },
     avoidBadge: {
         alignItems: 'center',
@@ -363,6 +296,80 @@ const styles = StyleSheet.create({
         ...typography.caption,
         flex: 1,
     },
+    avoidHeader: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    avoidPin: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        height: 24,
+        justifyContent: 'center',
+        width: 24,
+    },
+    avoidPinLabel: {
+        ...typography.caption,
+        fontWeight: '700',
+    },
+    avoidRow: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+        minHeight: layout.buttonHeight,
+    },
+    avoidTitle: {
+        ...typography.label,
+    },
+    card: {
+        borderRadius: radii.lg,
+        borderWidth: 1,
+        marginHorizontal: layout.screenPadding,
+        marginTop: spacing.sm,
+        padding: layout.cardPadding,
+    },
+    clearAll: {
+        ...typography.caption,
+    },
+    computing: {
+        ...typography.body,
+    },
+    distance: {
+        ...typography.readout,
+    },
+    duration: {
+        ...typography.body,
+    },
+    error: {
+        ...typography.caption,
+        marginTop: spacing.sm,
+    },
+    map: {
+        flex: 1,
+    },
+    pin: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        height: 28,
+        justifyContent: 'center',
+        width: 28,
+    },
+    pinLabel: {
+        ...typography.caption,
+        fontWeight: '700',
+    },
+    placeAddress: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
+    placeName: {
+        ...typography.body,
+    },
+    placeRow: {
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        minHeight: 56,
+        paddingVertical: spacing.sm,
+    },
     removeButton: {
         justifyContent: 'center',
         minHeight: layout.buttonHeight,
@@ -375,16 +382,9 @@ const styles = StyleSheet.create({
         ...typography.body,
         padding: layout.cardPadding,
     },
-    placeRow: {
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        minHeight: 56,
-        paddingVertical: spacing.sm,
-    },
-    placeName: {
-        ...typography.body,
-    },
-    placeAddress: {
-        ...typography.caption,
-        marginTop: spacing.xs,
+    summaryRow: {
+        alignItems: 'baseline',
+        flexDirection: 'row',
+        gap: spacing.md,
     },
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 
 import { PrimaryButton, showConfirm } from '@components/controls';
 import { EmptyState } from '@components/feedback';
@@ -18,7 +19,7 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 export const ConnectionScreen = () => {
     const navigation = useNavigation<Navigation>();
-    const route = useRoute<{ params: { bikeId: string } }>();
+    const route = useRoute<RouteProp<RootStackParamList, 'Connection'>>();
     const { colors } = useTheme();
     const bike = useGarageStore((state) => state.bikes.find((item) => item.id === route.params.bikeId));
     const state = useBleStore((store) => store.state);
@@ -106,7 +107,7 @@ export const ConnectionScreen = () => {
 
 export const BikeDetailsScreen = () => {
     const navigation = useNavigation<Navigation>();
-    const route = useRoute<{ params: { bikeId: string } }>();
+    const route = useRoute<RouteProp<RootStackParamList, 'Connection'>>();
     const { colors } = useTheme();
     const bike = useGarageStore((state) => state.bikes.find((item) => item.id === route.params.bikeId));
 
@@ -149,27 +150,27 @@ export const BikeDetailsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
+    actions: {
+        gap: spacing.md,
+        marginTop: layout.sectionGap,
     },
     content: {
         padding: layout.screenPadding,
-    },
-    title: {
-        ...typography.title,
-        marginBottom: spacing.sm,
     },
     meta: {
         ...typography.body,
         marginBottom: spacing.xs,
     },
+    screen: {
+        flex: 1,
+    },
+    title: {
+        ...typography.title,
+        marginBottom: spacing.sm,
+    },
     warning: {
         ...typography.caption,
         marginTop: spacing.md,
-    },
-    actions: {
-        gap: spacing.md,
-        marginTop: layout.sectionGap,
     },
 });
 
