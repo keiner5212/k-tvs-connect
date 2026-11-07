@@ -50,29 +50,3 @@ export const searchPlaces = async (
         latitude: feature.geometry.coordinates[1],
     }));
 };
-
-export const reverseGeocode = async (
-    baseUrl: string,
-    latitude: number,
-    longitude: number,
-): Promise<Place | null> => {
-    const url = `${baseUrl.replace(/\/$/, '')}/reverse?lon=${longitude}&lat=${latitude}`;
-    const { body } = await httpGetJson<PhotonResponse>(url, {
-        service: 'photon',
-        minIntervalMs: 1000,
-        maxBytes: 512 * 1024,
-    });
-
-    const feature = body.features?.[0];
-    if (!feature) {
-        return null;
-    }
-
-    return {
-        id: `${feature.properties.osm_id ?? 0}`,
-        name: feature.properties.name || 'Current position',
-        address: buildAddress(feature.properties),
-        longitude: feature.geometry.coordinates[0],
-        latitude: feature.geometry.coordinates[1],
-    };
-};

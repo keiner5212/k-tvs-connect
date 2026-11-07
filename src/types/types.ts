@@ -84,6 +84,8 @@ export interface BikeTelemetry {
     odometerKm: number;
     tripDistanceKm: number;
     tripTimeSeconds: number;
+    tripMileage: number;
+    tripFuel: number;
     averageSpeedKmh: number;
     topSpeedKmh: number;
     throttlePercent: number;
@@ -91,8 +93,17 @@ export interface BikeTelemetry {
     gearPosition: number;
     sideStandDown: boolean;
     turnSignal: 'none' | 'left' | 'right';
+    turnSignalStatus: number;
     vehicleState: number;
     switchStatus: number;
+    overspeedThreshold: number;
+    engineTemperature: number;
+    intakeAirTemperature: number;
+    cruisingRange: number;
+    lapNumber: number;
+    lapTimeMs: number;
+    bestLapNumber: number;
+    bestLapMs: number;
     latitude: number | null;
     longitude: number | null;
     frameNumber: string | null;

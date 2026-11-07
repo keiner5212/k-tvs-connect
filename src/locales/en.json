@@ -1,16 +1,58 @@
 {
-    "home": {
-        "title": "K Tvs Connect",
-        "subtitle": "Connected vehicle companion."
+    "garage": {
+        "title": "Garage",
+        "add": "Add scooter",
+        "empty": "No scooters yet",
+        "emptyBody": "Add your first scooter to see its live dashboard, ride stats and routes."
     },
-    "login": {
-        "title": "Sign in",
-        "phonePlaceholder": "Phone number",
-        "submit": "Continue"
+    "dashboard": {
+        "noScooter": "No scooter selected",
+        "noScooterBody": "Add a scooter in the Garage to see its live data here.",
+        "neverConnected": "Never connected",
+        "neverConnectedBody": "Turn the scooter on. It connects automatically when the scooter is switched on.",
+        "speed": "Speed",
+        "engine": "Engine",
+        "fuel": "Fuel",
+        "odometer": "Odometer",
+        "averageSpeed": "Average speed",
+        "topSpeed": "Top speed",
+        "throttle": "Throttle"
+    },
+    "connection": {
+        "off": "Not connected",
+        "scanning": "Scanning for scooters...",
+        "connecting": "Connecting to {name}...",
+        "connected": "Connected",
+        "reconnecting": "Reconnecting to {name}...",
+        "failed": "Could not connect"
+    },
+    "map": {
+        "search": "Search for a place",
+        "routes": "Saved routes",
+        "computing": "Computing route...",
+        "error": "Could not compute the route.",
+        "go": "Go",
+        "save": "Save",
+        "clear": "Clear",
+        "avoidPoints": "Points to avoid",
+        "clearAll": "Clear all",
+        "remove": "Remove"
+    },
+    "settings": {
+        "title": "Settings",
+        "units": "Units",
+        "speedAlert": "Speed alert",
+        "overspeed": "Overspeed limit",
+        "mapStyle": "Map style",
+        "services": "Free services",
+        "privacy": "Privacy",
+        "data": "Data"
     },
     "common": {
         "cancel": "Cancel",
         "retry": "Retry",
-        "loading": "Loading"
+        "close": "Close",
+        "save": "Save",
+        "delete": "Delete"
     }
 }

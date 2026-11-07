@@ -41,12 +41,6 @@ export const listBikes = async (): Promise<Bike[]> => {
     return rows.map(toBike);
 };
 
-export const getBike = async (id: string): Promise<Bike | null> => {
-    const db = getDatabase();
-    const row = await db.getFirstAsync<BikeRow>('SELECT * FROM bikes WHERE id = ?', id);
-    return row ? toBike(row) : null;
-};
-
 export const findBikeByMac = async (macAddress: string): Promise<Bike | null> => {
     const db = getDatabase();
     const row = await db.getFirstAsync<BikeRow>(

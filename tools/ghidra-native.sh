@@ -4,7 +4,8 @@ set -euo pipefail
 
 target="${1:?usage: ghidra-native.sh <apk|libdir> [project-name]}"
 project_name="${2:-Native}"
-work="$(mktemp -d)"
+work="$PWD/.tmp/ghidra-native.XXXXXX"
+mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT
 
 if [ -f "$target" ]; then

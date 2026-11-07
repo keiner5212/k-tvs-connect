@@ -9,9 +9,7 @@ import { useTheme } from '@hooks/useTheme';
 import { useGarageStore } from '@stores/garageStore';
 import { BikeModel, RootStackParamList } from '@typings/types';
 import { BleService, DiscoveredDevice } from '@ble/bleService';
-import { BLE_SERVICE_UUIDS } from '@ble/constants';
-import { serviceUuidCandidates } from '@ble/serviceUuid';
-import { isValidMac, normalizeMac } from '@services/db/bikeRepository';
+import { findBikeByMac, isValidMac, normalizeMac } from '@services/db/bikeRepository';
 import { layout, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -62,11 +60,7 @@ export const BikeForm = ({
 
         const service = new BleService();
         try {
-            const uuids = [
-                ...serviceUuidCandidates(null),
-                ...Object.values(BLE_SERVICE_UUIDS),
-            ];
-            await service.scan(uuids, (device) => {
+            await service.scan((device) => {
                 setFound((current) =>
                     current.some((entry) => entry.id === device.id) ? current : [...current, device],
                 );
@@ -87,8 +81,15 @@ export const BikeForm = ({
             setError('Enter the frame number.');
             return;
         }
-        if (!isValidMac(normalizeMac(mac))) {
+        const normalizedMac = normalizeMac(mac);
+        if (!isValidMac(normalizedMac)) {
             setError('Enter a MAC address as AA:BB:CC:DD:EE:FF.');
+            return;
+        }
+
+        const existing = await findBikeByMac(normalizedMac);
+        if (existing) {
+            setError(`This MAC address is already saved as ${existing.nickname}.`);
             return;
         }
 
@@ -99,7 +100,7 @@ export const BikeForm = ({
                 nickname: nickname.trim(),
                 model,
                 frameNumber: frameNumber.trim(),
-                macAddress: normalizeMac(mac),
+                macAddress: normalizedMac,
             });
         } finally {
             setSaving(false);

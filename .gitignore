@@ -11,6 +11,7 @@ expo-env.d.ts
 
 # reverse engineering scratch
 .tmp/
+analysis/
 *.xapk
 *.apk
 
@@ -21,7 +22,11 @@ expo-env.d.ts
 *.p8
 *.p12
 *.key
+*.keystore
 *.mobileprovision
+keystore.properties
+credentials.json
+google-services.json
 
 # Metro
 .metro-health-check*

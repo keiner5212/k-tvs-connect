@@ -1,18 +1,19 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { AlertBanner, EmptyState, StaleNotice } from '@components/feedback';
-import { ConnectionRail, MetricTile, SpeedGauge } from '@components/dashboard';
+import { ConnectionRail, MetricTile, SpeedGauge, WeekBars } from '@components/dashboard';
 import { useNow } from '@hooks/useNow';
 import { useTheme } from '@hooks/useTheme';
 import { useBleStore } from '@stores/bleStore';
 import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
-import { RootStackParamList, VehicleAlert } from '@typings/types';
+import { RootStackParamList, RideSummary, VehicleAlert } from '@typings/types';
 import { connectionController } from '@ble/connectionController';
-import { formatAge, isStale, speedUnit } from '@utils/format';
+import { listRides } from '@services/db/rideRepository';
+import { formatAge, formatDistance, formatDuration, isStale, speedUnit } from '@utils/format';
 import { layout, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -26,6 +27,7 @@ export const DashboardScreen = () => {
     const lastUpdateAt = useBleStore((state) => state.lastUpdateAt);
     const { settings } = useSettingsStore();
     const now = useNow();
+    const [rides, setRides] = useState<RideSummary[]>([]);
 
     useEffect(() => {
         const unbind = useBleStore.getState().bind();
@@ -33,10 +35,17 @@ export const DashboardScreen = () => {
     }, []);
 
     useEffect(() => {
+        const load = async () => {
+            setRides(activeBike ? await listRides(activeBike.id) : []);
+        };
+        void load();
+    }, [activeBike, lastUpdateAt]);
+
+    useEffect(() => {
         if (activeBike) {
             void connectionController.requestPermissions().then((granted) => {
                 if (granted) {
-                    void connectionController.start(activeBike, null);
+                    void connectionController.start(activeBike);
                 }
             });
         }
@@ -175,12 +184,95 @@ export const DashboardScreen = () => {
                     />
                 </View>
 
+                <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>TRIP</Text>
+                <View style={styles.grid}>
+                    <MetricTile
+                        isStale={stale}
+                        label="Trip distance"
+                        unit="km"
+                        value={(telemetry?.tripDistanceKm ?? 0).toFixed(2)}
+                    />
+                    <MetricTile
+                        isStale={stale}
+                        label="Trip time"
+                        unit="min"
+                        value={Math.round((telemetry?.tripTimeSeconds ?? 0) / 60).toString()}
+                    />
+                    <MetricTile
+                        isStale={stale}
+                        label="Trip mileage"
+                        unit="km/l"
+                        value={(telemetry?.tripMileage ?? 0).toFixed(1)}
+                    />
+                    <MetricTile
+                        isStale={stale}
+                        label="Range"
+                        unit="km"
+                        value={Math.round(telemetry?.cruisingRange ?? 0).toString()}
+                    />
+                    <MetricTile
+                        isStale={stale}
+                        label="Gear"
+                        value={(telemetry?.gearPosition ?? 0).toString()}
+                    />
+                    <MetricTile
+                        isStale={stale}
+                        label="Engine temp"
+                        unit="C"
+                        value={Math.round(telemetry?.engineTemperature ?? 0).toString()}
+                    />
+                    <MetricTile
+                        hint={telemetry?.bestLapMs ? `best ${(telemetry.bestLapMs / 1000).toFixed(1)} s` : undefined}
+                        isStale={stale}
+                        label="Lap"
+                        value={(telemetry?.lapNumber ?? 0).toString()}
+                    />
+                    <MetricTile
+                        isStale={stale}
+                        label="Lean angle"
+                        unit="deg"
+                        value={Math.round(telemetry?.leanAngleDegree ?? 0).toString()}
+                    />
+                </View>
+
+                {rides.length > 0 ? (
+                    <>
+                        <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
+                            RIDES
+                        </Text>
+                        <WeekBars days={weekDays(rides)} />
+                        {rides.slice(0, 5).map((ride) => (
+                            <View key={ride.id} style={styles.rideRow}>
+                                <Text style={[styles.rideText, { color: colors.foreground }]}>
+                                    {`${formatDistance(ride.distanceMeters, settings.unitSystem)} in ${formatDuration(ride.durationSeconds)}`}
+                                </Text>
+                                <Text style={[styles.rideText, { color: colors.mutedForeground }]}>
+                                    {`max ${Math.round(ride.maxSpeedKmh)} ${speedUnit(settings.unitSystem)}`}
+                                </Text>
+                            </View>
+                        ))}
+                    </>
+                ) : null}
+
                 <Text style={[styles.footer, { color: colors.mutedForeground }]}>
                     {`Last update ${formatAge(lastUpdateAt, now)}`}
                 </Text>
             </ScrollView>
         </View>
     );
+};
+
+const weekDays = (rides: RideSummary[]): { label: string; distanceKm: number }[] => {
+    const labels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    const days = labels.map((label) => ({ label, distanceKm: 0 }));
+
+    for (const ride of rides) {
+        const date = new Date(ride.startedAt);
+        const mondayIndex = (date.getDay() + 6) % 7;
+        days[mondayIndex].distanceKm += ride.distanceMeters / 1000;
+    }
+
+    return days;
 };
 
 const styles = StyleSheet.create({
@@ -197,8 +289,25 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         gap: spacing.md,
     },
+    rideRow: {
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        minHeight: 44,
+        paddingVertical: spacing.sm,
+    },
+    rideText: {
+        ...typography.body,
+    },
     screen: {
         flex: 1,
+    },
+    sectionTitle: {
+        ...typography.label,
+        letterSpacing: 0.08,
+        marginBottom: spacing.md,
+        marginTop: spacing.lg,
+        textTransform: 'uppercase',
     },
 });
 

@@ -43,7 +43,7 @@ export const ConnectionScreen = () => {
         const granted = await connectionController.requestPermissions();
         setPermissionGranted(granted);
         if (granted) {
-            await connectionController.start(bike, null);
+            await connectionController.start(bike);
         }
     };
 

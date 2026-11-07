@@ -29,26 +29,30 @@ against `0xEA`. Those are not supported yet.
 
 ## Frame format
 
-Every frame starts with `0x5A`, then a data id, then the payload, then a checksum
-and an end byte. The original parser reads a field by taking the bytes of a
-1 based range, formatting them as hex and parsing the result as an integer, so
-the fields are big endian.
+Every frame starts with `0x5A` (the original also accepts `0x9B`), then a data id,
+then the payload, then a checksum and an end byte. The original parser reads a
+field by taking the bytes of a 1 based range, formatting them as hex and parsing
+the result as an integer, so the fields are big endian. The parser reads
+`start - 1` and clamps the end to the length of the buffer.
+
+The checksum is parsed as a normal field and the receive path does not validate
+it, so the port does not reject a frame on a bad checksum either.
 
 ```
 byte   0      1       2 ...              n-2      n-1
      start   dataId   payload           checksum  end
 ```
 
-| Data id | Frame | Used for |
-| --- | --- | --- |
-| 16 | 5A_10 | speedometer, first block |
-| 17 | 5A_11 | speedometer, second block |
-| 18 | 5A_12 | speedometer, third block |
-| 22 | 5A_16 | speedometer, fourth block |
-| 24 | 5A_18 | speedometer, fifth block |
-| 25 | trip data | trip A and trip B |
-| 41 | wifi password | phone to vehicle pairing |
-| 107 | music control | remote music commands |
+| Data id | Frame | Original class | Used for |
+| --- | --- | --- | --- |
+| 16 | 5A_10 | `ApacheSpeedOMeter1` | speed, odometer, fuel, average and top speed, throttle, switches |
+| 17 | 5A_11 | `ApacheSpeedOMeter2` | vehicle state, gear, service reminder, turn indicator, diagnostics |
+| 18 | 5A_12 | `ApacheSpeedOMeter3` | lean angle, cruising range, trip distance, time, mileage, fuel, overspeed |
+| 22 | 5A_16 | `U399SpeedMeter4` | lap times and best lap |
+| 24 | 5A_18 | `ApacheSpeedMeter5` | engine load, temperatures, battery voltage, run time, distance |
+| 25 | trip data | | trip A and trip B |
+| 41 | wifi password | `N597LoggedData` | phone to vehicle pairing |
+| 107 | music control | | remote music commands |
 
 The 5A_10 layout, taken from `ApacheSpeedOMeter1` in the original app:
 
@@ -71,7 +75,12 @@ The 5A_10 layout, taken from `ApacheSpeedOMeter1` in the original app:
 | 19 | 1 | checksum | |
 | 20 | 1 | end byte | |
 
-The switch status bit field carries the side stand and the turn signals.
+The odometer is stored raw and divided by ten by the getter of the original
+class, the port does the same.
+
+The switch status bit field carries the side stand and the turn signals. The
+turn indicator has its own field in the 5A_11 frame, so the port prefers that one
+and falls back to the switch status.
 
 ## Implementation in this project
 
@@ -86,13 +95,23 @@ The switch status bit field carries the side stand and the turn signals.
 
 ## Still to confirm
 
-- The checksum algorithm. The original computes it in `BlePacketsProvider.getChecksum`,
-  the port has to be checked against it before the frames can be trusted.
-- The offsets of the frames 5A_11, 5A_12, 5A_16 and 5A_18. Only 5A_10 is ported so far.
 - Whether the newer bikes answer on the imei derived service uuid or only on the
   hardcoded one. The implementation scans for both.
 - Whether the link is encrypted or paired. The legacy family uses xor obfuscation,
   the newer one may use a handshake that is not visible in the Java layer.
+- The exact bit layout of the switch status and the turn indicator fields. The
+  port uses bit 1 for the side stand and bits 2 and 4 for the turn signals, taken
+  from the original frame model, but the bit order has not been verified against a
+  real frame.
+- The frames of the other families, Ntorq, Jupiter, U388 and IQUBE, live in the same
+  package with their own tables and are not ported yet.
+
+## The other families
+
+The same package holds the frames of the other bikes: `ntorq/NtorqSpeedOMeter1..4`,
+`jupiter/JupiterSpeedOMeter1..4`, `u388/U388SpeedometerFrameData` and
+`u399/U399SpeedMeter1..4`. They use the same frame format, so adding a family is
+a matter of copying its offset table into `src/ble/frames.ts`.
 
 ## How to capture the real frames
 

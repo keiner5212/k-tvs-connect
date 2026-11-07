@@ -20,4 +20,4 @@ COPY . .
 
 RUN npx expo prebuild --platform android --clean --no-install
 
-CMD ["sh", "-c", "cd android && ./gradlew assembleDebug --no-daemon && cp app/build/outputs/apk/debug/app-debug.apk /app/build/app-debug.apk"]
+CMD ["sh", "-c", "cd android && ./gradlew assembleDebug --no-daemon && cp app/build/outputs/apk/debug/app-debug.apk /out/app-debug.apk && echo APK_READY"]

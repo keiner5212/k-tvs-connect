@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS rides (
   duration_seconds REAL NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS avoid_points (
+  id TEXT PRIMARY KEY NOT NULL,
+  label TEXT NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  radius_meters REAL NOT NULL DEFAULT 30,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL

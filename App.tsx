@@ -1,13 +1,36 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
+import ErrorBoundary from '@components/ErrorBoundary';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { openDatabase } from '@services/db/database';
 import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
+import { bindRideTracker, rideTracker } from '@services/rideTracker';
+import '@/config/i18n';
 
 export default function App() {
     const [ready, setReady] = useState(false);
+
+    useEffect(() => {
+        const unbind = bindRideTracker();
+        const unsubscribe = useGarageStore.subscribe((state, previous) => {
+            const active = state.bikes.find((bike) => bike.isActive);
+            const before = previous.bikes.find((bike) => bike.isActive);
+            if (active?.id !== before?.id) {
+                if (active) {
+                    rideTracker.start(active.id);
+                } else {
+                    rideTracker.stop();
+                }
+            }
+        });
+
+        return () => {
+            unbind();
+            unsubscribe();
+        };
+    }, []);
 
     useEffect(() => {
         const bootstrap = async () => {
@@ -28,5 +51,9 @@ export default function App() {
         return <View style={{ flex: 1 }} />;
     }
 
-    return <RootNavigator />;
+    return (
+        <ErrorBoundary>
+            <RootNavigator />
+        </ErrorBoundary>
+    );
 }

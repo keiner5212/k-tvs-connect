@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   state: ErrorBoundaryState = { hasError: false, message: '' };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, message: error.message };
+    return { hasError: true, message: error.name };
   }
 
   render() {
@@ -24,11 +24,23 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <Text style={{ fontSize: 16, marginBottom: 8 }}>Something went wrong</Text>
-        <Text style={{ fontSize: 13, opacity: 0.7, textAlign: 'center' }}>{this.state.message}</Text>
+        <Text style={styles.title}>Something went wrong</Text>
+        <Text style={styles.body}>Restart the app. If it keeps happening, reinstall the app.</Text>
       </View>
     );
   }
 }
+
+const styles = StyleSheet.create({
+  body: {
+    fontSize: 13,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  title: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+});
 
 export default ErrorBoundary;

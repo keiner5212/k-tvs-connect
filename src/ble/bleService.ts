@@ -53,14 +53,13 @@ export class BleService {
     }
 
     async scan(
-        serviceUuids: string[],
         onDevice: (device: DiscoveredDevice) => void,
         timeoutMs: number,
     ): Promise<void> {
         this.manager.stopDeviceScan();
 
         this.manager.startDeviceScan(
-            serviceUuids.length > 0 ? serviceUuids : null,
+            null,
             { allowDuplicates: false },
             (error, device) => {
                 if (error || !device) {
@@ -87,15 +86,11 @@ export class BleService {
         return this.device;
     }
 
-    async discover(device: Device, serviceUuid: string, onTelemetry: TelemetryListener): Promise<void> {
+    async discover(device: Device, onTelemetry: TelemetryListener): Promise<void> {
         await device.discoverAllServicesAndCharacteristics();
         const services = await device.services();
 
         for (const service of services) {
-            if (service.uuid.toUpperCase() !== serviceUuid.toUpperCase()) {
-                continue;
-            }
-
             const characteristics = await device.characteristicsForService(service.uuid);
 
             for (const characteristic of characteristics) {

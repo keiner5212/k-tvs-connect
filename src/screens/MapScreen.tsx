@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
@@ -6,10 +6,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { AvoidPointList, MapCanvas, RoutePreviewCard } from '@components/map';
 import { Banner } from '@components/feedback';
+import { useNow } from '@hooks/useNow';
 import { useTheme } from '@hooks/useTheme';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { Place, RootStackParamList } from '@typings/types';
+import { distanceAlongPath, decodePolyline, pointAtDistance } from '@utils/polyline';
+import { rgba } from '@utils/hexToRgb';
 import { formatDistance, formatDuration } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -21,6 +24,7 @@ export const MapScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const { settings } = useSettingsStore();
+    const now = useNow();
     const {
         addAvoidPoint,
         avoidPoints,
@@ -30,13 +34,23 @@ export const MapScreen = () => {
         computing,
         destination,
         error,
+        loadAvoidPoints,
         removeAvoidPoint,
+        replayRoute,
+        setReplayRoute,
         route,
         setDestination,
     } = useMapStore();
 
     const [position, setPosition] = useState<[number, number] | null>(null);
     const [locationError, setLocationError] = useState<string | null>(null);
+    const [followUser, setFollowUser] = useState(true);
+    const [replay, setReplay] = useState<{
+        points: { lat: number; lon: number }[];
+        distance: number;
+        duration: number;
+        startedAt: number;
+    } | null>(null);
 
     useEffect(() => {
         const load = async () => {
@@ -52,39 +66,35 @@ export const MapScreen = () => {
     }, []);
 
     useEffect(() => {
+        void loadAvoidPoints();
+    }, [loadAvoidPoints]);
+
+    useEffect(() => {
         if (destination && position) {
             void compute(position[0], position[1]);
         }
     }, [destination, position, compute]);
 
-    const onLongPress = useCallback(
-        (latitude: number, longitude: number) => {
-            addAvoidPoint(latitude, longitude);
-            if (position) {
-                void compute(position[0], position[1]);
-            }
-        },
-        [addAvoidPoint, compute, position],
-    );
-
-    const onRemoveAvoid = (id: string) => {
-        removeAvoidPoint(id);
+    const recompute = useCallback(() => {
         if (position) {
             void compute(position[0], position[1]);
         }
+    }, [compute, position]);
+
+    const onLongPress = useCallback(
+        (latitude: number, longitude: number) => {
+            void addAvoidPoint(latitude, longitude);
+            recompute();
+        },
+        [addAvoidPoint, recompute],
+    );
+
+    const onRemoveAvoid = (id: string) => {
+        void removeAvoidPoint(id);
+        recompute();
     };
 
-    const onSave = () => {
-        if (!route || !destination) {
-            return;
-        }
-        void saveRoute(route, destination);
-    };
-
-    const saveRoute = async (
-        result: NonNullable<typeof route>,
-        target: Place,
-    ) => {
+    const saveRoute = async (result: NonNullable<typeof route>, target: Place) => {
         const { insertRoute } = await import('@services/db/routeRepository');
         await insertRoute({
             name: target.name,
@@ -101,16 +111,48 @@ export const MapScreen = () => {
         });
     };
 
+    const replayState = useMemo(() => {
+        if (!replay || replay.points.length < 2) {
+            return null;
+        }
+        const cumulative = distanceAlongPath(replay.points);
+        const total = cumulative[cumulative.length - 1];
+        const speed = replay.duration > 0 ? total / replay.duration : 0;
+        const elapsed = (now - (replay.startedAt ?? now)) / 1000;
+        const travelled = Math.min(total, elapsed * speed);
+        const point = pointAtDistance(replay.points, cumulative, travelled);
+
+        return {
+            position: point ? ([point.lat, point.lon] as [number, number]) : null,
+            remaining: Math.max(0, total - travelled),
+            etaSeconds: speed > 0 ? Math.max(0, (total - travelled) / speed) : 0,
+        };
+    }, [replay, now]);
+
+    useEffect(() => {
+        if (!replayRoute) {
+            return;
+        }
+        setReplay({
+            points: decodePolyline(replayRoute.geometry),
+            distance: replayRoute.distanceMeters,
+            duration: replayRoute.durationSeconds,
+            startedAt: Date.now(),
+        });
+        setReplayRoute(null);
+    }, [replayRoute, setReplayRoute]);
+
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <MapCanvas
                 avoidPoints={avoidPoints}
                 center={position ?? FALLBACK_CENTER}
                 destination={destination}
+                followUser={followUser}
                 onLongPress={onLongPress}
+                replayPosition={replayState?.position ?? null}
                 routeGeometry={route?.geometry}
                 styleURL={settings.mapStyleUrl}
-                userLocation={position}
                 zoom={13}
             />
 
@@ -131,40 +173,86 @@ export const MapScreen = () => {
                 >
                     <Text style={[styles.toolLabel, { color: colors.foreground }]}>Routes</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                    accessibilityLabel={followUser ? 'Stop following me' : 'Follow me'}
+                    accessibilityRole="button"
+                    onPress={() => setFollowUser((value) => !value)}
+                    style={[
+                        styles.tool,
+                        {
+                            backgroundColor: followUser ? colors.primary : colors.card,
+                            borderColor: colors.border,
+                        },
+                    ]}
+                >
+                    <Text
+                        style={[
+                            styles.toolLabel,
+                            { color: followUser ? colors.primaryForeground : colors.foreground },
+                        ]}
+                    >
+                        Me
+                    </Text>
+                </TouchableOpacity>
             </View>
 
             <View style={styles.bottom}>
                 {locationError ? <Banner tone="warning" message={locationError} /> : null}
                 {error ? (
                     <Banner
-                        tone="error"
-                        actionLabel="Open settings"
+                        actionLabel="Retry"
                         message={error}
-                        onAction={() => navigation.navigate('Main')}
+                        onAction={recompute}
+                        tone="error"
                     />
                 ) : null}
 
-                <RoutePreviewCard
-                    distanceLabel={formatDistance(route?.distanceMeters ?? 0, settings.unitSystem)}
-                    distanceMeters={route?.distanceMeters ?? 0}
-                    durationLabel={formatDuration(route?.durationSeconds ?? 0)}
-                    durationSeconds={route?.durationSeconds ?? 0}
-                    error={error}
-                    isComputing={computing}
-                    onClear={() => {
-                        clearRoute();
-                        setDestination(null);
-                    }}
-                    onGo={() => navigation.navigate('SavedRoutes')}
-                    onSave={onSave}
-                />
+                {replayState && replay ? (
+                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                        <Text style={[styles.replayTitle, { color: colors.mutedForeground }]}>REPLAY</Text>
+                        <Text style={[styles.replayDistance, { color: colors.foreground }]}>
+                            {formatDistance(replayState.remaining, settings.unitSystem)}
+                        </Text>
+                        <Text style={[styles.replayEta, { color: colors.mutedForeground }]}>
+                            {`${formatDuration(replayState.etaSeconds)} left`}
+                        </Text>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            onPress={() => {
+                                setReplay(null);
+                                setFollowUser(false);
+                            }}
+                            style={[styles.replayStop, { backgroundColor: colors.secondary }]}
+                        >
+                            <Text style={[styles.replayStopLabel, { color: colors.secondaryForeground }]}>
+                                Stop
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <RoutePreviewCard
+                        distanceLabel={formatDistance(route?.distanceMeters ?? 0, settings.unitSystem)}
+                        distanceMeters={route?.distanceMeters ?? 0}
+                        durationLabel={formatDuration(route?.durationSeconds ?? 0)}
+                        error={error}
+                        isComputing={computing}
+                        onClear={() => {
+                            clearRoute();
+                            setDestination(null);
+                        }}
+                        onGo={() => navigation.navigate('SavedRoutes')}
+                        onSave={() => {
+                            if (route && destination) {
+                                void saveRoute(route, destination);
+                            }
+                        }}
+                    />
+                )}
 
                 <AvoidPointList
                     onClearAll={() => {
-                        clearAvoidPoints();
-                        if (position) {
-                            void compute(position[0], position[1]);
-                        }
+                        void clearAvoidPoints();
+                        recompute();
                     }}
                     onDelete={onRemoveAvoid}
                     points={avoidPoints}
@@ -182,6 +270,34 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: 0,
     },
+    card: {
+        borderRadius: radii.lg,
+        borderWidth: 1,
+        marginHorizontal: layout.screenPadding,
+        marginTop: spacing.sm,
+        padding: layout.cardPadding,
+    },
+    replayDistance: {
+        ...typography.readout,
+        marginTop: spacing.xs,
+    },
+    replayEta: {
+        ...typography.body,
+    },
+    replayStop: {
+        alignItems: 'center',
+        borderRadius: radii.md,
+        justifyContent: 'center',
+        marginTop: spacing.md,
+        minHeight: layout.buttonHeight,
+    },
+    replayStopLabel: {
+        ...typography.button,
+    },
+    replayTitle: {
+        ...typography.caption,
+        letterSpacing: 0.08,
+    },
     screen: {
         flex: 1,
     },
@@ -189,10 +305,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: radii.md,
         borderWidth: 1,
+        elevation: 3,
         justifyContent: 'center',
         minHeight: 44,
         minWidth: 44,
         paddingHorizontal: spacing.md,
+        shadowColor: rgba('#000000', 0.18),
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 6,
     },
     toolLabel: {
         ...typography.label,

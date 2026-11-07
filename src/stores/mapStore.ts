@@ -2,47 +2,66 @@ import { create } from 'zustand';
 
 import { AvoidPoint, Place, RouteResult } from '@typings/types';
 import { computeRoute } from '@services/valhalla.service';
-import { newId } from '@services/db/database';
+import {
+    clearAvoidPoints as clearStoredAvoidPoints,
+    deleteAvoidPoint as deleteStoredAvoidPoint,
+    insertAvoidPoint,
+    listAvoidPoints,
+} from '@services/db/avoidPointRepository';
 import { useSettingsStore } from '@stores/settingsStore';
+
+export interface ReplayRoute {
+    geometry: string;
+    distanceMeters: number;
+    durationSeconds: number;
+}
 
 interface MapState {
     destination: Place | null;
+    replayRoute: ReplayRoute | null;
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
     computing: boolean;
     error: string | null;
+    loadAvoidPoints: () => Promise<void>;
     setDestination: (place: Place | null) => void;
-    addAvoidPoint: (latitude: number, longitude: number) => void;
-    removeAvoidPoint: (id: string) => void;
-    clearAvoidPoints: () => void;
+    addAvoidPoint: (latitude: number, longitude: number) => Promise<void>;
+    removeAvoidPoint: (id: string) => Promise<void>;
+    clearAvoidPoints: () => Promise<void>;
     compute: (originLat: number, originLon: number) => Promise<void>;
     clearRoute: () => void;
+    setReplayRoute: (route: ReplayRoute | null) => void;
 }
 
 export const useMapStore = create<MapState>((set, get) => ({
     destination: null,
+    replayRoute: null,
     avoidPoints: [],
     route: null,
     computing: false,
     error: null,
+    loadAvoidPoints: async () => {
+        const points = await listAvoidPoints();
+        set({ avoidPoints: points });
+    },
     setDestination: (place) => {
         set({ destination: place, error: null });
     },
-    addAvoidPoint: (latitude, longitude) => {
-        const point: AvoidPoint = {
-            id: newId(),
+    addAvoidPoint: async (latitude, longitude) => {
+        const saved = await insertAvoidPoint({
+            label: `Avoid ${get().avoidPoints.length + 1}`,
             latitude,
             longitude,
-            label: `Avoid ${get().avoidPoints.length + 1}`,
             radiusMeters: 30,
-            createdAt: Date.now(),
-        };
-        set({ avoidPoints: [...get().avoidPoints, point] });
+        });
+        set({ avoidPoints: [...get().avoidPoints, saved] });
     },
-    removeAvoidPoint: (id) => {
+    removeAvoidPoint: async (id) => {
+        await deleteStoredAvoidPoint(id);
         set({ avoidPoints: get().avoidPoints.filter((point) => point.id !== id) });
     },
-    clearAvoidPoints: () => {
+    clearAvoidPoints: async () => {
+        await clearStoredAvoidPoints();
         set({ avoidPoints: [] });
     },
     compute: async (originLat, originLon) => {
@@ -68,6 +87,9 @@ export const useMapStore = create<MapState>((set, get) => ({
         }
     },
     clearRoute: () => {
-        set({ route: null, destination: null, avoidPoints: [], error: null });
+        set({ route: null, destination: null, error: null });
+    },
+    setReplayRoute: (route) => {
+        set({ replayRoute: route });
     },
 }));

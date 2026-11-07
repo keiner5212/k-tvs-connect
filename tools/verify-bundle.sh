@@ -11,7 +11,8 @@ if [ ! -e "$target" ]; then
   exit 1
 fi
 
-tmp="$(mktemp -d)"
+tmp="${TMPDIR:-$PWD/.tmp}/$(basename "$0").XXXXXX"
+mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
 if [ -d "$target" ]; then

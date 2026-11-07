@@ -2,11 +2,13 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
     Camera,
-    CircleLayer,
     LineLayer,
     MapView,
     PointAnnotation,
     ShapeSource,
+    UserLocation,
+    UserLocationRenderMode,
+    UserTrackingMode,
 } from '@maplibre/maplibre-react-native';
 
 import { useTheme } from '@hooks/useTheme';
@@ -21,7 +23,8 @@ export interface MapCanvasProps {
     routeGeometry?: string | null;
     avoidPoints: AvoidPoint[];
     destination?: Place | null;
-    userLocation?: [number, number] | null;
+    followUser: boolean;
+    replayPosition?: [number, number] | null;
     onLongPress?: (latitude: number, longitude: number) => void;
 }
 
@@ -32,7 +35,8 @@ export const MapCanvas = ({
     routeGeometry,
     avoidPoints,
     destination,
-    userLocation,
+    followUser,
+    replayPosition,
     onLongPress,
 }: MapCanvasProps) => {
     const { colors } = useTheme();
@@ -64,7 +68,14 @@ export const MapCanvas = ({
                     : undefined
             }
         >
-            <Camera centerCoordinate={center} zoomLevel={zoom} />
+            <Camera
+        centerCoordinate={center}
+        followUserLocation={followUser}
+        followUserMode={UserTrackingMode.Follow}
+        zoomLevel={zoom}
+      />
+
+      <UserLocation visible renderMode={UserLocationRenderMode.Normal} />
 
             {routeShape ? (
                 <ShapeSource id="route-source" shape={routeShape}>
@@ -72,24 +83,12 @@ export const MapCanvas = ({
                 </ShapeSource>
             ) : null}
 
-            {userLocation ? (
-                <ShapeSource
-                    id="user-source"
-                    shape={{
-                        type: 'Point' as const,
-                        coordinates: [userLocation[1], userLocation[0]],
-                    }}
-                >
-                    <CircleLayer
-                        id="user-dot"
-                        style={{
-                            circleColor: colors.accent,
-                            circleRadius: 6,
-                            circleStrokeColor: colors.card,
-                            circleStrokeWidth: 2,
-                        }}
-                    />
-                </ShapeSource>
+            {replayPosition ? (
+                <PointAnnotation id="replay" coordinate={[replayPosition[1], replayPosition[0]]}>
+                    <View style={[styles.replayPin, { backgroundColor: colors.accent }]}>
+                        <Text style={[styles.replayLabel, { color: colors.primaryForeground }]}>R</Text>
+                    </View>
+                </PointAnnotation>
             ) : null}
 
             {destination ? (
@@ -119,7 +118,6 @@ export const MapCanvas = ({
 
 interface RoutePreviewCardProps {
     distanceMeters: number;
-    durationSeconds: number;
     distanceLabel: string;
     durationLabel: string;
     isComputing: boolean;
@@ -308,11 +306,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         width: 24,
     },
-    avoidPinLabel: {
+  avoidPinLabel: {
         ...typography.caption,
         fontWeight: '700',
     },
-    avoidRow: {
+  avoidRow: {
         alignItems: 'center',
         flexDirection: 'row',
         gap: spacing.md,
@@ -378,6 +376,17 @@ const styles = StyleSheet.create({
     removeLabel: {
         ...typography.caption,
     },
+    replayLabel: {
+    ...typography.caption,
+    fontWeight: '700',
+  },
+    replayPin: {
+    alignItems: 'center',
+    borderRadius: radii.full,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
     searching: {
         ...typography.body,
         padding: layout.cardPadding,

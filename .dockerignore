@@ -1,0 +1,8 @@
+node_modules
+.tmp
+build
+.git
+android
+ios
+*.apk
+*.xapk

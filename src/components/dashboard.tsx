@@ -147,6 +147,38 @@ export const SpeedGauge = ({ value, unit, overspeedLimitKmh, isStale }: SpeedGau
     );
 };
 
+interface WeekBarsProps {
+    days: { label: string; distanceKm: number }[];
+}
+
+export const WeekBars = ({ days }: WeekBarsProps) => {
+    const { colors } = useTheme();
+    const max = Math.max(1, ...days.map((day) => day.distanceKm));
+
+    return (
+        <View style={styles.week}>
+            {days.map((day) => (
+                <View key={day.label} style={styles.weekColumn}>
+                    <View style={[styles.weekTrack, { backgroundColor: colors.muted }]}>
+                        <View
+                            style={[
+                                styles.weekBar,
+                                {
+                                    backgroundColor: colors.primary,
+                                    height: `${Math.max(4, (day.distanceKm / max) * 100)}%`,
+                                },
+                            ]}
+                        />
+                    </View>
+                    <Text style={[styles.weekLabel, { color: colors.mutedForeground }]}>
+                        {day.label}
+                    </Text>
+                </View>
+            ))}
+        </View>
+    );
+};
+
 const styles = StyleSheet.create({
     gauge: {
         marginBottom: spacing.lg,
@@ -223,5 +255,30 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: spacing.xs,
         marginTop: spacing.sm,
+    },
+    week: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        height: 120,
+        marginBottom: spacing.lg,
+    },
+    weekBar: {
+        borderRadius: radii.sm,
+        width: '100%',
+    },
+    weekColumn: {
+        alignItems: 'center',
+        flex: 1,
+        gap: spacing.xs,
+    },
+    weekLabel: {
+        ...typography.caption,
+    },
+    weekTrack: {
+        borderRadius: radii.sm,
+        flex: 1,
+        justifyContent: 'flex-end',
+        overflow: 'hidden',
+        width: '100%',
     },
 });

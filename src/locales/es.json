@@ -1,16 +1,58 @@
 {
-    "home": {
-        "title": "K Tvs Connect",
-        "subtitle": "Companion del vehiculo conectado."
+    "garage": {
+        "title": "Garco",
+        "add": "Agregar moto",
+        "empty": "Todavia no hay motos",
+        "emptyBody": "Agrega tu primera moto para ver el tablero en vivo, las estadisticas y las rutas."
     },
-    "login": {
-        "title": "Iniciar sesion",
-        "phonePlaceholder": "Numero de telefono",
-        "submit": "Continuar"
+    "dashboard": {
+        "noScooter": "Ninguna moto seleccionada",
+        "noScooterBody": "Agrega una moto en el Garaje para ver sus datos en vivo aqui.",
+        "neverConnected": "Nunca conectada",
+        "neverConnectedBody": "Enciende la moto. Se conecta sola cuando la moto esta encendida.",
+        "speed": "Velocidad",
+        "engine": "Motor",
+        "fuel": "Combustible",
+        "odometer": "Odometro",
+        "averageSpeed": "Velocidad promedio",
+        "topSpeed": "Velocidad maxima",
+        "throttle": "Acelerador"
+    },
+    "connection": {
+        "off": "Sin conexion",
+        "scanning": "Buscando motos...",
+        "connecting": "Conectando con {name}...",
+        "connected": "Conectada",
+        "reconnecting": "Reconectando con {name}...",
+        "failed": "No se pudo conectar"
+    },
+    "map": {
+        "search": "Buscar un lugar",
+        "routes": "Rutas guardadas",
+        "computing": "Calculando la ruta...",
+        "error": "No se pudo calcular la ruta.",
+        "go": "Ir",
+        "save": "Guardar",
+        "clear": "Limpiar",
+        "avoidPoints": "Puntos a evitar",
+        "clearAll": "Borrar todo",
+        "remove": "Quitar"
+    },
+    "settings": {
+        "title": "Ajustes",
+        "units": "Unidades",
+        "speedAlert": "Alerta de velocidad",
+        "overspeed": "Limite de sobrevelocidad",
+        "mapStyle": "Estilo del mapa",
+        "services": "Servicios gratuitos",
+        "privacy": "Privacidad",
+        "data": "Datos"
     },
     "common": {
         "cancel": "Cancelar",
         "retry": "Reintentar",
-        "loading": "Cargando"
+        "close": "Cerrar",
+        "save": "Guardar",
+        "delete": "Eliminar"
     }
 }

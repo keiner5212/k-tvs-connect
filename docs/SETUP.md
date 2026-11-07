@@ -1,48 +1,61 @@
 # Setup
 
-## Requirements
+## What you need
 
+- The phone connected over usb with usb debugging on
 - Node 20.19.4 or newer, npm only, never pnpm or yarn
-- JDK 17 or newer for the Android build
-- A physical Android phone over usb, Android 12 or newer for the bluetooth
-  permissions, or an emulator with a bluetooth capable image
+- JDK 21 for the native build (the workspace keeps it in `~/.jabba/jdk/openjdk@21.0.2`)
 
-## Install
+## Install on the phone
 
 ```sh
 npm install
+npm run android
 ```
 
-## Run on a development client
+That command regenerates the native project when needed, builds the debug app with
+gradle, installs it on the connected phone and starts the metro bundler. The app
+opens on the phone and connects to the bundler over usb.
 
-The app does not run in Expo Go. It needs a development build because it uses
-bluetooth and the native map.
+The first build downloads gradle and the android dependencies, it takes a few
+minutes. Later builds are much faster.
+
+If you change the plugins in `app.json`, run `npx expo prebuild --clean` before the
+next build.
+
+### Without metro
+
+The debug app needs the bundler running. To keep it running in another terminal:
 
 ```sh
-npm run android        # build and install on the connected device
-npm start              # start the dev server only, then open the dev client
+npm start
 ```
 
-After changing the plugins in `app.json`, run `npx expo prebuild --clean` before
-the next native build.
+and then open the app on the phone.
 
 ## Build the apk in Docker, no EAS
 
 ```sh
 tools/build-apk.sh
-```
-
-It builds `docker/Dockerfile` on top of the community android image, pins the sdk
-components that React Native 0.81 expects (platform 36, build tools 36.0.0, ndk
-27.1.12297006, cmake 3.30.5) and leaves the apk in `build/app-debug.apk`.
-
-```sh
 adb install -r build/app-debug.apk
 tools/verify-bundle.sh build/app-debug.apk
 ```
 
-The verify step fails the build if a TVS host or the vendor credentials reappear in
+The image pins the sdk components React Native 0.81 expects: platform 36, build
+tools 36.0.0, ndk 27.1.12297006 and cmake 3.30.5. The first build downloads the
+image, the ndk and gradle, the layers are cached afterwards.
+
+The verify step fails the build if a TVS host or a vendor credential reappears in
 the bundle.
+
+## First run on the phone
+
+1. Open the app, go to **Garage** and tap **Add scooter**.
+2. Turn the scooter on and tap **Scan for scooters**. The bike shows up as a
+   bluetooth device, tap it to fill the address. Or type the address yourself.
+3. Fill the name and the frame number, then **Add scooter**.
+4. The scooter becomes the active one. Go to **Dashboard** and turn the ignition
+   on: the app connects on its own and the live values start to arrive.
 
 ## Local routing service
 
@@ -60,6 +73,9 @@ npm run lint
 npm run typecheck
 npm test
 ```
+
+The tests cover the bluetooth frame parser against the offset tables recovered from
+the original app, and the polyline maths used for the routes.
 
 ## Reverse engineering toolchain
 

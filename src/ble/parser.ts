@@ -1,5 +1,5 @@
 import { BikeTelemetry } from '@typings/types';
-import { START_BYTE_5A, START_BYTE_5B } from './constants';
+import { START_BYTE_5A, START_BYTE_9B } from './constants';
 import { frameForDataId } from './frames';
 
 export interface ParsedFrame {
@@ -23,7 +23,7 @@ export const parseFrame = (bytes: Uint8Array): ParsedFrame | null => {
     if (bytes.length < 4) {
         return null;
     }
-    if (bytes[0] !== START_BYTE_5A && bytes[0] !== START_BYTE_5B) {
+    if (bytes[0] !== START_BYTE_5A && bytes[0] !== START_BYTE_9B) {
         return null;
     }
 
@@ -36,7 +36,7 @@ export const parseFrame = (bytes: Uint8Array): ParsedFrame | null => {
     const values: Record<string, number> = {};
     for (const field of spec.fields) {
         const raw = readField(bytes, field.start, field.length);
-        values[field.name] = field.scale ? raw * field.scale : raw;
+        values[field.name] = field.scale ? raw / field.scale : raw;
     }
 
     return { dataId, values };
@@ -52,31 +52,60 @@ export const telemetryFromFrame = (
 ): BikeTelemetry => {
     const values = frame.values;
     const switchStatus = values.switchStatus ?? previous?.switchStatus ?? 0;
+    const turnSignalStatus = values.turnIndicatorStatus ?? previous?.turnSignalStatus ?? 0;
 
     const turnSignal =
-        switchStatus & LEFT_SIGNAL_BIT
+        turnSignalStatus & LEFT_SIGNAL_BIT
             ? 'left'
-            : switchStatus & RIGHT_SIGNAL_BIT
+            : turnSignalStatus & RIGHT_SIGNAL_BIT
                 ? 'right'
-                : 'none';
+                : switchStatus & LEFT_SIGNAL_BIT
+                    ? 'left'
+                    : switchStatus & RIGHT_SIGNAL_BIT
+                        ? 'right'
+                        : 'none';
 
     return {
         speedKmh: values.speed ?? previous?.speedKmh ?? 0,
         engineRpm: values.engineRpm ?? previous?.engineRpm ?? 0,
         fuelLevelPercent: values.fuelLevel ?? previous?.fuelLevelPercent ?? 0,
-        batteryVoltage: previous?.batteryVoltage ?? 0,
-        odometerKm: values.odometerRaw ?? previous?.odometerKm ?? 0,
-        tripDistanceKm: previous?.tripDistanceKm ?? 0,
-        tripTimeSeconds: previous?.tripTimeSeconds ?? 0,
+        batteryVoltage: values.batteryVoltage ?? previous?.batteryVoltage ?? 0,
+        odometerKm: values.odometer ?? previous?.odometerKm ?? 0,
+        tripDistanceKm: values.tripDistance ?? previous?.tripDistanceKm ?? 0,
+        tripTimeSeconds:
+            values.tripTimeHour !== undefined
+                ? values.tripTimeHour * 3600 + (values.tripTimeMinute ?? 0) * 60
+                : (previous?.tripTimeSeconds ?? 0),
         averageSpeedKmh: values.averageSpeed ?? previous?.averageSpeedKmh ?? 0,
         topSpeedKmh: values.topSpeed ?? previous?.topSpeedKmh ?? 0,
         throttlePercent: values.throttle ?? previous?.throttlePercent ?? 0,
-        leanAngleDegree: previous?.leanAngleDegree ?? 0,
-        gearPosition: previous?.gearPosition ?? 0,
+        leanAngleDegree: values.leanAngle ?? previous?.leanAngleDegree ?? 0,
+        gearPosition: values.gearPosition ?? previous?.gearPosition ?? 0,
         sideStandDown: (switchStatus & SIDE_STAND_BIT) !== 0,
         turnSignal,
-        vehicleState: previous?.vehicleState ?? 0,
+        turnSignalStatus,
+        vehicleState: values.vehicleState1 ?? previous?.vehicleState ?? 0,
         switchStatus,
+        tripMileage: values.tripMileage ?? previous?.tripMileage ?? 0,
+        tripFuel: values.tripFuel ?? previous?.tripFuel ?? 0,
+        overspeedThreshold: values.overspeedThreshold ?? previous?.overspeedThreshold ?? 0,
+        engineTemperature: values.engineTemperature ?? previous?.engineTemperature ?? 0,
+        intakeAirTemperature: values.intakeAirTemperature ?? previous?.intakeAirTemperature ?? 0,
+        cruisingRange: values.cruisingRange ?? previous?.cruisingRange ?? 0,
+        lapNumber: values.lapNumber ?? previous?.lapNumber ?? 0,
+        lapTimeMs:
+            values.lapTimeMinute !== undefined
+                ? values.lapTimeMinute * 60000 +
+                  values.lapTimeSecond * 1000 +
+                  values.lapTimeMilliSecond
+                : (previous?.lapTimeMs ?? 0),
+        bestLapNumber: values.bestLapNumber ?? previous?.bestLapNumber ?? 0,
+        bestLapMs:
+            values.bestLapMinute !== undefined
+                ? values.bestLapMinute * 60000 +
+                  values.bestLapSecond * 1000 +
+                  values.bestLapMilliSecond
+                : (previous?.bestLapMs ?? 0),
         latitude: previous?.latitude ?? null,
         longitude: previous?.longitude ?? null,
         frameNumber: previous?.frameNumber ?? null,

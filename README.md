@@ -18,13 +18,17 @@ contacted.
 
 - **Garage** with full CRUD: add a scooter by scanning for it or by typing its
   bluetooth address, edit the name, model and frame number, delete it, pick the
-  active one.
+  active one. A duplicate address is rejected.
 - **Connection** that reconnects on its own while the bike is on, with a scan
   window, a liveness watchdog and a visible age on every value.
 - **Dashboard** with speed, engine rpm, fuel, odometer, average and top speed,
-  throttle, plus the alerts for low fuel, side stand, turn signals and overspeed.
-- **Map** with place search, routes for a scooter profile, marked points to avoid
-  that the routing engine excludes by itself, and saved routes to ride again.
+  throttle, the trip block (distance, time, mileage, fuel, range, gear, engine
+  temperature, lean angle, lap and best lap), the recorded rides of the week and
+  the alerts for low fuel, side stand, turn signals and overspeed.
+- **Map** with the position of the phone and a follow mode, place search, routes
+  for a scooter profile, points to avoid that are stored on the device and that the
+  routing engine excludes by itself, and saved routes that can be renamed,
+  deleted and replayed along their line.
 - **Settings** for units, the overspeed limit, the map style, the service urls,
   a local pin, data export and data deletion.
 

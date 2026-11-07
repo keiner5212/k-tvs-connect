@@ -1,12 +1,5 @@
 export type UnitSystem = 'metric' | 'imperial';
 
-export const formatSpeed = (kmh: number, unit: UnitSystem): string => {
-    if (unit === 'imperial') {
-        return Math.round(kmh * 0.621371).toString();
-    }
-    return Math.round(kmh).toString();
-};
-
 export const speedUnit = (unit: UnitSystem): string => (unit === 'imperial' ? 'mph' : 'km/h');
 
 export const formatDistance = (meters: number, unit: UnitSystem): string => {
@@ -23,8 +16,6 @@ export const formatDistance = (meters: number, unit: UnitSystem): string => {
     return `${(meters / 1000).toFixed(1)} km`;
 };
 
-export const distanceUnit = (unit: UnitSystem): string => (unit === 'imperial' ? 'mi' : 'km');
-
 export const formatDuration = (seconds: number): string => {
     const total = Math.max(0, Math.round(seconds));
     const hours = Math.floor(total / 3600);
@@ -34,9 +25,6 @@ export const formatDuration = (seconds: number): string => {
     }
     return `${minutes}m`;
 };
-
-export const formatClock = (timestamp: number): string =>
-    new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 export const formatAge = (timestamp: number | null, now = Date.now()): string => {
     if (timestamp === null) {

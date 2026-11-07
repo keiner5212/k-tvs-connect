@@ -33,9 +33,6 @@ const constantTimeEquals = (a: string, b: string): boolean => {
     return difference === 0;
 };
 
-export const isPinConfigured = async (): Promise<boolean> =>
-    (await SecureStore.getItemAsync(VERIFIER_KEY)) !== null;
-
 export const setPin = async (pin: string): Promise<void> => {
     const salt = toHex(Crypto.getRandomBytes(16));
     const verifier = await derive(salt, pin);

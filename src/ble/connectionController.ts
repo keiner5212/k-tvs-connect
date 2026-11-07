@@ -4,14 +4,8 @@ import { State } from 'react-native-ble-plx';
 import { Bike, BikeTelemetry, ConnectionState } from '@typings/types';
 import { logger } from '@utils/logger';
 import { BleService, DiscoveredDevice } from './bleService';
-import {
-    BLE_SERVICE_UUIDS,
-    DATA_TIMEOUT_MS,
-    RECONNECT_DELAYS_MS,
-    SCAN_WINDOW_MS,
-} from './constants';
+import { DATA_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
 import { parseFrame, telemetryFromFrame } from './parser';
-import { serviceUuidCandidates } from './serviceUuid';
 
 export type ConnectionListener = (state: ConnectionState) => void;
 export type TelemetryListener = (telemetry: BikeTelemetry) => void;
@@ -22,8 +16,6 @@ export class ConnectionController {
     private state: ConnectionState = 'off';
 
     private bike: Bike | null = null;
-
-    private imei: string | null = null;
 
     private telemetry: BikeTelemetry | null = null;
 
@@ -88,9 +80,8 @@ export class ConnectionController {
         return Object.values(result).every((value) => value === PermissionsAndroid.RESULTS.GRANTED);
     }
 
-    async start(bike: Bike, imei: string | null): Promise<void> {
+    async start(bike: Bike): Promise<void> {
         this.bike = bike;
-        this.imei = imei;
         this.running = true;
         this.reconnectAttempt = 0;
         this.setState('scanning');
@@ -130,11 +121,6 @@ export class ConnectionController {
         }
     }
 
-    private serviceUuids(): string[] {
-        const known = Object.values(BLE_SERVICE_UUIDS);
-        return Array.from(new Set([...serviceUuidCandidates(this.imei), ...known]));
-    }
-
     private async scanAndConnect(): Promise<void> {
         if (!this.running || this.scanning) {
             return;
@@ -151,7 +137,6 @@ export class ConnectionController {
             const found: { device: DiscoveredDevice | null } = { device: null };
 
             await this.ble.scan(
-                this.serviceUuids(),
                 (device) => {
                     if (target && device.id.toUpperCase() === target.macAddress.toUpperCase()) {
                         found.device = device;
@@ -175,12 +160,7 @@ export class ConnectionController {
 
             try {
                 const device = await this.ble.connect(match.id);
-                const serviceUuid = this.serviceUuids().find(
-                    (uuid) => uuid.toUpperCase() === '5456534D-5647-5341-5342-454E544F5251'.toUpperCase(),
-                );
-                await this.ble.discover(device, serviceUuid ?? BLE_SERVICE_UUIDS.apache, (bytes) =>
-                    this.handleData(bytes),
-                );
+                await this.ble.discover(device, (bytes) => this.handleData(bytes));
                 this.reconnectAttempt = 0;
                 this.setState('connected');
             } catch (error) {

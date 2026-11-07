@@ -38,7 +38,7 @@ export const getSettings = async (): Promise<AppSettings> => {
     };
 };
 
-export const setSetting = async (key: string, value: string): Promise<void> => {
+const setSetting = async (key: string, value: string): Promise<void> => {
     const db = getDatabase();
     await db.runAsync(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',

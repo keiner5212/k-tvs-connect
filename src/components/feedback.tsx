@@ -66,31 +66,6 @@ export const EmptyState = ({ title, description, actionLabel, onAction }: EmptyS
     );
 };
 
-interface ErrorStateProps {
-    title: string;
-    description?: string;
-    actionLabel?: string;
-    onAction?: () => void;
-}
-
-export const ErrorState = ({ title, description, actionLabel, onAction }: ErrorStateProps) => {
-    const { colors } = useTheme();
-
-    return (
-        <View style={styles.centered}>
-            <Text style={[styles.title, { color: colors.error }]}>{title}</Text>
-            {description ? (
-                <Text style={[styles.description, { color: colors.mutedForeground }]}>{description}</Text>
-            ) : null}
-            {actionLabel && onAction ? (
-                <Text accessibilityRole="button" onPress={onAction} style={[styles.action, { color: colors.primary }]}>
-                    {actionLabel}
-                </Text>
-            ) : null}
-        </View>
-    );
-};
-
 type BannerTone = 'info' | 'warning' | 'error';
 
 interface BannerProps {
