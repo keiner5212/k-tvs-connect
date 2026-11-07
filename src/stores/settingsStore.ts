@@ -13,6 +13,10 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     settings: {
         unitSystem: 'metric',
+        cameraAvoidEnabled: true,
+        cameraRadiusMeters: 5000,
+        ansvFetchedAt: null,
+        ansvPublishedAt: null,
         overspeedLimitKmh: 80,
         mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
         photonBaseUrl: 'https://photon.komoot.io/api',

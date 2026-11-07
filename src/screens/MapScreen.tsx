@@ -4,11 +4,13 @@ import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { CameraAttribution, CameraAvoidList } from '@components/cameras';
 import { AvoidPointList, MapCanvas, RoutePreviewCard } from '@components/map';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@hooks/useTheme';
+import { useCameraStore } from '@stores/cameraStore';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { Place, RootStackParamList } from '@typings/types';
@@ -44,6 +46,19 @@ export const MapScreen = () => {
         setDestination,
     } = useMapStore();
 
+    const { nearby: nearbyCameras, routeSplit, publishedAt } = useCameraStore();
+    const cameraMarkers = useMemo(
+        () =>
+            nearbyCameras.map((camera) => ({
+                id: camera.cameraId,
+                latitude: camera.latitude,
+                longitude: camera.longitude,
+                maxSpeedKmh: camera.maxSpeedKmh,
+                isAvoided: camera.avoidEnabled,
+                label: camera.address || 'ANSV camera',
+            })),
+        [nearbyCameras],
+    );
     const [position, setPosition] = useState<[number, number] | null>(null);
     const [locationError, setLocationError] = useState<string | null>(null);
     const [followUser, setFollowUser] = useState(true);
@@ -148,9 +163,11 @@ export const MapScreen = () => {
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <MapCanvas
                 avoidPoints={avoidPoints}
+                cameras={cameraMarkers}
                 center={position ?? FALLBACK_CENTER}
                 destination={destination}
                 followUser={followUser}
+                onCameraPress={(cameraId) => navigation.navigate('CameraDetail', { cameraId })}
                 onLongPress={onLongPress}
                 replayPosition={replayState?.position ?? null}
                 routeGeometry={route?.geometry}
@@ -166,6 +183,17 @@ export const MapScreen = () => {
                     style={[styles.tool, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
                     <Text style={[styles.toolLabel, { color: colors.foreground }]}>Search</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    accessibilityLabel="Cameras near you"
+                    accessibilityRole="button"
+                    onPress={() => navigation.navigate('Cameras')}
+                    style={[
+                        styles.tool,
+                        { backgroundColor: colors.card, borderColor: colors.border },
+                    ]}
+                >
+                    <Text style={[styles.toolLabel, { color: colors.foreground }]}>Cameras</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     accessibilityLabel="Saved routes"
@@ -251,6 +279,24 @@ export const MapScreen = () => {
                     />
                 )}
 
+                {routeSplit.sent > 0 ? (
+                    <Banner
+                        message={
+                            routeSplit.leftOut > 0
+                                ? `This route avoids ${routeSplit.sent} cameras. ${routeSplit.leftOut} nearby cameras were left out of the request.`
+                                : `This route avoids ${routeSplit.sent} cameras. Every nearby camera was sent with the request.`
+                        }
+                        tone="info"
+                    />
+                ) : null}
+
+                <CameraAvoidList
+                    cameras={nearbyCameras.filter((camera) => camera.avoidEnabled)}
+                    onStopAvoiding={(cameraId) =>
+                        void useCameraStore.getState().setAvoidEnabled(cameraId, false)
+                    }
+                />
+
                 <AvoidPointList
                     onClearAll={() => {
                         void clearAvoidPoints();
@@ -259,6 +305,8 @@ export const MapScreen = () => {
                     onDelete={onRemoveAvoid}
                     points={avoidPoints}
                 />
+
+                <CameraAttribution publishedAt={publishedAt} />
             </View>
         </View>
     );

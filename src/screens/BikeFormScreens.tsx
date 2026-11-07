@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { PrimaryButton, SegmentedControl, TextField, showConfirm } from '@components/controls';
+import { ChipGroup, PrimaryButton, TextField, showConfirm } from '@components/controls';
 import { EmptyState } from '@components/feedback';
+import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
 import { useGarageStore } from '@stores/garageStore';
 import { BikeModel, RootStackParamList } from '@typings/types';
 import { BleService, DiscoveredDevice } from '@ble/bleService';
 import { findBikeByMac, isValidMac, normalizeMac } from '@services/db/bikeRepository';
-import { layout, spacing, typography } from '@config/theme';
+import { spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
@@ -46,7 +46,6 @@ export const BikeForm = ({
     }) => Promise<void>;
 }) => {
     const { colors } = useTheme();
-        const insets = useSafeAreaInsets();
     const [nickname, setNickname] = useState(initialNickname ?? '');
     const [model, setModel] = useState<BikeModel>(initialModel ?? 'apache');
     const [frameNumber, setFrameNumber] = useState(initialFrameNumber ?? '');
@@ -111,82 +110,78 @@ export const BikeForm = ({
     };
 
     return (
-        <ScrollView
-      contentContainerStyle={[
-        styles.content,
-        { paddingBottom: insets.bottom + layout.screenPadding },
-      ]}
-      keyboardShouldPersistTaps="handled"
-    >
-            <TextField
-                autoCapitalize="words"
-                label="Name"
-                onChangeText={setNickname}
-                placeholder="My Apache"
-                value={nickname}
-            />
+        <ScreenContainer edges={['bottom']} scroll keyboardShouldPersistTaps="handled">
 
-            <Text style={[styles.label, { color: colors.foreground }]}>Model</Text>
-            <View style={styles.modelWrap}>
-                <SegmentedControl
-                    onChange={(value) => setModel(value as BikeModel)}
-                    options={MODELS}
-                    value={model}
-                />
+        <TextField
+            autoCapitalize="words"
+            label="Name"
+            onChangeText={setNickname}
+            placeholder="My Apache"
+            value={nickname}
+        />
+
+        <Text style={[styles.label, { color: colors.foreground }]}>Model</Text>
+        <View style={styles.modelWrap}>
+            <ChipGroup
+                onChange={(value) => setModel(value as BikeModel)}
+                options={MODELS}
+                value={model}
+            />
+        </View>
+
+        <TextField
+            autoCapitalize="none"
+            label="Frame number"
+            onChangeText={setFrameNumber}
+            value={frameNumber}
+        />
+
+        <TextField
+            autoCapitalize="none"
+            errorText={error ?? undefined}
+            label="Bluetooth address"
+            onChangeText={setMac}
+            placeholder="AA:BB:CC:DD:EE:FF"
+            value={mac}
+        />
+
+        <PrimaryButton
+            disabled={scanning}
+            label={scanning ? 'Scanning...' : 'Scan for scooters'}
+            onPress={() => void scan()}
+            variant="secondary"
+        />
+
+        {found.length > 0 ? (
+            <View style={styles.found}>
+                {found.map((device) => (
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        key={device.id}
+                        onPress={() => setMac(device.id)}
+                        style={[styles.foundRow, { borderColor: colors.border }]}
+                    >
+                        <Text style={[styles.foundName, { color: colors.foreground }]}>
+                            {device.name ?? 'Scooter'}
+                        </Text>
+                        <Text style={[styles.foundMac, { color: colors.mutedForeground }]}>{device.id}</Text>
+                    </TouchableOpacity>
+                ))}
             </View>
+        ) : null}
 
-            <TextField
-                autoCapitalize="none"
-                label="Frame number"
-                onChangeText={setFrameNumber}
-                value={frameNumber}
+        {scanning && found.length === 0 ? (
+            <EmptyState
+                description="Make sure the scooter is switched on and close to your phone, then scan again."
+                title="No scooter found"
             />
+        ) : null}
 
-            <TextField
-                autoCapitalize="none"
-                errorText={error ?? undefined}
-                label="Bluetooth address"
-                onChangeText={setMac}
-                placeholder="AA:BB:CC:DD:EE:FF"
-                value={mac}
-            />
-
-            <PrimaryButton
-                disabled={scanning}
-                label={scanning ? 'Scanning...' : 'Scan for scooters'}
-                onPress={() => void scan()}
-                variant="secondary"
-            />
-
-            {found.length > 0 ? (
-                <View style={styles.found}>
-                    {found.map((device) => (
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            key={device.id}
-                            onPress={() => setMac(device.id)}
-                            style={[styles.foundRow, { borderColor: colors.border }]}
-                        >
-                            <Text style={[styles.foundName, { color: colors.foreground }]}>
-                                {device.name ?? 'Scooter'}
-                            </Text>
-                            <Text style={[styles.foundMac, { color: colors.mutedForeground }]}>{device.id}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            ) : null}
-
-            {scanning && found.length === 0 ? (
-                <EmptyState
-                    description="Make sure the scooter is switched on and close to your phone, then scan again."
-                    title="No scooter found"
-                />
-            ) : null}
-
-            <View style={styles.submit}>
-                <PrimaryButton label={submitLabel} loading={saving} onPress={() => void submit()} />
-            </View>
-        </ScrollView>
+        <View style={styles.submit}>
+            <PrimaryButton label={submitLabel} loading={saving} onPress={() => void submit()} />
+        </View>
+    
+            </ScreenContainer>
     );
 };
 
@@ -241,9 +236,6 @@ export const EditBikeScreen = ({ route }: { route: { params: { bikeId: string } 
 };
 
 const styles = StyleSheet.create({
-    content: {
-        padding: layout.screenPadding,
-    },
     found: {
         marginTop: spacing.md,
     },

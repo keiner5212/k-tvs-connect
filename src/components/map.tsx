@@ -12,7 +12,7 @@ import {
 } from '@maplibre/maplibre-react-native';
 
 import { useTheme } from '@hooks/useTheme';
-import { AvoidPoint, Place } from '@typings/types';
+import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
 import { decodePolyline } from '@utils/polyline';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -25,6 +25,8 @@ export interface MapCanvasProps {
     destination?: Place | null;
     followUser: boolean;
     replayPosition?: [number, number] | null;
+    cameras?: CameraMarkerData[];
+    onCameraPress?: (cameraId: string) => void;
     onLongPress?: (latitude: number, longitude: number) => void;
 }
 
@@ -37,6 +39,8 @@ export const MapCanvas = ({
     destination,
     followUser,
     replayPosition,
+    cameras = [],
+    onCameraPress,
     onLongPress,
 }: MapCanvasProps) => {
     const { colors } = useTheme();
@@ -99,7 +103,44 @@ export const MapCanvas = ({
                 </PointAnnotation>
             ) : null}
 
-            {avoidPoints.map((point, index) => (
+            {cameras.map((camera) => (
+        <PointAnnotation
+          id={`camera-${camera.id}`}
+          key={camera.id}
+          coordinate={[camera.longitude, camera.latitude]}
+        >
+          <TouchableOpacity
+            accessibilityLabel={camera.label}
+            accessibilityRole="button"
+            onPress={() => onCameraPress?.(camera.id)}
+            style={styles.cameraPin}
+          >
+            <View
+              style={[
+                styles.cameraBody,
+                {
+                  backgroundColor: camera.isAvoided ? colors.error : colors.card,
+                  borderColor: colors.error,
+                },
+              ]}
+            />
+            {camera.maxSpeedKmh !== null ? (
+              <View
+                style={[
+                  styles.cameraSpeed,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.cameraSpeedLabel, { color: colors.foreground }]}>
+                  {camera.maxSpeedKmh.toString()}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </PointAnnotation>
+      ))}
+
+      {avoidPoints.map((point, index) => (
                 <PointAnnotation
                     key={point.id}
                     id={point.id}
@@ -299,7 +340,30 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
     },
-    avoidPin: {
+    cameraPin: {
+    alignItems: 'center',
+    height: 26,
+    justifyContent: 'center',
+    width: 26,
+  },
+  cameraBody: {
+    borderRadius: radii.sm,
+    borderWidth: 2,
+    height: 20,
+    width: 20,
+  },
+  cameraSpeed: {
+    borderRadius: radii.full,
+    borderWidth: 1,
+    marginLeft: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  cameraSpeedLabel: {
+    ...typography.caption,
+    fontWeight: '700',
+  },
+  avoidPin: {
         alignItems: 'center',
         borderRadius: radii.full,
         height: 24,

@@ -1,3 +1,41 @@
+export type CameraTechnology =
+    | 'Radar Doppler'
+    | 'Video Detección (Con Analítica de Video)'
+    | 'Laser (Lidar) / Infrarrojo'
+    | 'Semi-Automática (Acción Remota)'
+    | 'Lazo Inductivo de Piso (Espiras)'
+    | 'Otra Tecnología'
+    | 'Not reported';
+
+export type CameraOperatingState = 'Operando' | 'Not operating' | 'Not reported';
+
+export interface TrafficCamera {
+    cameraId: string;
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+    maxSpeedKmh: number | null;
+    technology: CameraTechnology;
+    roadType: string;
+    address: string;
+    municipality: string;
+    department: string;
+    operatingState: CameraOperatingState;
+    infractions: string[];
+    datasetPublishedAt: number | null;
+    distanceMeters: number | null;
+    avoidEnabled: boolean;
+}
+
+export interface CameraMarkerData {
+    id: string;
+    latitude: number;
+    longitude: number;
+    maxSpeedKmh: number | null;
+    isAvoided: boolean;
+    label: string;
+}
+
 export type ConnectionState =
     | 'off'
     | 'scanning'
@@ -39,6 +77,7 @@ export interface AvoidPoint {
     label: string;
     radiusMeters: number;
     createdAt: number;
+    source?: 'manual' | 'ansv';
 }
 
 export interface SavedRoute {
@@ -134,6 +173,10 @@ export interface RouteResult {
 
 export interface AppSettings {
     unitSystem: 'metric' | 'imperial';
+    cameraAvoidEnabled: boolean;
+    cameraRadiusMeters: number;
+    ansvFetchedAt: number | null;
+    ansvPublishedAt: number | null;
     overspeedLimitKmh: number;
     mapStyleUrl: string;
     photonBaseUrl: string;
@@ -144,6 +187,8 @@ export interface AppSettings {
 
 export type RootStackParamList = {
     Main: undefined;
+    Cameras: undefined;
+    CameraDetail: { cameraId: string };
     AddBike: undefined;
     EditBike: { bikeId: string };
     BikeDetails: { bikeId: string };

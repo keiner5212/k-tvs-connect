@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -9,6 +8,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { PrimaryButton, showConfirm } from '@components/controls';
 import { EmptyState } from '@components/feedback';
 import { ConnectionRail } from '@components/dashboard';
+import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
 import { useBleStore } from '@stores/bleStore';
 import { useGarageStore } from '@stores/garageStore';
@@ -23,7 +23,6 @@ export const ConnectionScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'Connection'>>();
     const { colors } = useTheme();
-        const insets = useSafeAreaInsets();
     const bike = useGarageStore((state) => state.bikes.find((item) => item.id === route.params.bikeId));
     const state = useBleStore((store) => store.state);
     const lastUpdateAt = useBleStore((store) => store.lastUpdateAt);
@@ -58,54 +57,54 @@ export const ConnectionScreen = () => {
                 state={state}
             />
 
-            <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + layout.screenPadding }]}
-      >
-                <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                    {`${bike.model} · ${bike.frameNumber}`}
-                </Text>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]}>{bike.macAddress}</Text>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                    {`Last update ${formatAge(lastUpdateAt)}`}
-                </Text>
+            <ScreenContainer edges={['bottom']} scroll>
 
-                {!permissionGranted ? (
-                    <Text style={[styles.warning, { color: colors.error }]}>
-                        Bluetooth permission is needed to connect to your scooter.
-                    </Text>
-                ) : null}
+            <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
+            <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                {`${bike.model} · ${bike.frameNumber}`}
+            </Text>
+            <Text style={[styles.meta, { color: colors.mutedForeground }]}>{bike.macAddress}</Text>
+            <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                {`Last update ${formatAge(lastUpdateAt)}`}
+            </Text>
 
-                <View style={styles.actions}>
-                    <PrimaryButton label="Connect now" onPress={() => void connect()} />
-                    <PrimaryButton
-                        label="Disconnect"
-                        onPress={() => void connectionController.stop()}
-                        variant="secondary"
-                    />
-                    <PrimaryButton
-                        label="Edit scooter"
-                        onPress={() => navigation.navigate('EditBike', { bikeId: bike.id })}
-                        variant="ghost"
-                    />
-                    <PrimaryButton
-                        label="Delete scooter"
-                        onPress={() =>
-                            showConfirm(
-                                `Delete ${bike.nickname}?`,
-                                'This removes the scooter, its ride history and its saved routes from this device. This cannot be undone.',
-                                'Delete',
-                                () => {
-                                    void useGarageStore.getState().remove(bike.id);
-                                    navigation.goBack();
-                                },
-                                true,
-                            )
-                        }
-                        variant="danger"
-                    />
-                </View>
-            </ScrollView>
+            {!permissionGranted ? (
+                <Text style={[styles.warning, { color: colors.error }]}>
+                    Bluetooth permission is needed to connect to your scooter.
+                </Text>
+            ) : null}
+
+            <View style={styles.actions}>
+                <PrimaryButton label="Connect now" onPress={() => void connect()} />
+                <PrimaryButton
+                    label="Disconnect"
+                    onPress={() => void connectionController.stop()}
+                    variant="secondary"
+                />
+                <PrimaryButton
+                    label="Edit scooter"
+                    onPress={() => navigation.navigate('EditBike', { bikeId: bike.id })}
+                    variant="ghost"
+                />
+                <PrimaryButton
+                    label="Delete scooter"
+                    onPress={() =>
+                        showConfirm(
+                            `Delete ${bike.nickname}?`,
+                            'This removes the scooter, its ride history and its saved routes from this device. This cannot be undone.',
+                            'Delete',
+                            () => {
+                                void useGarageStore.getState().remove(bike.id);
+                                navigation.goBack();
+                            },
+                            true,
+                        )
+                    }
+                    variant="danger"
+                />
+            </View>
+        
+            </ScreenContainer>
         </View>
     );
 };
@@ -114,7 +113,6 @@ export const BikeDetailsScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'Connection'>>();
     const { colors } = useTheme();
-        const insets = useSafeAreaInsets();
     const bike = useGarageStore((state) => state.bikes.find((item) => item.id === route.params.bikeId));
 
     if (!bike) {
@@ -127,32 +125,32 @@ export const BikeDetailsScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + layout.screenPadding }]}
-      >
-                <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
-                <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                    {`${bike.model} · ${bike.frameNumber}`}
-                </Text>
+            <ScreenContainer edges={['bottom']} scroll>
 
-                <View style={styles.actions}>
-                    <PrimaryButton
-                        label="Connection"
-                        onPress={() => navigation.navigate('Connection', { bikeId: bike.id })}
-                    />
-                    <PrimaryButton
-                        label="Edit"
-                        onPress={() => navigation.navigate('EditBike', { bikeId: bike.id })}
-                        variant="secondary"
-                    />
-                    <PrimaryButton
-                        label={bike.isActive ? 'Active scooter' : 'Set as active'}
-                        disabled={bike.isActive}
-                        onPress={() => void useGarageStore.getState().activate(bike.id)}
-                        variant="ghost"
-                    />
-                </View>
-            </ScrollView>
+            <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
+            <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                {`${bike.model} · ${bike.frameNumber}`}
+            </Text>
+
+            <View style={styles.actions}>
+                <PrimaryButton
+                    label="Connection"
+                    onPress={() => navigation.navigate('Connection', { bikeId: bike.id })}
+                />
+                <PrimaryButton
+                    label="Edit"
+                    onPress={() => navigation.navigate('EditBike', { bikeId: bike.id })}
+                    variant="secondary"
+                />
+                <PrimaryButton
+                    label={bike.isActive ? 'Active scooter' : 'Set as active'}
+                    disabled={bike.isActive}
+                    onPress={() => void useGarageStore.getState().activate(bike.id)}
+                    variant="ghost"
+                />
+            </View>
+        
+            </ScreenContainer>
         </View>
     );
 };
@@ -161,9 +159,6 @@ const styles = StyleSheet.create({
     actions: {
         gap: spacing.md,
         marginTop: layout.sectionGap,
-    },
-    content: {
-        padding: layout.screenPadding,
     },
     meta: {
         ...typography.body,

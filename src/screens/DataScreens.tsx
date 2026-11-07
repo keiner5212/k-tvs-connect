@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Share, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
 import { PinDots, PrimaryButton, TextField, showConfirm } from '@components/controls';
 import { EmptyState } from '@components/feedback';
+import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { lockoutRemainingMs, removePin, setPin, verifyPin } from '@services/auth/garageLock';
 import { getDatabase } from '@services/db/database';
-import { layout, spacing, typography } from '@config/theme';
+import { spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
@@ -21,7 +21,6 @@ export const PinScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'Pin'>>();
     const { colors } = useTheme();
-          const insets = useSafeAreaInsets();
     const update = useSettingsStore((state) => state.update);
 
     const [pin, setPinValue] = useState('');
@@ -80,79 +79,74 @@ export const PinScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + layout.screenPadding },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-                <Text style={[styles.title, { color: colors.foreground }]}>
-                    {route.params.mode === 'remove' ? 'Remove pin' : 'Set a pin'}
-                </Text>
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    The pin protects the garage on this device. It cannot be recovered if you forget it.
-                </Text>
+            <ScreenContainer edges={['bottom']} scroll keyboardShouldPersistTaps="handled">
 
-                {route.params.mode === 'change' ? (
+            <Text style={[styles.title, { color: colors.foreground }]}>
+                {route.params.mode === 'remove' ? 'Remove pin' : 'Set a pin'}
+            </Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                The pin protects the garage on this device. It cannot be recovered if you forget it.
+            </Text>
+
+            {route.params.mode === 'change' ? (
+                <TextField
+                    keyboardType="number-pad"
+                    label="Current pin"
+                    onChangeText={setCurrentPin}
+                    secureTextEntry
+                    value={currentPin}
+                />
+            ) : null}
+
+            {route.params.mode !== 'remove' ? (
+                <>
                     <TextField
+                        keyboardType="number-pad"
+                        label="New pin"
+                        onChangeText={setPinValue}
+                        secureTextEntry
+                        value={pin}
+                    />
+                    <TextField
+                        errorText={error ?? undefined}
+                        keyboardType="number-pad"
+                        label="Repeat pin"
+                        onChangeText={setConfirmation}
+                        secureTextEntry
+                        value={confirmation}
+                    />
+                    <PinDots error={Boolean(error)} filled={pin.length} length={6} />
+                    <PrimaryButton label="Save pin" onPress={() => void save()} />
+                </>
+            ) : (
+                <>
+                    <TextField
+                        errorText={error ?? undefined}
                         keyboardType="number-pad"
                         label="Current pin"
                         onChangeText={setCurrentPin}
                         secureTextEntry
                         value={currentPin}
                     />
-                ) : null}
-
-                {route.params.mode !== 'remove' ? (
-                    <>
-                        <TextField
-                            keyboardType="number-pad"
-                            label="New pin"
-                            onChangeText={setPinValue}
-                            secureTextEntry
-                            value={pin}
-                        />
-                        <TextField
-                            errorText={error ?? undefined}
-                            keyboardType="number-pad"
-                            label="Repeat pin"
-                            onChangeText={setConfirmation}
-                            secureTextEntry
-                            value={confirmation}
-                        />
-                        <PinDots error={Boolean(error)} filled={pin.length} length={6} />
-                        <PrimaryButton label="Save pin" onPress={() => void save()} />
-                    </>
-                ) : (
-                    <>
-                        <TextField
-                            errorText={error ?? undefined}
-                            keyboardType="number-pad"
-                            label="Current pin"
-                            onChangeText={setCurrentPin}
-                            secureTextEntry
-                            value={currentPin}
-                        />
-                        <PrimaryButton
-                            label="Remove pin"
-                            onPress={() =>
-                                showConfirm('Remove pin?', 'The garage will be open without a pin.', 'Remove', () =>
-                                    void remove(),
-                                )
-                            }
-                            variant="danger"
-                        />
-                    </>
-                )}
-            </ScrollView>
+                    <PrimaryButton
+                        label="Remove pin"
+                        onPress={() =>
+                            showConfirm('Remove pin?', 'The garage will be open without a pin.', 'Remove', () =>
+                                void remove(),
+                            )
+                        }
+                        variant="danger"
+                    />
+                </>
+            )}
+        
+            </ScreenContainer>
         </View>
     );
 };
 
 export const ExportDataScreen = () => {
     const { colors } = useTheme();
-          const insets = useSafeAreaInsets();
     const [summary, setSummary] = useState<string | null>(null);
 
     const exportData = async () => {
@@ -173,19 +167,16 @@ export const ExportDataScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + layout.screenPadding },
-        ]}
-      >
-                <Text style={[styles.title, { color: colors.foreground }]}>Export data</Text>
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    Shares a copy of the scooters, routes and rides stored on this device.
-                </Text>
-                <PrimaryButton label="Export" onPress={() => void exportData()} />
-                {summary ? <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text> : null}
-            </ScrollView>
+            <ScreenContainer edges={['bottom']} scroll>
+
+            <Text style={[styles.title, { color: colors.foreground }]}>Export data</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                Shares a copy of the scooters, routes and rides stored on this device.
+            </Text>
+            <PrimaryButton label="Export" onPress={() => void exportData()} />
+            {summary ? <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text> : null}
+        
+            </ScreenContainer>
         </View>
     );
 };
@@ -193,7 +184,6 @@ export const ExportDataScreen = () => {
 export const DeleteDataScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
-          const insets = useSafeAreaInsets();
     const [confirmation, setConfirmation] = useState('');
     const [error, setError] = useState<string | null>(null);
 
@@ -212,33 +202,28 @@ export const DeleteDataScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + layout.screenPadding },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-                <Text style={[styles.title, { color: colors.foreground }]}>Delete all data</Text>
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    This permanently removes every scooter, ride, route and setting on this device.
-                </Text>
-                <TextField
-                    autoCapitalize="none"
-                    errorText={error ?? undefined}
-                    label="Type DELETE to confirm"
-                    onChangeText={setConfirmation}
-                    value={confirmation}
-                />
-                <PrimaryButton label="Delete everything" onPress={() => void deleteAll()} variant="danger" />
-            </ScrollView>
+            <ScreenContainer edges={['bottom']} scroll keyboardShouldPersistTaps="handled">
+
+            <Text style={[styles.title, { color: colors.foreground }]}>Delete all data</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                This permanently removes every scooter, ride, route and setting on this device.
+            </Text>
+            <TextField
+                autoCapitalize="none"
+                errorText={error ?? undefined}
+                label="Type DELETE to confirm"
+                onChangeText={setConfirmation}
+                value={confirmation}
+            />
+            <PrimaryButton label="Delete everything" onPress={() => void deleteAll()} variant="danger" />
+        
+            </ScreenContainer>
         </View>
     );
 };
 
 export const PermissionsScreen = () => {
     const { colors } = useTheme();
-          const insets = useSafeAreaInsets();
     const [status, setStatus] = useState<string>('Checking...');
 
     const check = async () => {
@@ -253,27 +238,21 @@ export const PermissionsScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + layout.screenPadding },
-        ]}
-      >
-                <Text style={[styles.title, { color: colors.foreground }]}>Permissions</Text>
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>{status}</Text>
-                <PrimaryButton label="Request permissions" onPress={() => void check()} />
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    If a permission is blocked, turn it on in the system settings for this app.
-                </Text>
-            </ScrollView>
+            <ScreenContainer edges={['bottom']} scroll>
+
+            <Text style={[styles.title, { color: colors.foreground }]}>Permissions</Text>
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>{status}</Text>
+            <PrimaryButton label="Request permissions" onPress={() => void check()} />
+            <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                If a permission is blocked, turn it on in the system settings for this app.
+            </Text>
+        
+            </ScreenContainer>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    content: {
-        padding: layout.screenPadding,
-    },
     help: {
         ...typography.body,
         marginBottom: spacing.lg,

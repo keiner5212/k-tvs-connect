@@ -163,6 +163,48 @@ export const SegmentedControl = ({ options, value, onChange }: SegmentedControlP
     );
 };
 
+interface ChipGroupProps {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+}
+
+export const ChipGroup = ({ options, value, onChange }: ChipGroupProps) => {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.chipRow}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <TouchableOpacity
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: selected ? colors.primary : colors.card,
+                borderColor: selected ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.chipLabel,
+                { color: selected ? colors.primaryForeground : colors.foreground },
+              ]}
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
 interface PinDotsProps {
     length: number;
     filled: number;
@@ -214,6 +256,22 @@ const styles = StyleSheet.create({
     buttonLabel: {
         ...typography.button,
     },
+    chip: {
+    alignItems: 'center',
+    borderRadius: radii.full,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+  },
+    chipLabel: {
+    ...typography.label,
+  },
+    chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
     disabled: {
         opacity: 0.5,
     },
@@ -250,16 +308,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginVertical: spacing.lg,
     },
-    segment: {
+  segment: {
         alignItems: 'center',
         borderRadius: radii.full,
         flex: 1,
         paddingVertical: spacing.sm,
     },
-    segmentLabel: {
+  segmentLabel: {
         ...typography.label,
     },
-    segmentTrack: {
+  segmentTrack: {
         borderRadius: radii.full,
         flexDirection: 'row',
         padding: spacing.xs,

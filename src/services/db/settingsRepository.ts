@@ -3,6 +3,10 @@ import { getDatabase } from './database';
 
 const DEFAULTS: AppSettings = {
     unitSystem: 'metric',
+    cameraAvoidEnabled: true,
+    cameraRadiusMeters: 5000,
+    ansvFetchedAt: null,
+    ansvPublishedAt: null,
     overspeedLimitKmh: 80,
     mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
     photonBaseUrl: 'https://photon.komoot.io/api',
@@ -27,6 +31,14 @@ export const getSettings = async (): Promise<AppSettings> => {
 
     return {
         unitSystem: (stored.unitSystem as AppSettings['unitSystem']) ?? DEFAULTS.unitSystem,
+        cameraAvoidEnabled: stored.cameraAvoidEnabled
+            ? stored.cameraAvoidEnabled === 'true'
+            : DEFAULTS.cameraAvoidEnabled,
+        cameraRadiusMeters: stored.cameraRadiusMeters
+            ? Number(stored.cameraRadiusMeters)
+            : DEFAULTS.cameraRadiusMeters,
+        ansvFetchedAt: stored.ansvFetchedAt ? Number(stored.ansvFetchedAt) : DEFAULTS.ansvFetchedAt,
+        ansvPublishedAt: stored.ansvPublishedAt ? Number(stored.ansvPublishedAt) : DEFAULTS.ansvPublishedAt,
         overspeedLimitKmh: stored.overspeedLimitKmh
             ? Number(stored.overspeedLimitKmh)
             : DEFAULTS.overspeedLimitKmh,
@@ -38,7 +50,7 @@ export const getSettings = async (): Promise<AppSettings> => {
     };
 };
 
-const setSetting = async (key: string, value: string): Promise<void> => {
+export const setSetting = async (key: string, value: string): Promise<void> => {
     const db = getDatabase();
     await db.runAsync(
         'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',

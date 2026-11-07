@@ -55,6 +55,31 @@ CREATE TABLE IF NOT EXISTS avoid_points (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS cameras (
+  camera_id TEXT PRIMARY KEY NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  radius_meters REAL NOT NULL DEFAULT 50,
+  max_speed_kmh INTEGER,
+  technology TEXT NOT NULL,
+  road_type TEXT NOT NULL,
+  address TEXT NOT NULL,
+  municipality TEXT NOT NULL,
+  department TEXT NOT NULL,
+  operating_state TEXT NOT NULL,
+  infractions TEXT NOT NULL,
+  dataset_published_at INTEGER,
+  snapshot_id TEXT NOT NULL,
+  last_seen_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cameras_position ON cameras (latitude, longitude);
+
+CREATE TABLE IF NOT EXISTS camera_preferences (
+  camera_id TEXT PRIMARY KEY NOT NULL,
+  avoid_enabled INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL

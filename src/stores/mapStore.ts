@@ -8,6 +8,7 @@ import {
     insertAvoidPoint,
     listAvoidPoints,
 } from '@services/db/avoidPointRepository';
+import { useCameraStore } from '@stores/cameraStore';
 import { useSettingsStore } from '@stores/settingsStore';
 
 export interface ReplayRoute {
@@ -71,6 +72,24 @@ export const useMapStore = create<MapState>((set, get) => ({
         }
 
         const { valhallaBaseUrl } = useSettingsStore.getState().settings;
+        const { selectForRoute } = useCameraStore.getState();
+        const cameras = selectForRoute(
+            originLat,
+            originLon,
+            destination.latitude,
+            destination.longitude,
+        );
+
+        const cameraPoints: AvoidPoint[] = cameras.map((camera) => ({
+            id: `ansv-${camera.cameraId}`,
+            latitude: camera.latitude,
+            longitude: camera.longitude,
+            label: camera.address || 'ANSV camera',
+            radiusMeters: camera.radiusMeters,
+            createdAt: Date.now(),
+            source: 'ansv',
+        }));
+
         set({ computing: true, error: null });
 
         try {
@@ -79,7 +98,7 @@ export const useMapStore = create<MapState>((set, get) => ({
                 originLon,
                 destinationLat: destination.latitude,
                 destinationLon: destination.longitude,
-                avoidPoints: get().avoidPoints,
+                avoidPoints: [...get().avoidPoints, ...cameraPoints],
             });
             set({ route, computing: false });
         } catch {

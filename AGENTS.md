@@ -44,6 +44,21 @@ summaries are written, and only when the user asks for it.
 Declared in `babel.config.js` (module-resolver) and `tsconfig.json` (paths).
 A new alias goes in both files.
 
+## Screen layout and safe area
+
+Every screen goes through `src/components/ScreenContainer.tsx`. It owns the safe
+area insets and the horizontal padding, so no screen pads itself by hand.
+
+- A tab screen has no header, so it uses the top edge: `edges={['top', 'bottom']}`.
+- A screen pushed on the stack has a navigator header, so it only needs the bottom
+  edge: `edges={['bottom']}`.
+- The map is full bleed. It handles its own insets: the toolbar uses `insets.top`,
+  the bottom sheet uses `insets.bottom`.
+
+Do not add manual `paddingTop` or `paddingBottom` for the system bars in a screen.
+If a screen needs more room at the bottom, use `layout.screenPadding` on top of the
+inset, not a magic number.
+
 ## React Native styling
 
 ### Tailwind / NativeWind - only for simple boolean utilities

@@ -16,6 +16,32 @@ const PRIVATE_HOST_PATTERN = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d
 
 const lastRequestAt = new Map<string, number>();
 
+const byteLength = (text: string): number => {
+  let bytes = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0x80) {
+      bytes += 1;
+    } else if (code < 0x800) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4;
+      index += 1;
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
+};
+
+const readHeaders = (response: Response): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value;
+  });
+  return headers;
+};
+
 const isPrivateHost = (host: string): boolean => PRIVATE_HOST_PATTERN.test(host);
 
 const assertAllowedUrl = (url: URL): void => {
@@ -54,6 +80,8 @@ export interface HttpResult<T> {
     status: number;
     body: T;
     requestId: string;
+    headers: Record<string, string>;
+    notModified: boolean;
 }
 
 export const httpGetJson = async <T>(
@@ -83,8 +111,31 @@ export const httpGetJson = async <T>(
             },
         });
 
+        const declared = Number(response.headers.get('content-length') ?? '0');
+        if (declared > (options.maxBytes ?? MAX_RESPONSE_BYTES)) {
+            throw new Error('response is too large');
+        }
+
+        if (response.status === 304) {
+            logger.info('http request', {
+                service: options.service,
+                host: parsed.hostname,
+                pathTemplate: parsed.pathname,
+                status: response.status,
+                durationMs: Date.now() - startedAt,
+                requestId,
+            });
+            return {
+                status: 304,
+                body: null as T,
+                requestId,
+                headers: readHeaders(response),
+                notModified: true,
+            };
+        }
+
         const text = await response.text();
-        if (text.length > (options.maxBytes ?? MAX_RESPONSE_BYTES)) {
+        if (byteLength(text) > (options.maxBytes ?? MAX_RESPONSE_BYTES)) {
             throw new Error('response is too large');
         }
 
@@ -106,6 +157,8 @@ export const httpGetJson = async <T>(
             status: response.status,
             body: JSON.parse(text) as T,
             requestId,
+            headers: readHeaders(response),
+            notModified: false,
         };
     } catch (error) {
         logger.error('http request failed', {
@@ -152,8 +205,31 @@ export const httpPostJson = async <T>(
             body: JSON.stringify(payload),
         });
 
+        const declared = Number(response.headers.get('content-length') ?? '0');
+        if (declared > (options.maxBytes ?? MAX_RESPONSE_BYTES)) {
+            throw new Error('response is too large');
+        }
+
+        if (response.status === 304) {
+            logger.info('http request', {
+                service: options.service,
+                host: parsed.hostname,
+                pathTemplate: parsed.pathname,
+                status: response.status,
+                durationMs: Date.now() - startedAt,
+                requestId,
+            });
+            return {
+                status: 304,
+                body: null as T,
+                requestId,
+                headers: readHeaders(response),
+                notModified: true,
+            };
+        }
+
         const text = await response.text();
-        if (text.length > (options.maxBytes ?? MAX_RESPONSE_BYTES)) {
+        if (byteLength(text) > (options.maxBytes ?? MAX_RESPONSE_BYTES)) {
             throw new Error('response is too large');
         }
 
@@ -175,6 +251,8 @@ export const httpPostJson = async <T>(
             status: response.status,
             body: JSON.parse(text) as T,
             requestId,
+            headers: readHeaders(response),
+            notModified: false,
         };
     } catch (error) {
         logger.error('http request failed', {
