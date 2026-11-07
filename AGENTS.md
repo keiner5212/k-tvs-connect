@@ -2,38 +2,47 @@
 
 ## Stack
 
-Expo SDK 54, React Native 0.81.5, React 19.1, TypeScript strict.
+Expo SDK 54, React Native 0.81.5, React 19.1, TypeScript strict, legacy architecture.
 Runs on a **development client**, not Expo Go: `npm start` uses `expo start --dev-client --clear`.
 Android application id `com.ktvsconnect.app`, iOS bundle id `com.ktvsconnect.app`.
+
+MapLibre React Native is pinned to `10.4.2`, the last release that supports the
+legacy architecture. Moving to the new architecture means moving to `11.x`.
 
 ## Package manager
 
 **npm only.** Never pnpm/yarn here, Expo breaks with them.
 Use `package-lock.json`. Install with `npm install`.
 
-## Layout
+## No TVS
 
-```
-App.tsx              root: theme, error boundary, navigator
-index.ts             entry point registered with expo
-src/config/          theme tokens, envs, i18n setup
-src/constants/       shared constants
-src/hooks/           reusable hooks
-src/navigation/      navigators and param lists
-src/screens/         screens
-src/components/      presentational components
-src/services/        API clients and data access
-src/stores/          zustand stores
-src/types/           shared TypeScript types
-src/utils/           pure helpers
-src/locales/         i18n json
-tools/               reverse engineering scripts (see README.md)
-mcp/                 MCP server configs for the AI client
-```
+The app never contacts a TVS host and never carries a TVS credential.
+`tools/verify-bundle.sh` fails the build if `tvsmotor`, `bluconnect`, `aptener`,
+`firebase`, `AIza` or `RSA_TOKEN` reappear in the bundle. Do not add a TVS base url,
+a TVS login or a TVS analytics call.
 
-Path aliases: `@components`, `@hooks`, `@screens`, `@navigation`, `@config`, `@stores`,
-`@locales`, `@utils`, `@services`, `@constants`, `@contexts`, `@typings`, `@`.
-They are declared in `babel.config.js` (module-resolver) and `tsconfig.json` (paths).
+## Module boundaries
+
+- `src/ble` owns bluetooth. Only that folder imports `react-native-ble-plx`.
+- `src/services/db` owns the local database. Everything else goes through a repository.
+- `src/services/http.service.ts` is the only network entry point. No other module
+  calls `fetch`.
+- `src/utils/logger.ts` is the only module that calls `console`. `no-console` is an
+  error everywhere else. The logger drops every field outside a short allow list.
+- `src/stores` owns the client state, one writer per value.
+- `src/config/theme.ts` owns colors, spacing and radii.
+
+## Live data never touches the disk
+
+Live speed, the ble gps stream and the raw frames stay in memory. Only ride
+summaries are written, and only when the user asks for it.
+
+## Path aliases
+
+`@` (src), `@ble`, `@components`, `@hooks`, `@screens`, `@navigation`, `@config`,
+`@stores`, `@locales`, `@utils`, `@services`, `@constants`, `@contexts`, `@typings`.
+Declared in `babel.config.js` (module-resolver) and `tsconfig.json` (paths).
+A new alias goes in both files.
 
 ## React Native styling
 
@@ -84,25 +93,32 @@ Never hardcode color literals (`'#fff'`, `'rgba(0,0,0,0.5)'`) inside component s
 | Full-screen overlay | `colors.overlay` |
 | Border | `colors.border` |
 
-Only use literal `rgba(...)` when building animated shadow or overlay values from
-`hexToRgb(colors.foreground)`.
+Use `rgba(colors.foreground, alpha)` through `src/utils/hexToRgb` for shadows and
+overlays.
 
-## Local-only files - do not commit
+## Typography
 
-`src/config/envs.ts` changes during local testing (API URLs, keys, flags).
-Git skips it with:
+`typography.metric` is the big live speed number, `typography.readout` is a tile
+value. Both use tabular numerals so the digits do not jump.
 
-```sh
-git update-index --skip-worktree src/config/envs.ts
-```
+## Accessibility
 
-Do not stage or commit `envs.ts` unless the change is intentional and tested.
+Every icon only control gets an `accessibilityLabel` and a 44 by 44 touch target.
+No state is color only: the connection dot always sits next to a word. The
+connection rail is the only live region, it announces on a state change and not on
+every value.
+
+## Local only files - do not commit
+
+`src/config/envs.ts` is gone, the service urls live in the settings table instead.
+Never commit a keystore, an api key or a `.env` file. The debug keystore that the
+Docker build uses is public and must never sign anything else.
 
 ## Reverse engineering workspace
 
-`.tmp/` holds the unpacked XAPK, jadx and apktool output, and the MobSF reports.
-It is gitignored. The tooling is documented in `README.md`, the recovered API contract
-in `docs/API_CONTRACT.md`.
+`.tmp/` holds the unpacked XAPK, the jadx and apktool output and the MobSF
+reports. It is gitignored. The recovered protocol is in `docs/BLE_PROTOCOL.md`,
+the free service stack in `docs/FREE_SERVICES.md`.
 
 Do not copy proprietary code, artwork or resources from the original app into `src/`.
-The replacement client must be clean room: own code, own assets, same public endpoints.
+The replacement client must be clean room: own code, own assets.

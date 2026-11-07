@@ -2,7 +2,8 @@
 
 | Document | Content |
 | --- | --- |
-| [SETUP.md](SETUP.md) | Local setup, dev client, build commands |
+| [SETUP.md](SETUP.md) | Install, run, the Docker apk build, the local routing service |
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | Folder map and module boundaries |
-| [API_CONTRACT.md](API_CONTRACT.md) | Endpoints recovered from the XAPK and how to call them |
-| [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) | Toolchain, workflow and findings of the XAPK analysis |
+| [BLE_PROTOCOL.md](BLE_PROTOCOL.md) | The scooter protocol: uuids, frames, the port in `src/ble` |
+| [FREE_SERVICES.md](FREE_SERVICES.md) | Tiles, place search and routing without a key or an account |
+| [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) | What the original app does and the toolchain used to find out |

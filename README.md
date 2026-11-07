@@ -1,31 +1,74 @@
 # K Tvs Connect
 
-React Native replacement client for the TVS Connect Android app, plus the
-reverse engineering toolchain used to recover its API contract.
-
-The repository holds two things:
-
-- `src/`, `App.tsx` and the root config files: the Expo app (development client, not Expo Go).
-- `tools/`, `mcp/` and `docs/`: the analysis workspace for the original XAPK.
-
-`docs/API_CONTRACT.md` holds the endpoints recovered from the original app.
-`docs/REVERSE_ENGINEERING.md` holds the findings and the toolchain notes.
-
-## The app
+A personal React Native companion for your own scooter. It talks to the bike over
+Bluetooth LE with the protocol recovered from the original TVS Connect app, and it
+uses free map services. No account, no server of our own, no TVS backend is ever
+contacted.
 
 | | |
 | --- | --- |
 | Stack | Expo SDK 54, React Native 0.81.5, React 19.1, TypeScript strict |
 | Application id | `com.ktvsconnect.app` |
-| Run | `npm start` starts the dev client, `npm run android` builds and installs |
-| Checks | `npm run lint`, `npm run typecheck`, `npm test` |
+| Map | MapLibre React Native with OpenFreeMap styles, no key |
+| Search and routing | Photon and Valhalla, no key, no account |
+| Storage | expo-sqlite with SQLCipher, the key in the android keystore |
+| Build | debug apk from Docker, no EAS |
 
-Conventions live in [AGENTS.md](AGENTS.md). Setup in [docs/SETUP.md](docs/SETUP.md).
+## Features
+
+- **Garage** with full CRUD: add a scooter by scanning for it or by typing its
+  bluetooth address, edit the name, model and frame number, delete it, pick the
+  active one.
+- **Connection** that reconnects on its own while the bike is on, with a scan
+  window, a liveness watchdog and a visible age on every value.
+- **Dashboard** with speed, engine rpm, fuel, odometer, average and top speed,
+  throttle, plus the alerts for low fuel, side stand, turn signals and overspeed.
+- **Map** with place search, routes for a scooter profile, marked points to avoid
+  that the routing engine excludes by itself, and saved routes to ride again.
+- **Settings** for units, the overspeed limit, the map style, the service urls,
+  a local pin, data export and data deletion.
+
+## Run it
 
 ```sh
 npm install
-npm run android
+npm run android          # build and install on the connected phone
 ```
+
+The app needs a development client, Expo Go does not carry bluetooth or the
+native map. See [docs/SETUP.md](docs/SETUP.md).
+
+## Build the apk in Docker, no EAS
+
+```sh
+tools/build-apk.sh
+adb install -r build/app-debug.apk
+tools/verify-bundle.sh build/app-debug.apk
+```
+
+The image pins the sdk components React Native 0.81 expects. The verify step fails
+the build if a TVS host or a vendor credential reappears in the bundle.
+
+## Run the routing locally
+
+```sh
+docker compose -f docker/docker-compose.valhalla.yml up -d
+```
+
+Then point the routing url in Settings at `http://127.0.0.1:8002` and nothing
+leaves the machine any more.
+
+## Documentation
+
+| Document | Content |
+| --- | --- |
+| [docs/SETUP.md](docs/SETUP.md) | Install, run, the Docker builds |
+| [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Folder map and boundaries |
+| [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md) | The scooter protocol and the port in `src/ble` |
+| [docs/FREE_SERVICES.md](docs/FREE_SERVICES.md) | Tiles, search and routing without a key |
+| [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md) | What the original app does and how it was found |
+
+Conventions live in [AGENTS.md](AGENTS.md).
 
 ## Reverse engineering toolchain
 
@@ -36,14 +79,13 @@ npm run android
 | jadx | 1.5.6 | `~/.local/bin/jadx` |
 | apktool | 3.0.3 | `~/.local/bin/apktool` |
 | Android SDK | build-tools 36.0.0, platform 36, platform-tools 37.0.1 | `~/Android/Sdk` |
-| MobSF | v4.6.4 image | container `mobsf`, `http://127.0.0.1:8000`, login `mobsf`/`mobsf` |
+| MobSF | v4.6.4 image | container `mobsf`, `http://127.0.0.1:8000` |
 | frida-tools | 17.26.1 | `~/.local/bin/frida`, `frida-ps`, `frida-trace` |
 | objection | 1.12.5 | `~/.local/bin/objection` |
 | mitmproxy | 12.3.1 | `~/.local/bin/mitmproxy`, `mitmdump` |
 | JDK for Ghidra | 21.0.2 | `~/.jabba/jdk/openjdk@21.0.2` |
 
 Ghidra 12.1.4 is pinned because the GhidraMCP 2.0 extension is built for it.
-Ghidra needs JDK 21 or newer, the rest of the system keeps its default JDK 26.
 
 Load the environment before using the scripts:
 
@@ -51,97 +93,24 @@ Load the environment before using the scripts:
 . tools/env.sh
 ```
 
-It exports `GHIDRA_INSTALL_DIR`, `ANDROID_HOME`, `GHIDRA_PROJECTS`, `JAVA_HOME` and the
-`PATH` entries for every tool above.
-
-## Workflow
-
-### 1. Unpack the XAPK
+### Workflow
 
 ```sh
 tools/xapk-unpack.sh com.tvsm.connect.latam-44_arm64-v8a.xapk .tmp/target
-```
-
-Prints the package name, version and every split, then lists the APK parts. The base
-APK is what jadx, apktool and MobSF need.
-
-### 2. Static analysis
-
-```sh
 tools/apk-static.sh .tmp/target/base.apk .tmp/target/static
-```
-
-Runs `aapt2 dump badging`, `apksigner verify --print-certs`, lists native libraries,
-decompiles with jadx into `jadx/` and decodes resources and smali with apktool into
-`apktool/`.
-
-### 3. MobSF report
-
-```sh
 tools/mobsf-up.sh .tmp/target/base.apk .tmp/target/mobsf
-```
-
-Uploads through the MobSF REST API, starts the static analysis and writes
-`report.json` plus `report.pdf`. The API key is read from the container log on every
-run, so recreating the container does not break the script.
-
-Start MobSF again after a reboot:
-
-```sh
-docker start mobsf
-```
-
-### 4. Native libraries in Ghidra
-
-```sh
 tools/ghidra-native.sh .tmp/target/split_config.arm64_v8a.apk TVSConnect
+tools/ghidra-mcp-http.sh .tmp/target/tvs-lib/arm64-v8a/libBluConnect-Lib.so 8082
 ```
 
-Imports every `lib/*/*.so` into the Ghidra project `~/ghidra-projects/TVSConnect`.
+The MCP client config for the AI client is in [mcp/ghidra-mcp.json](mcp/ghidra-mcp.json).
 
 Ghidra rejects project paths that contain a path element starting with a dot, so
 projects live in `~/ghidra-projects` and not in `.tmp/`.
 
-### 5. Ghidra over MCP
-
-GUI mode:
-
-```sh
-~/tools/ghidra_12.1.4_PUBLIC/ghidraRun
-```
-
-Open the project, then `File > Configure > Developer > GhidraMCPPlugin`, and set the
-port in `Edit > Tool Options > GhidraMCP HTTP Server` (default 8080).
-
-Headless mode, no GUI needed:
-
-```sh
-tools/ghidra-mcp-http.sh .tmp/target/lib/arm64-v8a/libBluConnect-Lib.so 8081
-```
-
-MCP client config for both modes is in [mcp/ghidra-mcp.json](mcp/ghidra-mcp.json).
-The `ghidra` entry is the stdio server to register in the AI client, the
-`ghidra-headless` entry starts its own Ghidra instance.
-
-Verified end to end: `initialize` then `tools/call get_program_info` returned the
-program metadata and the function count through the headless bridge.
-
-### 6. Dynamic analysis on the device
-
-The phone is connected over USB and is not rooted, so `frida-server` cannot run on
-the device. Options are the frida-gadget patched into the APK, a rooted emulator,
-or static analysis plus `mitmdump` for the network behaviour.
-
-```sh
-adb devices -l
-mitmdump --listen-host 0.0.0.0 --listen-port 8080
-frida-ps -U
-objection -U -G com.tvsm.connect.latam explore
-```
-
 ## Scope and legality
 
-Reverse engineering for interoperability or personal use of an app you have the right
-to inspect is fine. Do not redistribute the original app code, resources, artwork or
-signing keys, and do not ship the original package name. Clean room the replacement:
-the React Native app contains its own code and talks to the same public endpoints.
+Reverse engineering for interoperability or personal use of an app you have the
+right to inspect is fine. This project contains no original code, no original
+artwork and no original assets, and it never contacts the vendor backend. Do not
+redistribute the original app and do not ship the original package name.
