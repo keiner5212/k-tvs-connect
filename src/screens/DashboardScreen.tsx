@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -23,6 +24,7 @@ export const DashboardScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const tabBarHeight = useBottomTabBarHeight();
     const activeBike = useGarageStore((state) => state.bikes.find((bike) => bike.isActive) ?? null);
     const connectionState = useBleStore((state) => state.state);
     const telemetry = useBleStore((state) => state.telemetry);
@@ -73,7 +75,7 @@ export const DashboardScreen = () => {
                 id: 'side_stand',
                 kind: 'side_stand',
                 title: 'Side stand down',
-                body: 'The side stand is down. The scooter may cut out.',
+                body: 'The side stand is down. The bike may cut out.',
                 raisedAt: telemetry.receivedAt,
             });
         }
@@ -113,8 +115,8 @@ export const DashboardScreen = () => {
             <View style={[styles.screen, { backgroundColor: colors.background }]}>
                 <View style={{ paddingTop: insets.top + spacing.lg }}>
                     <EmptyState
-                        title="No scooter selected"
-                        description="Add a scooter in the Garage to see its live data here."
+                        title="No bike selected"
+                        description="Add a bike in the Garage to see its live data here."
                     />
                 </View>
             </View>
@@ -135,7 +137,10 @@ export const DashboardScreen = () => {
             <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + layout.screenPadding },
+          {
+              paddingTop: insets.top + spacing.lg,
+              paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding,
+            },
         ]}
       >
                 {stale && lastUpdateAt ? (

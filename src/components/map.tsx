@@ -73,13 +73,13 @@ export const MapCanvas = ({
             }
         >
             <Camera
-        centerCoordinate={center}
-        followUserLocation={followUser}
-        followUserMode={UserTrackingMode.Follow}
-        zoomLevel={zoom}
-      />
+                centerCoordinate={center}
+                followUserLocation={followUser}
+                followUserMode={UserTrackingMode.Follow}
+                zoomLevel={zoom}
+            />
 
-      <UserLocation visible renderMode={UserLocationRenderMode.Normal} />
+            <UserLocation visible renderMode={UserLocationRenderMode.Normal} />
 
             {routeShape ? (
                 <ShapeSource id="route-source" shape={routeShape}>
@@ -104,52 +104,82 @@ export const MapCanvas = ({
             ) : null}
 
             {cameras.map((camera) => (
-        <PointAnnotation
-          id={`camera-${camera.id}`}
-          key={camera.id}
-          coordinate={[camera.longitude, camera.latitude]}
-        >
-          <TouchableOpacity
-            accessibilityLabel={camera.label}
-            accessibilityRole="button"
-            onPress={() => onCameraPress?.(camera.id)}
-            style={styles.cameraPin}
-          >
-            <View
-              style={[
-                styles.cameraBody,
-                {
-                  backgroundColor: camera.isAvoided ? colors.error : colors.card,
-                  borderColor: colors.error,
-                },
-              ]}
-            />
-            {camera.maxSpeedKmh !== null ? (
-              <View
-                style={[
-                  styles.cameraSpeed,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.cameraSpeedLabel, { color: colors.foreground }]}>
-                  {camera.maxSpeedKmh.toString()}
-                </Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        </PointAnnotation>
-      ))}
+                <PointAnnotation
+                    id={`camera-${camera.id}`}
+                    key={camera.id}
+                    coordinate={[camera.longitude, camera.latitude]}
+                >
+                    <TouchableOpacity
+                        accessibilityLabel={
+                            camera.maxSpeedKmh !== null
+                                ? `Speed camera, ${camera.maxSpeedKmh} kilometres per hour, ${camera.label}`
+                                : `Speed camera, speed not published, ${camera.label}`
+                        }
+                        accessibilityRole="button"
+                        onPress={() => onCameraPress?.(camera.id)}
+                        style={styles.cameraPin}
+                    >
+                        <View
+                            style={[
+                                styles.cameraBody,
+                                {
+                                    backgroundColor: camera.isAvoided ? colors.error : colors.card,
+                                    borderColor: colors.error,
+                                },
+                            ]}
+                        >
+                            <View
+                                style={[
+                                    styles.cameraLens,
+                                    {
+                                        backgroundColor: camera.isAvoided
+                                            ? colors.errorForeground
+                                            : colors.error,
+                                    },
+                                ]}
+                            />
+                            <View
+                                style={[
+                                    styles.cameraFoot,
+                                    {
+                                        backgroundColor: camera.isAvoided
+                                            ? colors.errorForeground
+                                            : colors.error,
+                                    },
+                                ]}
+                            />
+                        </View>
+                        {camera.maxSpeedKmh !== null ? (
+                            <View
+                                style={[
+                                    styles.cameraSpeed,
+                                    { backgroundColor: colors.card, borderColor: colors.border },
+                                ]}
+                            >
+                                <Text style={[styles.cameraSpeedLabel, { color: colors.foreground }]}>
+                                    {camera.maxSpeedKmh.toString()}
+                                </Text>
+                            </View>
+                        ) : null}
+                    </TouchableOpacity>
+                </PointAnnotation>
+            ))}
 
-      {avoidPoints.map((point, index) => (
+            {avoidPoints.map((point, index) => (
                 <PointAnnotation
                     key={point.id}
                     id={point.id}
                     coordinate={[point.longitude, point.latitude]}
                 >
-                    <View style={[styles.avoidPin, { backgroundColor: colors.warning }]}>
-                        <Text style={[styles.avoidPinLabel, { color: colors.warningForeground }]}>
-                            {(index + 1).toString()}
-                        </Text>
+                    <View style={styles.avoidPinWrap}>
+                        <View style={[styles.avoidPin, { backgroundColor: colors.warning }]}>
+                            <Text style={[styles.avoidPinLabel, { color: colors.warningForeground }]}>
+                                {(index + 1).toString()}
+                            </Text>
+                        </View>
+                        <View
+                            style={[styles.avoidTip, { borderTopColor: colors.warning }]}
+                        />
                     </View>
                 </PointAnnotation>
             ))}
@@ -340,41 +370,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
     },
-    cameraPin: {
-    alignItems: 'center',
-    height: 26,
-    justifyContent: 'center',
-    width: 26,
-  },
-  cameraBody: {
-    borderRadius: radii.sm,
-    borderWidth: 2,
-    height: 20,
-    width: 20,
-  },
-  cameraSpeed: {
-    borderRadius: radii.full,
-    borderWidth: 1,
-    marginLeft: 2,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  cameraSpeedLabel: {
-    ...typography.caption,
-    fontWeight: '700',
-  },
-  avoidPin: {
+    avoidPin: {
         alignItems: 'center',
         borderRadius: radii.full,
         height: 24,
         justifyContent: 'center',
         width: 24,
     },
-  avoidPinLabel: {
+    avoidPinLabel: {
         ...typography.caption,
         fontWeight: '700',
     },
-  avoidRow: {
+    avoidRow: {
         alignItems: 'center',
         flexDirection: 'row',
         gap: spacing.md,
@@ -382,6 +389,62 @@ const styles = StyleSheet.create({
     },
     avoidTitle: {
         ...typography.label,
+    },
+    cameraBody: {
+        borderRadius: radii.sm,
+        borderWidth: 2,
+        height: 20,
+        width: 20,
+    },
+    cameraPin: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        height: 26,
+        justifyContent: 'center',
+    },
+    cameraBody: {
+        alignItems: 'center',
+        borderRadius: radii.sm,
+        borderWidth: 2,
+        height: 22,
+        justifyContent: 'center',
+        width: 22,
+    },
+    cameraLens: {
+        borderRadius: radii.full,
+        height: 7,
+        width: 7,
+    },
+    cameraFoot: {
+        borderTopLeftRadius: 2,
+        borderTopRightRadius: 2,
+        bottom: 3,
+        height: 3,
+        position: 'absolute',
+        width: 10,
+    },
+    avoidPinWrap: {
+        alignItems: 'center',
+    },
+    avoidTip: {
+        borderLeftColor: 'transparent',
+        borderLeftWidth: 5,
+        borderRightColor: 'transparent',
+        borderRightWidth: 5,
+        borderTopWidth: 6,
+        height: 0,
+        width: 0,
+    },
+    cameraSpeed: {
+        borderRadius: radii.full,
+        borderWidth: 1,
+        marginLeft: 2,
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+    },
+    cameraSpeedLabel: {
+        ...typography.caption,
+        fontWeight: '700',
     },
     card: {
         borderRadius: radii.lg,
@@ -441,16 +504,16 @@ const styles = StyleSheet.create({
         ...typography.caption,
     },
     replayLabel: {
-    ...typography.caption,
-    fontWeight: '700',
-  },
+        ...typography.caption,
+        fontWeight: '700',
+    },
     replayPin: {
-    alignItems: 'center',
-    borderRadius: radii.full,
-    height: 28,
-    justifyContent: 'center',
-    width: 28,
-  },
+        alignItems: 'center',
+        borderRadius: radii.full,
+        height: 28,
+        justifyContent: 'center',
+        width: 28,
+    },
     searching: {
         ...typography.body,
         padding: layout.cardPadding,

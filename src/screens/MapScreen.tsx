@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -8,6 +7,7 @@ import { CameraAttribution, CameraAvoidList } from '@components/cameras';
 import { AvoidPointList, MapCanvas, RoutePreviewCard } from '@components/map';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@hooks/useTheme';
 import { useCameraStore } from '@stores/cameraStore';
@@ -29,6 +29,7 @@ export const MapScreen = () => {
     const { settings } = useSettingsStore();
     const now = useNow();
     const insets = useSafeAreaInsets();
+    const tabBarHeight = useBottomTabBarHeight();
     const {
         addAvoidPoint,
         avoidPoints,
@@ -71,13 +72,17 @@ export const MapScreen = () => {
 
     useEffect(() => {
         const load = async () => {
-            const permission = await Location.requestForegroundPermissionsAsync();
-            if (permission.status !== 'granted') {
+            const { useLocationStore } = await import('@stores/locationStore');
+            const store = useLocationStore.getState();
+            if (store.permission === 'unknown') {
+                await store.request();
+            }
+            const permission = useLocationStore.getState().permission;
+            if (permission !== 'granted') {
                 setLocationError('Location permission needed to plan routes from your position.');
                 return;
             }
-            const current = await Location.getCurrentPositionAsync({});
-            setPosition([current.coords.latitude, current.coords.longitude]);
+            setPosition(useLocationStore.getState().position);
         };
         void load();
     }, []);
@@ -226,7 +231,9 @@ export const MapScreen = () => {
                 </TouchableOpacity>
             </View>
 
-            <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.md }]}>
+            <View
+                style={[styles.bottom, { paddingBottom: insets.bottom + tabBarHeight + spacing.md }]}
+            >
                 {locationError ? <Banner tone="warning" message={locationError} /> : null}
                 {error ? (
                     <Banner

@@ -14,6 +14,7 @@
 - The scooter service uuid is derived from the phone imei: `imei[0:8]-imei[8:12]-imei[12:15]9-5342-454E544F5251`. Read characteristic `00005354-...`, write `00005352-...`.
 - MapLibre React Native is pinned to 10.4.2 because the project is on the legacy architecture and v11 dropped it.
 - The free map stack: OpenFreeMap styles, Photon for search, Valhalla for routing with `exclude_locations` and `exclude_polygons` as top level request fields.
+- The ANSV camera dataset is `https://fotodeteccion.ansv.gov.co/map/data/sast.json`, a public file with no key. Only `estado_operacion == "Operando"` is treated as active. The infraction codes it carries (C35, D02, ...) have no published legend, so the app shows them verbatim and never guesses.
 - Long decompiles run inside a docker container so they survive the session: `docker run -d --entrypoint java ... jadx.cli.JadxCLI`.
 - The scratch of this project stays inside the folder: `tools/env.sh` points `GHIDRA_PROJECTS` at `analysis/ghidra-projects` and the scripts use `.tmp/` instead of `/tmp`.
 - The phone is connected over usb as RCUSTSEQTSK7RKSW (model 2602DPT53G). `npx expo run:android` installs the dev build on it.

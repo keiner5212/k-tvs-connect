@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { SegmentedControl, TextField, showConfirm } from '@components/controls';
-import { NumberStepper, SettingsChoice, SettingsRow, SettingsSection } from '@components/settings';
+import { NumberStepper, SettingsBody, SettingsChoice, SettingsRow, SettingsSection } from '@components/settings';
 import { useTheme } from '@hooks/useTheme';
+import { useCameraStore } from '@stores/cameraStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { isAllowedBaseUrl } from '@services/http.service';
@@ -24,7 +26,12 @@ export const SettingsScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const tabBarHeight = useBottomTabBarHeight();
     const { settings, load, update } = useSettingsStore();
+    const cameraAvoidEnabled = useCameraStore((state) => state.avoidEnabled);
+    const cameraRadiusMeters = useCameraStore((state) => state.radiusMeters);
+    const setAvoidEnabledGlobally = useCameraStore((state) => state.setAvoidEnabledGlobally);
+    const setRadiusMeters = useCameraStore((state) => state.setRadiusMeters);
 
     const [photonUrl, setPhotonUrl] = useState(settings.photonBaseUrl);
     const [valhallaUrl, setValhallaUrl] = useState(settings.valhallaBaseUrl);
@@ -53,15 +60,18 @@ export const SettingsScreen = () => {
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + layout.screenPadding },
-        ]}
-      >
+                contentContainerStyle={[
+                    styles.content,
+                    {
+                        paddingTop: insets.top + spacing.lg,
+                        paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding,
+                    },
+                ]}
+            >
                 <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
 
                 <SettingsSection title="Units">
-                    <View style={styles.padded}>
+                    <SettingsBody>
                         <SegmentedControl
                             onChange={(value) => void update({ unitSystem: value as 'metric' | 'imperial' })}
                             options={[
@@ -70,7 +80,7 @@ export const SettingsScreen = () => {
                             ]}
                             value={settings.unitSystem}
                         />
-                    </View>
+                    </SettingsBody>
                 </SettingsSection>
 
                 <SettingsSection title="Speed alert">
@@ -97,14 +107,40 @@ export const SettingsScreen = () => {
                             selected={settings.mapStyleUrl === style.value}
                         />
                     ))}
-                    <View style={styles.padded}>
+                </SettingsSection>
+
+                <SettingsSection title="Custom map style">
+                    <SettingsBody>
                         <TextField
                             errorText={urlError ?? undefined}
-                            label="Custom style url"
+                            helperText="Any MapLibre style json url."
+                            label="Style url"
                             onChangeText={setStyleUrl}
                             value={styleUrl}
                         />
-                    </View>
+                    </SettingsBody>
+                    <SettingsRow label="Save style url" onPress={saveUrls} />
+                </SettingsSection>
+
+                <SettingsSection
+                    title="Cameras"
+                    footer="Photo detection cameras published by the road safety agency become automatic points to avoid."
+                >
+                    <SettingsRow
+                        description="Send the nearby cameras with every route."
+                        label="Avoid cameras on routes"
+                        onSwitchChange={(value) => void setAvoidEnabledGlobally(value)}
+                        switchValue={cameraAvoidEnabled}
+                    />
+                    <NumberStepper
+                        label="Search radius"
+                        max={20000}
+                        min={1000}
+                        onChange={(value) => void setRadiusMeters(value)}
+                        step={1000}
+                        unit="m"
+                        value={cameraRadiusMeters}
+                    />
                 </SettingsSection>
 
                 <SettingsSection
@@ -150,7 +186,7 @@ export const SettingsScreen = () => {
                         onPress={() =>
                             showConfirm(
                                 'Delete all data?',
-                                'This permanently removes every scooter, ride, route and setting on this device.',
+                                'This permanently removes every bike, ride, route and setting on this device.',
                                 'Delete everything',
                                 () => navigation.navigate('DeleteData'),
                                 true,

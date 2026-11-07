@@ -171,7 +171,7 @@ export const ExportDataScreen = () => {
 
             <Text style={[styles.title, { color: colors.foreground }]}>Export data</Text>
             <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                Shares a copy of the scooters, routes and rides stored on this device.
+                Shares a copy of the bikes, routes and rides stored on this device.
             </Text>
             <PrimaryButton label="Export" onPress={() => void exportData()} />
             {summary ? <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text> : null}
@@ -206,7 +206,7 @@ export const DeleteDataScreen = () => {
 
             <Text style={[styles.title, { color: colors.foreground }]}>Delete all data</Text>
             <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                This permanently removes every scooter, ride, route and setting on this device.
+                This permanently removes every bike, ride, route and setting on this device.
             </Text>
             <TextField
                 autoCapitalize="none"

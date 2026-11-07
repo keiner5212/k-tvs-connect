@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '@components/ErrorBoundary';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { openDatabase } from '@services/db/database';
+import { useCameraStore } from '@stores/cameraStore';
 import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { bindRideTracker, rideTracker } from '@services/rideTracker';
@@ -44,6 +45,7 @@ export default function App() {
             await useGarageStore.getState().load();
             await useSettingsStore.getState().load();
             setReady(true);
+            void useCameraStore.getState().refresh();
         };
         void bootstrap();
     }, []);

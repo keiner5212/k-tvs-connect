@@ -17,13 +17,13 @@ interface ConnectionRailProps {
 const stateTitle = (state: ConnectionState, nickname?: string): string => {
     switch (state) {
         case 'scanning':
-            return 'Scanning for scooters...';
+            return 'Scanning for bikes...';
         case 'connecting':
-            return `Connecting to ${nickname ?? 'scooter'}...`;
+            return `Connecting to ${nickname ?? 'bike'}...`;
         case 'connected':
             return 'Connected';
         case 'reconnecting':
-            return `Reconnecting to ${nickname ?? 'scooter'}...`;
+            return `Reconnecting to ${nickname ?? 'bike'}...`;
         case 'failed':
             return 'Could not connect';
         default:
@@ -55,7 +55,7 @@ export const ConnectionRail = ({
                 </Text>
                 {state === 'off' ? (
                     <Text style={[styles.railCaption, { color: colors.mutedForeground }]}>
-                        Turn the scooter on. It connects automatically when the scooter is switched on.
+                        Turn the bike on. It connects automatically when the bike is switched on.
                     </Text>
                 ) : (
                     <Text style={[styles.railCaption, { color: colors.mutedForeground }]}>

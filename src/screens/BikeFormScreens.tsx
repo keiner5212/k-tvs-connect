@@ -68,7 +68,7 @@ export const BikeForm = ({
                 );
             }, 5000);
         } catch {
-            setError('Bluetooth permission is needed to scan for your scooter.');
+            setError('Bluetooth permission is needed to scan for your bike.');
         } finally {
             setScanning(false);
         }
@@ -76,7 +76,7 @@ export const BikeForm = ({
 
     const submit = async () => {
         if (!nickname.trim()) {
-            setError('Enter a name for your scooter.');
+            setError('Enter a name for your bike.');
             return;
         }
         if (!frameNumber.trim()) {
@@ -147,7 +147,7 @@ export const BikeForm = ({
 
         <PrimaryButton
             disabled={scanning}
-            label={scanning ? 'Scanning...' : 'Scan for scooters'}
+            label={scanning ? 'Scanning...' : 'Scan for bikes'}
             onPress={() => void scan()}
             variant="secondary"
         />
@@ -172,8 +172,8 @@ export const BikeForm = ({
 
         {scanning && found.length === 0 ? (
             <EmptyState
-                description="Make sure the scooter is switched on and close to your phone, then scan again."
-                title="No scooter found"
+                description="Make sure the bike is switched on and close to your phone, then scan again."
+                title="No bike found"
             />
         ) : null}
 
@@ -199,7 +199,7 @@ export const AddBikeScreen = () => {
                     );
                     navigation.goBack();
                 }}
-                submitLabel="Add scooter"
+                submitLabel="Add bike"
             />
         </View>
     );
@@ -213,7 +213,7 @@ export const EditBikeScreen = ({ route }: { route: { params: { bikeId: string } 
     if (!bike) {
         return (
             <View style={styles.screen}>
-                <EmptyState description="This scooter is no longer saved." title="Not found" />
+                <EmptyState description="This bike is no longer saved." title="Not found" />
             </View>
         );
     }

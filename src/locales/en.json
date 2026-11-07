@@ -1,15 +1,15 @@
 {
     "garage": {
         "title": "Garage",
-        "add": "Add scooter",
-        "empty": "No scooters yet",
-        "emptyBody": "Add your first scooter to see its live dashboard, ride stats and routes."
+        "add": "Add bike",
+        "empty": "No bikes yet",
+        "emptyBody": "Add your first bike to see its live dashboard, ride stats and routes."
     },
     "dashboard": {
-        "noScooter": "No scooter selected",
-        "noScooterBody": "Add a scooter in the Garage to see its live data here.",
+        "noScooter": "No bike selected",
+        "noScooterBody": "Add a bike in the Garage to see its live data here.",
         "neverConnected": "Never connected",
-        "neverConnectedBody": "Turn the scooter on. It connects automatically when the scooter is switched on.",
+        "neverConnectedBody": "Turn the bike on. It connects automatically when the bike is switched on.",
         "speed": "Speed",
         "engine": "Engine",
         "fuel": "Fuel",
@@ -20,7 +20,7 @@
     },
     "connection": {
         "off": "Not connected",
-        "scanning": "Scanning for scooters...",
+        "scanning": "Scanning for bikes...",
         "connecting": "Connecting to {name}...",
         "connected": "Connected",
         "reconnecting": "Reconnecting to {name}...",

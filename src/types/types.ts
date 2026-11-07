@@ -7,7 +7,7 @@ export type CameraTechnology =
     | 'Otra Tecnología'
     | 'Not reported';
 
-export type CameraOperatingState = 'Operando' | 'Not operating' | 'Not reported';
+export type CameraOperatingState = 'Operating' | 'Not operating' | 'Not reported';
 
 export interface TrafficCamera {
     cameraId: string;

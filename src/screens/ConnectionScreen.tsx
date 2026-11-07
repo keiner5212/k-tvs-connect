@@ -36,7 +36,7 @@ export const ConnectionScreen = () => {
     if (!bike) {
         return (
             <View style={[styles.screen, { backgroundColor: colors.background }]}>
-                <EmptyState description="This scooter is no longer saved." title="Not found" />
+                <EmptyState description="This bike is no longer saved." title="Not found" />
             </View>
         );
     }
@@ -70,7 +70,7 @@ export const ConnectionScreen = () => {
 
             {!permissionGranted ? (
                 <Text style={[styles.warning, { color: colors.error }]}>
-                    Bluetooth permission is needed to connect to your scooter.
+                    Bluetooth permission is needed to connect to your bike.
                 </Text>
             ) : null}
 
@@ -82,16 +82,16 @@ export const ConnectionScreen = () => {
                     variant="secondary"
                 />
                 <PrimaryButton
-                    label="Edit scooter"
+                    label="Edit bike"
                     onPress={() => navigation.navigate('EditBike', { bikeId: bike.id })}
                     variant="ghost"
                 />
                 <PrimaryButton
-                    label="Delete scooter"
+                    label="Delete bike"
                     onPress={() =>
                         showConfirm(
                             `Delete ${bike.nickname}?`,
-                            'This removes the scooter, its ride history and its saved routes from this device. This cannot be undone.',
+                            'This removes the bike, its ride history and its saved routes from this device. This cannot be undone.',
                             'Delete',
                             () => {
                                 void useGarageStore.getState().remove(bike.id);
@@ -118,7 +118,7 @@ export const BikeDetailsScreen = () => {
     if (!bike) {
         return (
             <View style={[styles.screen, { backgroundColor: colors.background }]}>
-                <EmptyState description="This scooter is no longer saved." title="Not found" />
+                <EmptyState description="This bike is no longer saved." title="Not found" />
             </View>
         );
     }
@@ -143,7 +143,7 @@ export const BikeDetailsScreen = () => {
                     variant="secondary"
                 />
                 <PrimaryButton
-                    label={bike.isActive ? 'Active scooter' : 'Set as active'}
+                    label={bike.isActive ? 'Active bike' : 'Set as active'}
                     disabled={bike.isActive}
                     onPress={() => void useGarageStore.getState().activate(bike.id)}
                     variant="ghost"

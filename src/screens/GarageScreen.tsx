@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -19,6 +20,7 @@ export const GarageScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const tabBarHeight = useBottomTabBarHeight();
     const { bikes, load } = useGarageStore();
     const connectionState = useBleStore((state) => state.state);
     const lastUpdateAt = useBleStore((state) => state.lastUpdateAt);
@@ -46,20 +48,23 @@ export const GarageScreen = () => {
             <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
                 <Text style={[styles.title, { color: colors.foreground }]}>Garage</Text>
                 <PrimaryButton
-                    label="Add scooter"
+                    label="Add bike"
                     onPress={() => navigation.navigate('AddBike')}
                     variant="primary"
                 />
             </View>
 
             <FlatList
-                contentContainerStyle={styles.list}
+                contentContainerStyle={[
+                    styles.list,
+                    { paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding },
+                ]}
                 data={bikes}
                 keyExtractor={(item) => item.id}
                 ListEmptyComponent={
                     <EmptyState
-                        title="No scooters yet"
-                        description="Add your first scooter to see its live dashboard, ride stats and routes."
+                        title="No bikes yet"
+                        description="Add your first bike to see its live dashboard, ride stats and routes."
                     />
                 }
                 renderItem={renderItem}

@@ -170,7 +170,7 @@ export const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
                 address: sanitizeText(location.direccion, 200),
                 municipality: sanitizeText(result.municipio, 80),
                 department: sanitizeText(result.departamento, 80),
-                operatingState: 'Operando',
+                operatingState: 'Operating',
                 infractions: parseInfractions(location.lista_infracciones),
             });
         }

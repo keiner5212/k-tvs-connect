@@ -23,6 +23,8 @@ import {
 import { typography } from '@config/theme';
 
 const Tabs = createBottomTabNavigator<MainTabParamList>();
+
+const INITIAL_TAB = 'Settings';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const TAB_LABELS: Record<keyof MainTabParamList, string> = {
@@ -33,7 +35,7 @@ const TAB_LABELS: Record<keyof MainTabParamList, string> = {
 };
 
 const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof MaterialIcons.glyphMap> = {
-    Garage: 'two-wheeler',
+    Garage: 'motorcycle',
     Dashboard: 'speed',
     Map: 'map',
     Settings: 'settings',
@@ -43,7 +45,9 @@ export const MainNavigator = () => {
     const { colors } = useTheme();
 
     return (
-        <Tabs.Navigator            screenOptions={({ route }) => ({
+        <Tabs.Navigator
+            initialRouteName={INITIAL_TAB as keyof MainTabParamList}
+            screenOptions={({ route }) => ({
                 headerShown: false,
                 tabBarIcon: ({ color, size }) => (
                     <MaterialIcons
@@ -72,7 +76,7 @@ export const RootNavigator = () => {
 
     return (
         <NavigationContainer>
-            <Stack.Navigator                screenOptions={{
+            <Stack.Navigator            screenOptions={{
                     headerTintColor: colors.foreground,
                     headerStyle: { backgroundColor: colors.card },
                     headerTitleStyle: typography.subheading,
@@ -82,9 +86,9 @@ export const RootNavigator = () => {
                 <Stack.Screen
                     component={AddBikeScreen}
                     name="AddBike"
-                    options={{ presentation: 'modal', title: 'Add scooter' }}
+                    options={{ presentation: 'modal', title: 'Add bike' }}
                 />
-                <Stack.Screen component={EditBikeScreen} name="EditBike" options={{ title: 'Edit scooter' }} />
+                <Stack.Screen component={EditBikeScreen} name="EditBike" options={{ title: 'Edit bike' }} />
                 <Stack.Screen component={BikeDetailsScreen} name="BikeDetails" options={{ title: 'Scooter' }} />
                 <Stack.Screen component={ConnectionScreen} name="Connection" options={{ title: 'Connection' }} />
                 <Stack.Screen

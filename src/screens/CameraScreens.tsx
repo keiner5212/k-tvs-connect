@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,6 +10,7 @@ import { Banner, EmptyState } from '@components/feedback';
 import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
 import { useCameraStore } from '@stores/cameraStore';
+import { useLocationStore } from '@stores/locationStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { layout, spacing, typography } from '@config/theme';
@@ -22,9 +23,22 @@ export const CamerasScreen = () => {
     const { unitSystem } = useSettingsStore((state) => state.settings);
     const { nearby, loading, error, publishedAt, refresh, setAvoidEnabled } = useCameraStore();
 
+    const position = useLocationStore((state) => state.position);
+
+    useEffect(() => {
+        const load = async () => {
+            const store = useLocationStore.getState();
+            if (store.permission === 'unknown') {
+                await store.request();
+            }
+            await useCameraStore.getState().load();
+        };
+        void load();
+    }, []);
+
     useEffect(() => {
         void useCameraStore.getState().load();
-    }, []);
+    }, [position]);
 
     const radiusMeters = useCameraStore((state) => state.radiusMeters);
 
@@ -90,7 +104,6 @@ export const CamerasScreen = () => {
 export const CameraDetailScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'CameraDetail'>>();
-    const { colors } = useTheme();
     const { unitSystem } = useSettingsStore((state) => state.settings);
     const camera = useCameraStore((state) =>
         state.cameras.find((item) => item.cameraId === route.params.cameraId),
@@ -135,20 +148,20 @@ export const CameraDetailScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    title: {
-        ...typography.title,
+    footer: {
+        marginBottom: layout.screenPadding,
+        marginTop: spacing.lg,
+    },
+    loading: {
+        ...typography.body,
+        paddingVertical: spacing.md,
     },
     subtitle: {
         ...typography.body,
         marginBottom: spacing.md,
         marginTop: spacing.xs,
     },
-    loading: {
-        ...typography.body,
-        paddingVertical: spacing.md,
-    },
-    footer: {
-        marginBottom: layout.screenPadding,
-        marginTop: spacing.lg,
+    title: {
+        ...typography.title,
     },
 });

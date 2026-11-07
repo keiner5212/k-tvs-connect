@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import { useTheme } from '@hooks/useTheme';
+import { UnitSystem } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
 interface SettingsSectionProps {
@@ -15,14 +16,24 @@ export const SettingsSection = ({ title, children, footer }: SettingsSectionProp
 
     return (
         <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{title}</Text>
-            <View style={[styles.sectionBody, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.header, { color: colors.mutedForeground }]}>{title}</Text>
                 {children}
             </View>
             {footer ? <Text style={[styles.footer, { color: colors.mutedForeground }]}>{footer}</Text> : null}
         </View>
     );
 };
+
+interface SettingsBodyProps {
+    children: React.ReactNode;
+}
+
+/**
+ * Wrapper for free form content inside a section, so every control shares the
+ * same left edge as the rows.
+ */
+export const SettingsBody = ({ children }: SettingsBodyProps) => <View style={styles.body}>{children}</View>;
 
 interface SettingsRowProps {
     label: string;
@@ -73,6 +84,36 @@ export const SettingsRow = ({
     );
 };
 
+interface SettingsChoiceProps {
+    label: string;
+    description?: string;
+    selected: boolean;
+    onSelect: () => void;
+}
+
+export const SettingsChoice = ({ label, description, selected, onSelect }: SettingsChoiceProps) => {
+    const { colors } = useTheme();
+
+    return (
+        <TouchableOpacity
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            onPress={onSelect}
+            style={[styles.row, selected ? { backgroundColor: colors.primarySubtle } : null]}
+        >
+            <View style={styles.rowText}>
+                <Text style={[styles.rowLabel, { color: colors.foreground }]}>{label}</Text>
+                {description ? (
+                    <Text style={[styles.rowDescription, { color: colors.mutedForeground }]}>{description}</Text>
+                ) : null}
+            </View>
+            <View style={[styles.radio, { borderColor: selected ? colors.primary : colors.border }]}>
+                {selected ? <View style={[styles.radioDot, { backgroundColor: colors.primary }]} /> : null}
+            </View>
+        </TouchableOpacity>
+    );
+};
+
 interface NumberStepperProps {
     label: string;
     value: number;
@@ -100,7 +141,7 @@ export const NumberStepper = ({
     };
 
     return (
-        <View style={styles.stepperRow}>
+        <View style={styles.row}>
             <Text style={[styles.rowLabel, { color: colors.foreground }]}>{label}</Text>
             <View style={styles.stepperControls}>
                 <TouchableOpacity
@@ -127,53 +168,57 @@ export const NumberStepper = ({
     );
 };
 
-interface SettingsChoiceProps {
-    label: string;
-    description?: string;
-    selected: boolean;
-    onSelect: () => void;
-}
-
-export const SettingsChoice = ({ label, description, selected, onSelect }: SettingsChoiceProps) => {
-    const { colors } = useTheme();
-
-    return (
-        <TouchableOpacity
-            accessibilityRole="radio"
-            accessibilityState={{ selected }}
-            onPress={onSelect}
-            style={[styles.choice, selected ? { backgroundColor: colors.primarySubtle } : null]}
-        >
-            <View
-                style={[
-                    styles.radio,
-                    { borderColor: selected ? colors.primary : colors.border },
-                ]}
-            >
-                {selected ? <View style={[styles.radioDot, { backgroundColor: colors.primary }]} /> : null}
-            </View>
-            <View style={styles.rowText}>
-                <Text style={[styles.rowLabel, { color: colors.foreground }]}>{label}</Text>
-                {description ? (
-                    <Text style={[styles.rowDescription, { color: colors.mutedForeground }]}>{description}</Text>
-                ) : null}
-            </View>
-        </TouchableOpacity>
-    );
-};
+export const unitLabel = (unit: UnitSystem): string => (unit === 'imperial' ? 'Miles' : 'Kilometres');
 
 const styles = StyleSheet.create({
-    choice: {
-        alignItems: 'center',
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        flexDirection: 'row',
-        gap: spacing.md,
-        minHeight: 56,
+    section: {
+        marginBottom: layout.sectionGap,
+    },
+    card: {
+        borderRadius: radii.lg,
+        borderWidth: 1,
+        overflow: 'hidden',
         paddingVertical: spacing.sm,
+    },
+    header: {
+        ...typography.label,
+        letterSpacing: 0.08,
+        paddingBottom: spacing.sm,
+        paddingHorizontal: layout.cardPadding,
+        paddingTop: spacing.xs,
+        textTransform: 'uppercase',
+    },
+    body: {
+        paddingHorizontal: layout.cardPadding,
+        paddingVertical: spacing.xs,
     },
     footer: {
         ...typography.caption,
         marginTop: spacing.sm,
+        paddingHorizontal: layout.screenPadding,
+    },
+    row: {
+        alignItems: 'center',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'space-between',
+        minHeight: 52,
+        paddingHorizontal: layout.cardPadding,
+        paddingVertical: spacing.sm,
+    },
+    rowText: {
+        flex: 1,
+    },
+    rowLabel: {
+        ...typography.body,
+    },
+    rowDescription: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
+    rowValue: {
+        ...typography.body,
     },
     radio: {
         alignItems: 'center',
@@ -188,41 +233,10 @@ const styles = StyleSheet.create({
         height: 10,
         width: 10,
     },
-    row: {
+    stepperControls: {
         alignItems: 'center',
-        borderBottomWidth: StyleSheet.hairlineWidth,
         flexDirection: 'row',
         gap: spacing.md,
-        minHeight: 48,
-        paddingVertical: spacing.sm,
-    },
-    rowDescription: {
-        ...typography.caption,
-        marginTop: spacing.xs,
-    },
-    rowLabel: {
-        ...typography.body,
-    },
-    rowText: {
-        flex: 1,
-    },
-    rowValue: {
-        ...typography.body,
-    },
-    section: {
-        marginBottom: layout.sectionGap,
-    },
-    sectionBody: {
-        borderRadius: radii.lg,
-        borderWidth: 1,
-        overflow: 'hidden',
-        paddingHorizontal: layout.cardPadding,
-    },
-    sectionTitle: {
-        ...typography.label,
-        letterSpacing: 0.08,
-        marginBottom: spacing.md,
-        textTransform: 'uppercase',
     },
     stepperButton: {
         alignItems: 'center',
@@ -231,24 +245,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         width: 44,
     },
-    stepperControls: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: spacing.md,
-    },
-    stepperRow: {
-        alignItems: 'center',
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        minHeight: 56,
-        paddingVertical: spacing.sm,
-    },
     stepperSymbol: {
         ...typography.heading,
     },
     stepperValue: {
-        ...typography.heading,
+        ...typography.subheading,
         minWidth: 72,
         textAlign: 'center',
     },

@@ -7,6 +7,20 @@ import { TrafficCamera } from '@typings/types';
 import { formatDistance, UnitSystem } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
+const TECHNOLOGY_DESCRIPTIONS: Record<string, string> = {
+    'Radar Doppler': 'Speed measured with a Doppler radar',
+    'Video Detección (Con Analítica de Video)': 'Video camera with automatic video analytics',
+    'Laser (Lidar) / Infrarrojo': 'Laser or infrared measurement',
+    'Lazo Inductivo de Piso (Espiras)': 'Inductive loops laid in the road',
+    'Semi-Automática (Acción Remota)': 'Recorded by a traffic agent with a device',
+    'Otra Tecnología': 'Other technology',
+};
+
+const describeTechnology = (technology: string): string => {
+    const description = TECHNOLOGY_DESCRIPTIONS[technology];
+    return description ? `${description} (${technology})` : technology;
+};
+
 interface CameraCardProps {
     camera: TrafficCamera;
     unitSystem: UnitSystem;
@@ -76,7 +90,7 @@ export const CameraCard = ({
             <View style={styles.fieldRow}>
                 <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Technology</Text>
                 <Text style={[styles.fieldValue, { color: colors.foreground }]}>
-                    {camera.technology}
+                    {describeTechnology(camera.technology)}
                 </Text>
             </View>
 
@@ -88,7 +102,7 @@ export const CameraCard = ({
                             styles.stateDot,
                             {
                                 backgroundColor:
-                                    camera.operatingState === 'Operando'
+                                    camera.operatingState === 'Operating'
                                         ? colors.success
                                         : colors.mutedForeground,
                             },
@@ -237,81 +251,6 @@ export const CameraAttribution = ({ publishedAt }: CameraAttributionProps) => {
 };
 
 const styles = StyleSheet.create({
-    card: {
-        borderRadius: radii.lg,
-        borderWidth: 1,
-        marginHorizontal: layout.screenPadding,
-        marginTop: spacing.sm,
-        padding: layout.cardPadding,
-    },
-    headerRow: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        gap: spacing.sm,
-        justifyContent: 'space-between',
-    },
-    address: {
-        ...typography.subheading,
-        flex: 1,
-    },
-    place: {
-        ...typography.caption,
-        marginTop: spacing.xs,
-    },
-    chipRow: {
-        flexDirection: 'row',
-        gap: spacing.sm,
-        marginTop: spacing.md,
-    },
-    chip: {
-        borderRadius: radii.full,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-    },
-    chipLabel: {
-        ...typography.caption,
-    },
-    speedChip: {
-        ...typography.label,
-    },
-    fieldRow: {
-        flexDirection: 'row',
-        gap: spacing.md,
-        marginTop: spacing.md,
-    },
-    fieldLabel: {
-        ...typography.caption,
-        width: 130,
-    },
-    fieldValue: {
-        ...typography.body,
-        flex: 1,
-    },
-    stateRow: {
-        alignItems: 'center',
-        flex: 1,
-        flexDirection: 'row',
-        gap: spacing.sm,
-    },
-    stateDot: {
-        borderRadius: radii.full,
-        height: 8,
-        width: 8,
-    },
-    caveat: {
-        ...typography.caption,
-        marginTop: spacing.md,
-    },
-    footer: {
-        ...typography.caption,
-        marginBottom: spacing.md,
-        marginTop: spacing.md,
-    },
-    actionRow: {
-        flexDirection: 'row',
-        gap: spacing.lg,
-        marginTop: spacing.sm,
-    },
     action: {
         justifyContent: 'center',
         minHeight: 44,
@@ -319,14 +258,18 @@ const styles = StyleSheet.create({
     actionLabel: {
         ...typography.label,
     },
-    listTitle: {
-        ...typography.label,
-    },
-    cameraRow: {
-        alignItems: 'center',
+    actionRow: {
         flexDirection: 'row',
-        gap: spacing.md,
-        minHeight: 48,
+        gap: spacing.lg,
+        marginTop: spacing.sm,
+    },
+    address: {
+        ...typography.subheading,
+        flex: 1,
+    },
+    cameraAddress: {
+        ...typography.body,
+        flex: 1,
     },
     cameraBadge: {
         alignItems: 'center',
@@ -339,8 +282,79 @@ const styles = StyleSheet.create({
         ...typography.caption,
         fontWeight: '700',
     },
-    cameraAddress: {
+    cameraRow: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+        minHeight: 48,
+    },
+    card: {
+        borderRadius: radii.lg,
+        borderWidth: 1,
+        marginHorizontal: layout.screenPadding,
+        marginTop: spacing.sm,
+        padding: layout.cardPadding,
+    },
+    caveat: {
+        ...typography.caption,
+        marginTop: spacing.md,
+    },
+    chip: {
+        borderRadius: radii.full,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+    },
+    chipLabel: {
+        ...typography.caption,
+    },
+    chipRow: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginTop: spacing.md,
+    },
+    fieldLabel: {
+        ...typography.caption,
+        width: 130,
+    },
+    fieldRow: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.md,
+    },
+    fieldValue: {
         ...typography.body,
         flex: 1,
+    },
+    footer: {
+        ...typography.caption,
+        marginBottom: spacing.md,
+        marginTop: spacing.md,
+    },
+    headerRow: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.sm,
+        justifyContent: 'space-between',
+    },
+    listTitle: {
+        ...typography.label,
+    },
+    place: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
+    speedChip: {
+        ...typography.label,
+    },
+    stateDot: {
+        borderRadius: radii.full,
+        height: 8,
+        width: 8,
+    },
+    stateRow: {
+        alignItems: 'center',
+        flex: 1,
+        flexDirection: 'row',
+        gap: spacing.sm,
     },
 });
