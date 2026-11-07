@@ -1,23 +1,32 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 
-import ErrorBoundary from '@components/ErrorBoundary';
-import RootNavigator from '@navigation/RootNavigator';
-import { useTheme } from '@hooks/useTheme';
-import '@/config/i18n';
+import { RootNavigator } from '@/navigation/RootNavigator';
+import { openDatabase } from '@services/db/database';
+import { useGarageStore } from '@stores/garageStore';
+import { useSettingsStore } from '@stores/settingsStore';
 
-function App() {
-  const { mode, colors } = useTheme();
+export default function App() {
+    const [ready, setReady] = useState(false);
 
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <ErrorBoundary>
-        <RootNavigator />
-      </ErrorBoundary>
-    </View>
-  );
+    useEffect(() => {
+        const bootstrap = async () => {
+            try {
+                await openDatabase();
+            } catch {
+                setReady(false);
+                return;
+            }
+            await useGarageStore.getState().load();
+            await useSettingsStore.getState().load();
+            setReady(true);
+        };
+        void bootstrap();
+    }, []);
+
+    if (!ready) {
+        return <View style={{ flex: 1 }} />;
+    }
+
+    return <RootNavigator />;
 }
-
-export default App;
