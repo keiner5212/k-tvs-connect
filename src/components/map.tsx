@@ -1,6 +1,13 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import MapView, { Camera, CircleLayer, LineLayer, PointAnnotation, ShapeSource } from '@maplibre/maplibre-react-native';
+import {
+    Camera,
+    CircleLayer,
+    LineLayer,
+    MapView,
+    PointAnnotation,
+    ShapeSource,
+} from '@maplibre/maplibre-react-native';
 
 import { useTheme } from '@hooks/useTheme';
 import { AvoidPoint, Place } from '@typings/types';
@@ -47,7 +54,7 @@ export const MapCanvas = ({
             attributionEnabled
             onLongPress={
                 onLongPress
-                    ? (feature) => {
+                    ? (feature: GeoJSON.Feature) => {
                         const coordinates = feature.geometry?.coordinates ?? [];
                         if (coordinates.length >= 2) {
                             onLongPress(coordinates[1], coordinates[0]);

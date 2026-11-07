@@ -108,8 +108,8 @@ export const typography = {
     caption: { fontSize: 12, lineHeight: 16 },
     label: { fontSize: 14, fontWeight: '600' as const },
     button: { fontSize: 15, fontWeight: '700' as const },
-    metric: { fontSize: 52, fontWeight: '700' as const, fontVariant: ['tabular-nums' as const] },
-    readout: { fontSize: 22, fontWeight: '600' as const, fontVariant: ['tabular-nums' as const] },
+    metric: { fontSize: 52, fontWeight: '700' as const, fontVariant: ['tabular-nums'] as ('tabular-nums')[] },
+    readout: { fontSize: 22, fontWeight: '600' as const, fontVariant: ['tabular-nums'] as ('tabular-nums')[] },
 } as const;
 
 export const radii = {
