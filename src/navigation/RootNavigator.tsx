@@ -23,8 +23,6 @@ import {
 import { typography } from '@config/theme';
 
 const Tabs = createBottomTabNavigator<MainTabParamList>();
-
-const INITIAL_TAB = 'Settings';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const TAB_LABELS: Record<keyof MainTabParamList, string> = {
@@ -46,7 +44,6 @@ export const MainNavigator = () => {
 
     return (
         <Tabs.Navigator
-            initialRouteName={INITIAL_TAB as keyof MainTabParamList}
             screenOptions={({ route }) => ({
                 headerShown: false,
                 tabBarIcon: ({ color, size }) => (
@@ -76,11 +73,11 @@ export const RootNavigator = () => {
 
     return (
         <NavigationContainer>
-            <Stack.Navigator            screenOptions={{
-                    headerTintColor: colors.foreground,
-                    headerStyle: { backgroundColor: colors.card },
-                    headerTitleStyle: typography.subheading,
-                }}
+            <Stack.Navigator screenOptions={{
+                headerTintColor: colors.foreground,
+                headerStyle: { backgroundColor: colors.card },
+                headerTitleStyle: typography.subheading,
+            }}
             >
                 <Stack.Screen component={MainNavigator} name="Main" options={{ headerShown: false }} />
                 <Stack.Screen
@@ -97,8 +94,8 @@ export const RootNavigator = () => {
                     options={{ presentation: 'modal', title: 'Where to' }}
                 />
                 <Stack.Screen component={CamerasScreen} name="Cameras" options={{ title: 'Cameras' }} />
-            <Stack.Screen component={CameraDetailScreen} name="CameraDetail" options={{ title: 'Camera' }} />
-            <Stack.Screen component={SavedRoutesScreen} name="SavedRoutes" options={{ title: 'Saved routes' }} />
+                <Stack.Screen component={CameraDetailScreen} name="CameraDetail" options={{ title: 'Camera' }} />
+                <Stack.Screen component={SavedRoutesScreen} name="SavedRoutes" options={{ title: 'Saved routes' }} />
                 <Stack.Screen component={RoutePreviewScreen} name="RoutePreview" options={{ title: 'Route' }} />
                 <Stack.Screen component={PinScreen} name="Pin" options={{ title: 'Pin' }} />
                 <Stack.Screen component={ExportDataScreen} name="ExportData" options={{ title: 'Export data' }} />

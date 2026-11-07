@@ -11,6 +11,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@hooks/useTheme';
 import { useCameraStore } from '@stores/cameraStore';
+import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { Place, RootStackParamList } from '@typings/types';
@@ -72,19 +73,26 @@ export const MapScreen = () => {
 
     useEffect(() => {
         const load = async () => {
-            const { useLocationStore } = await import('@stores/locationStore');
             const store = useLocationStore.getState();
             if (store.permission === 'unknown') {
                 await store.request();
             }
-            const permission = useLocationStore.getState().permission;
-            if (permission !== 'granted') {
+            if (useLocationStore.getState().permission !== 'granted') {
                 setLocationError('Location permission needed to plan routes from your position.');
                 return;
             }
             setPosition(useLocationStore.getState().position);
         };
         void load();
+    }, []);
+
+    useEffect(() => {
+        void useCameraStore.getState().load();
+        const unsubscribe = useLocationStore.subscribe((state) => {
+            setPosition(state.position);
+            void useCameraStore.getState().load();
+        });
+        return unsubscribe;
     }, []);
 
     useEffect(() => {

@@ -76,6 +76,9 @@ export const useCameraStore = create<CameraState>((set, get) => ({
         ]);
 
         const { useLocationStore } = await import('@stores/locationStore');
+        if (!useLocationStore.getState().position) {
+            await useLocationStore.getState().request();
+        }
         const position = useLocationStore.getState().position;
         const nearby = cameras
             .map((camera) => ({

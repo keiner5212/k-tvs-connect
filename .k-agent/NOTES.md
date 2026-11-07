@@ -25,3 +25,5 @@
 - The MIUI phone can revoke INJECT_EVENTS for the adb shell, then `adb shell input tap` fails with exit 255. Unlock the phone and enable "USB debugging (Security settings)" to get the permission back.
 - The docker apk build caches gradle in the named volume `k-tvs-connect-gradle`, seeded from `~/.gradle`. Mounting `~/.gradle` directly breaks the gradle daemon.
 - The expo dev client shows a welcome sheet on the first launch that only a real touch dismisses, it blocks synthetic `adb input tap`.
+- Metro caches aggressively in /tmp/metro-cache, so a stale bundle can hide a code change. Start it with `--clear` on a fresh port when the bundle looks wrong.
+- The `write` tool reports type diagnostics against a stale snapshot in this build, so trust `npx tsc --noEmit` over the tool output.

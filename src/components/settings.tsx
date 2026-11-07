@@ -171,14 +171,20 @@ export const NumberStepper = ({
 export const unitLabel = (unit: UnitSystem): string => (unit === 'imperial' ? 'Miles' : 'Kilometres');
 
 const styles = StyleSheet.create({
-    section: {
-        marginBottom: layout.sectionGap,
+    body: {
+        paddingHorizontal: layout.cardPadding,
+        paddingVertical: spacing.xs,
     },
     card: {
         borderRadius: radii.lg,
         borderWidth: 1,
         overflow: 'hidden',
         paddingVertical: spacing.sm,
+    },
+    footer: {
+        ...typography.caption,
+        marginTop: spacing.sm,
+        paddingHorizontal: layout.screenPadding,
     },
     header: {
         ...typography.label,
@@ -187,38 +193,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: layout.cardPadding,
         paddingTop: spacing.xs,
         textTransform: 'uppercase',
-    },
-    body: {
-        paddingHorizontal: layout.cardPadding,
-        paddingVertical: spacing.xs,
-    },
-    footer: {
-        ...typography.caption,
-        marginTop: spacing.sm,
-        paddingHorizontal: layout.screenPadding,
-    },
-    row: {
-        alignItems: 'center',
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        flexDirection: 'row',
-        gap: spacing.md,
-        justifyContent: 'space-between',
-        minHeight: 52,
-        paddingHorizontal: layout.cardPadding,
-        paddingVertical: spacing.sm,
-    },
-    rowText: {
-        flex: 1,
-    },
-    rowLabel: {
-        ...typography.body,
-    },
-    rowDescription: {
-        ...typography.caption,
-        marginTop: spacing.xs,
-    },
-    rowValue: {
-        ...typography.body,
     },
     radio: {
         alignItems: 'center',
@@ -233,10 +207,31 @@ const styles = StyleSheet.create({
         height: 10,
         width: 10,
     },
-    stepperControls: {
+    row: {
         alignItems: 'center',
+        borderBottomWidth: StyleSheet.hairlineWidth,
         flexDirection: 'row',
         gap: spacing.md,
+        justifyContent: 'space-between',
+        minHeight: 52,
+        paddingHorizontal: layout.cardPadding,
+        paddingVertical: spacing.sm,
+    },
+    rowDescription: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
+    rowLabel: {
+        ...typography.body,
+    },
+    rowText: {
+        flex: 1,
+    },
+    rowValue: {
+        ...typography.body,
+    },
+    section: {
+        marginBottom: layout.sectionGap,
     },
     stepperButton: {
         alignItems: 'center',
@@ -244,6 +239,11 @@ const styles = StyleSheet.create({
         height: 44,
         justifyContent: 'center',
         width: 44,
+    },
+    stepperControls: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
     },
     stepperSymbol: {
         ...typography.heading,

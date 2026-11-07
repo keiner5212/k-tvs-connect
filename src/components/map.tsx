@@ -381,26 +381,24 @@ const styles = StyleSheet.create({
         ...typography.caption,
         fontWeight: '700',
     },
+    avoidPinWrap: {
+        alignItems: 'center',
+    },
     avoidRow: {
         alignItems: 'center',
         flexDirection: 'row',
         gap: spacing.md,
         minHeight: layout.buttonHeight,
     },
+    avoidTip: {
+        borderLeftWidth: 5,
+        borderRightWidth: 5,
+        borderTopWidth: 6,
+        height: 0,
+        width: 0,
+    },
     avoidTitle: {
         ...typography.label,
-    },
-    cameraBody: {
-        borderRadius: radii.sm,
-        borderWidth: 2,
-        height: 20,
-        width: 20,
-    },
-    cameraPin: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        height: 26,
-        justifyContent: 'center',
     },
     cameraBody: {
         alignItems: 'center',
@@ -410,30 +408,24 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         width: 22,
     },
+    cameraFoot: {
+        borderRadius: 2,
+        height: 4,
+        left: 3,
+        position: 'absolute',
+        top: 3,
+        width: 6,
+    },
     cameraLens: {
         borderRadius: radii.full,
-        height: 7,
-        width: 7,
+        height: 8,
+        width: 8,
     },
-    cameraFoot: {
-        borderTopLeftRadius: 2,
-        borderTopRightRadius: 2,
-        bottom: 3,
-        height: 3,
-        position: 'absolute',
-        width: 10,
-    },
-    avoidPinWrap: {
+    cameraPin: {
         alignItems: 'center',
-    },
-    avoidTip: {
-        borderLeftColor: 'transparent',
-        borderLeftWidth: 5,
-        borderRightColor: 'transparent',
-        borderRightWidth: 5,
-        borderTopWidth: 6,
-        height: 0,
-        width: 0,
+        flexDirection: 'row',
+        height: 26,
+        justifyContent: 'center',
     },
     cameraSpeed: {
         borderRadius: radii.full,
