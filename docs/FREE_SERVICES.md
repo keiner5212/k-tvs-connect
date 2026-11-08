@@ -6,8 +6,41 @@ instances to your own Docker instance without touching the code.
 
 ## Map tiles and styles
 
-OpenFreeMap serves the whole planet from the OpenMapTiles schema with no key, no
-registration and no published request limit.
+The map is rendered with `@maplibre/maplibre-react-native`, which has no Google
+dependency. The project stays on the legacy architecture, so the version is pinned
+to `10.4.2`, the last release that supports it.
+
+Two tile providers, and the app uses the first one that answers.
+
+**Google Map Tiles API**, the google map. The key lives in the gitignored
+`.env.local` as `EXPO_PUBLIC_GOOGLE_TILES_API_KEY`. It is a **second key**, on
+purpose:
+
+| | search key | tiles key |
+| --- | --- | --- |
+| api restriction | Geocoding API, Places API (New) | Map Tiles API |
+| application restriction | Android apps, package plus certificate | none |
+| where it is used | the requests the app makes in javascript | the tiles the maplibre native loader fetches |
+
+The tiles key has no application restriction because the tiles are fetched
+outside javascript, by the native maplibre loader, and that loader cannot send
+the `X-Android-Package` and `X-Android-Cert` headers an android restriction
+needs. The protection is the api restriction, the daily quota of **3.225**
+requests (100.000 per month divided by 31, google's own recipe) and a budget
+alert at one dollar. The key can only buy tiles, it cannot touch the search.
+
+Every tile request needs a session token, created with
+`POST https://tile.googleapis.com/v1/createSession`, valid for two weeks. The
+app keeps it in the secure store, renews it a day before it expires, and caps
+the session requests at five a day. The style is assembled in memory with the
+key and the token in the tile url, so neither of them reaches the settings
+table or the exported data. The map shows the google mark and the data
+attribution, and it falls back to OpenFreeMap with one line when google does
+not answer.
+
+**OpenFreeMap**, the fallback and the default. It serves the whole planet from
+the OpenMapTiles schema with no key, no registration and no published request
+limit.
 
 | Style | Url |
 | --- | --- |
@@ -15,10 +48,7 @@ registration and no published request limit.
 | Bright | `https://tiles.openfreemap.org/styles/bright` |
 | Positron | `https://tiles.openfreemap.org/styles/positron` |
 
-The map is rendered with `@maplibre/maplibre-react-native`, which has no Google
-dependency. The project stays on the legacy architecture, so the version is pinned
-to `10.4.2`, the last release that supports it. The tiles still need a unique
-user agent, the app sends `K-Tvs-Connect/0.1`.
+The tiles still need a unique user agent, the app sends `K-Tvs-Connect/0.1`.
 
 ## Place search
 
@@ -75,9 +105,9 @@ things that matter here:
 
 - `motor_scooter` as the costing profile, so the route prefers the kind of road a
   scooter can use.
-- `exclude_locations` and `exclude_polygons` at the root of the request, so a
-  marked point is excluded by the engine itself. No polyline inspection and no
-  detour waypoint needed on the client.
+- `exclude_polygons` at the root of the request, so a marked point is excluded
+  by the engine itself. No polyline inspection and no detour waypoint needed on
+  the client.
 
 Request shape:
 
@@ -87,7 +117,6 @@ Request shape:
   "language": "es-ES",
   "costing": "motor_scooter",
   "units": "kilometers",
-  "exclude_locations": [{ "lat": 0, "lon": 0 }],
   "exclude_polygons": [[[0, 0], [0, 0], [0, 0], [0, 0]]]
 }
 ```
@@ -99,10 +128,14 @@ Three things the public instance does not tell you:
   metres, with `src/utils/polyline.ts`.
 - **`exclude_polygons` takes plain rings of coordinates, not GeoJSON objects.** A
   GeoJSON polygon is refused with a parse error.
-- **An exclusion removes the whole road the point sits on.** When that makes the
-  destination unreachable the router answers "no path could be found". The app
-  then relaxes the request, first to the points only and then to no exclusion at
-  all, and tells the rider that the cameras could not be avoided.
+- **An exclusion removes every road that crosses the ring.** The ring is a
+  circle of the radius of the point, 50 metres for a camera, so the route keeps
+  at least that distance from it. The `exclude_locations` form is not sent:
+  it removes the closest road entirely, even when the road is far from the
+  point, and that is what made the route jump to another street. When a ring
+  makes the destination unreachable the router answers "no path could be
+  found", and the app then tries again with half of the points and finally with
+  none, and tells the rider how many cameras were left out.
 
 The FOSSGIS demo server `https://valhalla1.openstreetmap.de` is open to the public
 with one request per second and asks published apps to send an `X-Client-Id`

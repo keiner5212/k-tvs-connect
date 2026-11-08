@@ -275,7 +275,7 @@ export const RoutePreviewScreen = () => {
                                         distanceMeters: saved.distanceMeters,
                                         durationSeconds: saved.durationSeconds,
                                     });
-                                    navigation.navigate('Main');
+                                    navigation.navigate('Main', { screen: 'Map' });
                                 }}
                             />
                         </View>
@@ -396,7 +396,7 @@ export const RouteDetailsScreen = () => {
                 <EmptyState
                     actionLabel="Back to the map"
                     description="Plan a route on the map first."
-                    onAction={() => navigation.navigate('Main')}
+                    onAction={() => navigation.navigate('Main', { screen: 'Map' })}
                     title="No route"
                 />
             </ScreenContainer>

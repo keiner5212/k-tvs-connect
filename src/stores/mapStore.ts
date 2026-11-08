@@ -33,6 +33,12 @@ export interface NavigationProgress {
     arrived: boolean;
 }
 
+export interface FocusPoint {
+    latitude: number;
+    longitude: number;
+    cameraId: string | null;
+}
+
 interface MapState {
     destination: Place | null;
     replayRoute: ReplayRoute | null;
@@ -44,8 +50,12 @@ interface MapState {
     error: string | null;
     routeFailures: number;
     navigation: NavigationProgress;
+    focus: FocusPoint | null;
+    cameraKey: number;
     loadAvoidPoints: () => Promise<void>;
     setDestination: (place: Place | null) => void;
+    focusOn: (latitude: number, longitude: number, cameraId?: string | null) => void;
+    recenter: () => void;
     addAvoidPoint: (latitude: number, longitude: number) => Promise<void>;
     removeAvoidPoint: (id: string) => Promise<void>;
     clearAvoidPoints: () => Promise<void>;
@@ -89,12 +99,25 @@ export const useMapStore = create<MapState>((set, get) => ({
         instruction: '',
         arrived: false,
     },
+    focus: null,
+    cameraKey: 0,
     loadAvoidPoints: async () => {
         const points = await listAvoidPoints();
         set({ avoidPoints: points });
     },
     setDestination: (place) => {
-        set({ destination: place, error: null });
+        set((state) => ({
+            destination: place,
+            error: null,
+            focus: null,
+            cameraKey: state.cameraKey + 1,
+        }));
+    },
+    focusOn: (latitude, longitude, cameraId = null) => {
+        set({ focus: { latitude, longitude, cameraId } });
+    },
+    recenter: () => {
+        set((state) => ({ focus: null, cameraKey: state.cameraKey + 1 }));
     },
     addAvoidPoint: async (latitude, longitude) => {
         const saved = await insertAvoidPoint({
@@ -168,13 +191,15 @@ export const useMapStore = create<MapState>((set, get) => ({
                 observations,
             );
 
-            const applied = route.avoidOutcome?.applied ?? cameraPoints.length;
-            if (applied < cameraPoints.length) {
+            const manualCount = get().avoidPoints.length;
+            const applied = route.avoidOutcome?.applied ?? manualCount + cameraPoints.length;
+            const camerasSent = Math.max(0, applied - manualCount);
+            if (camerasSent < cameraPoints.length) {
                 useCameraStore.getState().setRouteSplit({
-                    sent: 0,
-                    leftOut: cameraPoints.length,
+                    sent: camerasSent,
+                    leftOut: cameraPoints.length - camerasSent,
                 });
-                useCameraStore.getState().setRouteCameras([]);
+                useCameraStore.getState().setRouteCameras(cameras.slice(0, camerasSent));
             }
 
             set({ route, arrival, routeContext: context, computing: false, routeFailures: 0 });

@@ -6,7 +6,7 @@ const DATASET_URL = 'https://fotodeteccion.ansv.gov.co/map/data/sast.json';
 export const ANSV_SOURCE_NAME = 'Agencia Nacional de Seguridad Vial (ANSV)';
 export const ANSV_SOURCE_URL = 'https://fotodeteccion.ansv.gov.co/map/ubicaciones-aprobadas.html';
 
-export const CAMERA_AVOID_RADIUS_METERS = 50;
+export const CAMERA_AVOID_RADIUS_METERS = 150;
 
 const MAX_RESULTS = 5000;
 const MAX_LOCATIONS = 50000;
@@ -101,8 +101,8 @@ const parseInfractions = (value: unknown): string[] => {
     const list = Array.isArray(value) ? value : [];
     const codes = list
         .filter((entry): entry is string => typeof entry === 'string')
-        .map((entry) => entry.trim().toUpperCase())
-        .filter((entry) => /^[A-Z]\d{2}$/.test(entry));
+        .map((entry) => entry.trim().toUpperCase().match(/^([A-I]\d{2})/)?.[1] ?? '')
+        .filter((entry) => entry.length > 0);
 
     return Array.from(new Set(codes)).sort();
 };

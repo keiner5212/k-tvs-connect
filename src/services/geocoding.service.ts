@@ -6,6 +6,7 @@ import {
     ANDROID_PACKAGE_NAME,
     GEOCODE_BIAS_CELL_DEGREES,
     GEOCODE_CACHE_TTL_MS,
+    GEOCODE_CACHE_VERSION,
     GEOCODE_COUNTRY,
     GEOCODE_LANGUAGE,
     GOOGLE_API_KEY,
@@ -173,7 +174,7 @@ const biasFor = (position?: [number, number] | null): Bias | null => {
 const cacheKeyFor = (query: string, bias: Bias | null): string => {
     const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ');
     const cell = bias ? `${bias.latitude.toFixed(2)},${bias.longitude.toFixed(2)}` : '-';
-    return `${GEOCODE_COUNTRY}|${normalized}|${cell}`;
+    return `${GEOCODE_CACHE_VERSION}|${GEOCODE_COUNTRY}|${normalized}|${cell}`;
 };
 
 const findComponent = (

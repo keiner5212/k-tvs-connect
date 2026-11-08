@@ -18,6 +18,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         ansvFetchedAt: null,
         ansvPublishedAt: null,
         overspeedLimitKmh: 80,
+        mapProvider: 'google',
         mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
         valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
         saveTracks: false,

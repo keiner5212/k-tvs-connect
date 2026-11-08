@@ -8,6 +8,7 @@ const DEFAULTS: AppSettings = {
     ansvFetchedAt: null,
     ansvPublishedAt: null,
     overspeedLimitKmh: 80,
+    mapProvider: 'google',
     mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
     valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
     saveTracks: false,
@@ -41,6 +42,7 @@ export const getSettings = async (): Promise<AppSettings> => {
         overspeedLimitKmh: stored.overspeedLimitKmh
             ? Number(stored.overspeedLimitKmh)
             : DEFAULTS.overspeedLimitKmh,
+        mapProvider: (stored.mapProvider as AppSettings['mapProvider']) ?? DEFAULTS.mapProvider,
         mapStyleUrl: stored.mapStyleUrl ?? DEFAULTS.mapStyleUrl,
         valhallaBaseUrl: stored.valhallaBaseUrl ?? DEFAULTS.valhallaBaseUrl,
         saveTracks: stored.saveTracks ? stored.saveTracks === 'true' : DEFAULTS.saveTracks,

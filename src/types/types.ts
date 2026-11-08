@@ -191,6 +191,7 @@ export interface AppSettings {
     ansvFetchedAt: number | null;
     ansvPublishedAt: number | null;
     overspeedLimitKmh: number;
+    mapProvider: 'google' | 'openfreemap';
     mapStyleUrl: string;
     valhallaBaseUrl: string;
     saveTracks: boolean;

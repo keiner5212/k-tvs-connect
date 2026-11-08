@@ -50,9 +50,9 @@ export interface RouteRequest {
 }
 
 /**
- * How many of the avoid points the router actually managed to exclude. The
- * router removes the whole road a point sits on, so a point near the
- * destination can make the route impossible. The request is then relaxed.
+ * How many of the avoid points the router actually managed to exclude. A
+ * point that makes the route impossible is dropped and the request is tried
+ * again with fewer points.
  */
 export interface AvoidOutcome {
     applied: number;
@@ -62,22 +62,38 @@ export interface AvoidOutcome {
 /**
  * The router takes the polygons as plain rings of coordinates, not as GeoJSON
  * objects. A GeoJSON polygon is refused with a parse error.
+ *
+ * The ring is a circle of the radius of the point. The router removes every
+ * road that crosses the ring, so the route keeps at least that distance from
+ * the point.
  */
 const buildPolygon = (point: AvoidPoint): number[][] => {
     const radiusLat = point.radiusMeters / 111320;
     const radiusLon =
         point.radiusMeters / (111320 * Math.max(0.1, Math.cos((point.latitude * Math.PI) / 180)));
 
-    const ring = [
-        [point.longitude - radiusLon, point.latitude - radiusLat],
-        [point.longitude + radiusLon, point.latitude - radiusLat],
-        [point.longitude + radiusLon, point.latitude + radiusLat],
-        [point.longitude - radiusLon, point.latitude + radiusLat],
-        [point.longitude - radiusLon, point.latitude - radiusLat],
-    ];
+    const ring: number[][] = [];
+    for (let step = 0; step <= 16; step += 1) {
+        const angle = (step / 16) * 2 * Math.PI;
+        ring.push([
+            point.longitude + radiusLon * Math.cos(angle),
+            point.latitude + radiusLat * Math.sin(angle),
+        ]);
+    }
 
     return ring;
 };
+
+/**
+ * The attempts of the request, from every point to none. A point that makes
+ * the route impossible is dropped, one half at a time, so the route keeps the
+ * points that matter most. The points are given in the order they matter:
+ * the manual ones first and the cameras after them, the closest camera last.
+ */
+const attemptCounts = (total: number): number[] =>
+    [total, Math.floor(total / 2), 0].filter(
+        (count, index, all) => index === 0 || count < all[index - 1],
+    );
 
 export const computeRoute = async (
     baseUrl: string,
@@ -98,30 +114,15 @@ export const computeRoute = async (
     const url = `${baseUrl.replace(/\/$/, '')}/route`;
     const options = { service: 'valhalla', minIntervalMs: 1000, maxBytes: 5 * 1024 * 1024 };
 
-    const attempts: { payload: Record<string, unknown>; applied: number }[] = [
-        {
-            payload: {
-                ...base,
-                exclude_locations: avoidPoints.map((point) => ({
-                    lat: point.latitude,
-                    lon: point.longitude,
-                })),
-                exclude_polygons: avoidPoints.map(buildPolygon),
-            },
-            applied: avoidPoints.length,
+    const attempts: { payload: Record<string, unknown>; applied: number }[] = attemptCounts(
+        avoidPoints.length,
+    ).map((count) => ({
+        payload: {
+            ...base,
+            exclude_polygons: avoidPoints.slice(0, count).map(buildPolygon),
         },
-        {
-            payload: {
-                ...base,
-                exclude_locations: avoidPoints.map((point) => ({
-                    lat: point.latitude,
-                    lon: point.longitude,
-                })),
-            },
-            applied: avoidPoints.length,
-        },
-        { payload: base, applied: 0 },
-    ];
+        applied: count,
+    }));
 
     let body: ValhallaResponse | null = null;
     let applied = 0;

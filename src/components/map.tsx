@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { Ref, useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
     Camera,
     LineLayer,
     MapView,
-    PointAnnotation,
+    MapViewRef,
+    MarkerView,
     ShapeSource,
     UserLocation,
     UserLocationRenderMode,
@@ -12,15 +13,20 @@ import {
 } from '@maplibre/maplibre-react-native';
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconLabelButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
 import { decodePolyline } from '@utils/polyline';
+import { rgba } from '@utils/hexToRgb';
 import { layout, radii, spacing, typography } from '@config/theme';
 
+/** the toolbar column of the map screen, the compass goes under it */
+export const TOOLBAR_HEIGHT = 3 * 44 + 2 * spacing.sm;
+
 export interface MapCanvasProps {
-    styleURL: string;
+    style: string | object;
     center: [number, number];
     zoom: number;
     routeGeometry?: string | null;
@@ -30,12 +36,17 @@ export interface MapCanvasProps {
     followKey: number;
     replayPosition?: [number, number] | null;
     cameras?: CameraMarkerData[];
+    mapRef?: Ref<MapViewRef>;
+    pinnedPoint?: [number, number] | null;
+    focusedCameraId?: string | null;
     onCameraPress?: (cameraId: string) => void;
-    onLongPress?: (latitude: number, longitude: number) => void;
+    onAvoidPointPress?: (point: AvoidPoint) => void;
+    onMapPress?: (latitude: number, longitude: number) => void;
+    onTilesFail?: () => void;
 }
 
 export const MapCanvas = ({
-    styleURL,
+    style,
     center,
     zoom,
     routeGeometry,
@@ -45,10 +56,26 @@ export const MapCanvas = ({
     followKey,
     replayPosition,
     cameras = [],
+    mapRef,
+    pinnedPoint,
+    focusedCameraId = null,
     onCameraPress,
-    onLongPress,
+    onAvoidPointPress,
+    onMapPress,
+    onTilesFail,
 }: MapCanvasProps) => {
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
+
+    const centerLatitude = center[0];
+    const centerLongitude = center[1];
+    const centerCoordinate = useMemo(
+        () =>
+            followUser
+                ? undefined
+                : ([centerLongitude, centerLatitude] as [number, number]),
+        [centerLatitude, centerLongitude, followUser],
+    );
 
     const routePoints = routeGeometry ? decodePolyline(routeGeometry) : [];
     const routeShape =
@@ -62,23 +89,31 @@ export const MapCanvas = ({
     return (
         <MapView
             style={styles.map}
-            mapStyle={styleURL}
+            mapStyle={style}
             logoEnabled={false}
             attributionEnabled
-            onLongPress={
-                onLongPress
+            attributionPosition={{ top: insets.top + spacing.sm, left: layout.screenPadding }}
+            onDidFailLoadingMap={onTilesFail}
+            compassViewPosition={1}
+            compassViewMargins={{
+                x: layout.screenPadding,
+                y: insets.top + spacing.sm + TOOLBAR_HEIGHT + spacing.sm,
+            }}
+            ref={mapRef}
+            onPress={
+                onMapPress
                     ? (feature: GeoJSON.Feature) => {
                         const geometry = feature.geometry as GeoJSON.Point | undefined;
                         const coordinates = geometry?.coordinates ?? [];
                         if (coordinates.length >= 2) {
-                            onLongPress(coordinates[1], coordinates[0]);
+                            onMapPress(coordinates[1], coordinates[0]);
                         }
                     }
                     : undefined
             }
         >
             <Camera
-                centerCoordinate={followUser ? undefined : center}
+                centerCoordinate={centerCoordinate}
                 followUserLocation={followUser}
                 followUserMode={UserTrackingMode.Follow}
                 key={followKey}
@@ -94,102 +129,224 @@ export const MapCanvas = ({
             ) : null}
 
             {replayPosition ? (
-                <PointAnnotation id="replay" coordinate={[replayPosition[1], replayPosition[0]]}>
+                <MarkerView allowOverlap coordinate={[replayPosition[1], replayPosition[0]]}>
                     <View style={[styles.replayPin, { backgroundColor: colors.accent }]}>
                         <Text style={[styles.replayLabel, { color: colors.primaryForeground }]}>R</Text>
                     </View>
-                </PointAnnotation>
+                </MarkerView>
             ) : null}
 
             {destination ? (
-                <PointAnnotation id="destination" coordinate={[destination.longitude, destination.latitude]}>
+                <MarkerView allowOverlap coordinate={[destination.longitude, destination.latitude]}>
                     <View style={[styles.pin, { backgroundColor: colors.primary }]}>
                         <Text style={[styles.pinLabel, { color: colors.primaryForeground }]}>D</Text>
                     </View>
-                </PointAnnotation>
+                </MarkerView>
             ) : null}
 
-            {cameras.map((camera) => (
-                <PointAnnotation
-                    id={`camera-${camera.id}`}
-                    key={camera.id}
-                    coordinate={[camera.longitude, camera.latitude]}
-                >
-                    <TouchableOpacity
-                        accessibilityLabel={
-                            camera.maxSpeedKmh !== null
-                                ? `Speed camera, ${camera.maxSpeedKmh} kilometres per hour, ${camera.label}`
-                                : `Speed camera, speed not published, ${camera.label}`
-                        }
-                        accessibilityRole="button"
-                        onPress={() => onCameraPress?.(camera.id)}
-                        style={styles.cameraPin}
+            {pinnedPoint ? (
+                <MarkerView allowOverlap coordinate={[pinnedPoint[1], pinnedPoint[0]]}>
+                    <View
+                        importantForAccessibility="no-hide-descendants"
+                        style={[styles.pinnedDot, { backgroundColor: colors.primary, borderColor: colors.card }]}
+                    />
+                </MarkerView>
+            ) : null}
+
+            {cameras.map((camera) => {
+                const focused = camera.id === focusedCameraId;
+                const speedLabel =
+                    camera.maxSpeedKmh !== null
+                        ? `Speed camera, ${camera.maxSpeedKmh} kilometres per hour, ${camera.label}`
+                        : `Speed camera, speed not published, ${camera.label}`;
+
+                return (
+                    <MarkerView
+                        allowOverlap
+                        coordinate={[camera.longitude, camera.latitude]}
+                        key={camera.id}
                     >
-                        <View
-                            style={[
-                                styles.cameraBody,
-                                {
-                                    backgroundColor: camera.isAvoided ? colors.primary : colors.card,
-                                    borderColor: colors.primary,
-                                },
-                            ]}
+                        <TouchableOpacity
+                            accessibilityLabel={
+                                focused ? `Selected camera, ${speedLabel}` : speedLabel
+                            }
+                            accessibilityRole="button"
+                            onPress={() => onCameraPress?.(camera.id)}
+                            style={styles.cameraPin}
                         >
-                            <View
-                                style={[
-                                    styles.cameraLens,
-                                    {
-                                        backgroundColor: camera.isAvoided
-                                            ? colors.primaryForeground
-                                            : colors.primary,
-                                    },
-                                ]}
-                            />
-                            <View
-                                style={[
-                                    styles.cameraFoot,
-                                    {
-                                        backgroundColor: camera.isAvoided
-                                            ? colors.primaryForeground
-                                            : colors.primary,
-                                    },
-                                ]}
-                            />
-                        </View>
-                        {camera.maxSpeedKmh !== null ? (
-                            <View
-                                style={[
-                                    styles.cameraSpeed,
-                                    { backgroundColor: colors.card, borderColor: colors.border },
-                                ]}
-                            >
-                                <Text style={[styles.cameraSpeedLabel, { color: colors.foreground }]}>
-                                    {camera.maxSpeedKmh.toString()}
-                                </Text>
+                            <View style={styles.cameraMarker}>
+                                {focused ? (
+                                    <View
+                                        style={[styles.cameraRing, { borderColor: colors.primary }]}
+                                    />
+                                ) : null}
+                                <View
+                                    style={[
+                                        styles.cameraBody,
+                                        {
+                                            backgroundColor: camera.isAvoided
+                                                ? colors.primary
+                                                : colors.card,
+                                            borderColor: colors.primary,
+                                        },
+                                    ]}
+                                >
+                                    <View
+                                        style={[
+                                            styles.cameraLens,
+                                            {
+                                                backgroundColor: camera.isAvoided
+                                                    ? colors.primaryForeground
+                                                    : colors.primary,
+                                            },
+                                        ]}
+                                    />
+                                    <View
+                                        style={[
+                                            styles.cameraFoot,
+                                            {
+                                                backgroundColor: camera.isAvoided
+                                                    ? colors.primaryForeground
+                                                    : colors.primary,
+                                            },
+                                        ]}
+                                    />
+                                </View>
                             </View>
-                        ) : null}
-                    </TouchableOpacity>
-                </PointAnnotation>
-            ))}
+                            {camera.maxSpeedKmh !== null ? (
+                                <View
+                                    style={[
+                                        styles.cameraSpeed,
+                                        { backgroundColor: colors.card, borderColor: colors.border },
+                                    ]}
+                                >
+                                    <Text
+                                        style={[styles.cameraSpeedLabel, { color: colors.foreground }]}
+                                    >
+                                        {camera.maxSpeedKmh.toString()}
+                                    </Text>
+                                </View>
+                            ) : null}
+                            {focused ? (
+                                <View
+                                    style={[
+                                        styles.cameraAddress,
+                                        { backgroundColor: colors.card, borderColor: colors.border },
+                                    ]}
+                                >
+                                    <Text
+                                        numberOfLines={1}
+                                        style={[styles.cameraAddressLabel, { color: colors.foreground }]}
+                                    >
+                                        {camera.label}
+                                    </Text>
+                                </View>
+                            ) : null}
+                        </TouchableOpacity>
+                    </MarkerView>
+                );
+            })}
 
             {avoidPoints.map((point, index) => (
-                <PointAnnotation
-                    key={point.id}
-                    id={point.id}
+                <MarkerView
+                    allowOverlap
                     coordinate={[point.longitude, point.latitude]}
+                    key={point.id}
                 >
-                    <View style={styles.avoidPinWrap}>
-                        <View style={[styles.avoidPin, { backgroundColor: colors.warning }]}>
-                            <Text style={[styles.avoidPinLabel, { color: colors.warningForeground }]}>
-                                {(index + 1).toString()}
-                            </Text>
+                    <TouchableOpacity
+                        accessibilityHint="Opens the menu to remove this point"
+                        accessibilityLabel={`Avoid point ${index + 1}`}
+                        accessibilityRole="button"
+                        onPress={() => onAvoidPointPress?.(point)}
+                        style={styles.avoidTarget}
+                    >
+                        <View style={styles.avoidPinWrap}>
+                            <View style={[styles.avoidPin, { backgroundColor: colors.warning }]}>
+                                <Text
+                                    style={[styles.avoidPinLabel, { color: colors.warningForeground }]}
+                                >
+                                    {(index + 1).toString()}
+                                </Text>
+                            </View>
+                            <View
+                                style={[styles.avoidTip, { borderTopColor: colors.warning }]}
+                            />
                         </View>
-                        <View
-                            style={[styles.avoidTip, { borderTopColor: colors.warning }]}
-                        />
-                    </View>
-                </PointAnnotation>
+                    </TouchableOpacity>
+                </MarkerView>
             ))}
         </MapView>
+    );
+};
+
+interface GoogleAttributionProps {
+    visible: boolean;
+}
+
+/**
+ * The google rules ask for the google maps mark and for the name of the data
+ * provider. The words are enough when the space is tight, which it is here.
+ */
+export const GoogleAttribution = ({ visible }: GoogleAttributionProps) => {
+    const { colors } = useTheme();
+
+    if (!visible) {
+        return null;
+    }
+
+    return (
+        <View
+            style={[
+                styles.attributionChip,
+                {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    shadowColor: rgba(colors.foreground, 0.18),
+                },
+            ]}
+        >
+            <Text style={[styles.attributionBrand, { color: colors.foreground }]}>Google Maps</Text>
+            <Text style={[styles.attributionData, { color: colors.mutedForeground }]}>
+                Map data: Google, Maxar Technologies
+            </Text>
+        </View>
+    );
+};
+
+interface RecenterButtonProps {
+    disabled: boolean;
+    onPress: () => void;
+}
+
+export const RecenterButton = ({ disabled, onPress }: RecenterButtonProps) => {
+    const { colors } = useTheme();
+
+    return (
+        <TouchableOpacity
+            accessibilityHint={
+                disabled ? 'Your position is not known yet' : 'Moves the map back to your position'
+            }
+            accessibilityLabel="Center on me"
+            accessibilityRole="button"
+            accessibilityState={{ disabled }}
+            activeOpacity={0.8}
+            disabled={disabled}
+            onPress={onPress}
+            style={[
+                styles.recenterButton,
+                {
+                    backgroundColor: disabled ? colors.muted : colors.card,
+                    borderColor: colors.border,
+                    shadowColor: rgba(colors.foreground, 0.18),
+                },
+            ]}
+        >
+            <MaterialIcons
+                color={disabled ? colors.mutedForeground : colors.primary}
+                name={disabled ? 'location-disabled' : 'my-location'}
+                size={24}
+            />
+        </TouchableOpacity>
     );
 };
 
@@ -463,6 +620,23 @@ export const PlaceSearchList = ({ results, isSearching, onSelect }: PlaceSearchL
 };
 
 const styles = StyleSheet.create({
+    attributionBrand: {
+        ...typography.subheading,
+    },
+    attributionChip: {
+        alignSelf: 'flex-start',
+        borderRadius: radii.sm,
+        borderWidth: 1,
+        elevation: 2,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 1,
+        shadowRadius: 4,
+    },
+    attributionData: {
+        ...typography.caption,
+    },
     avoidBadge: {
         alignItems: 'center',
         borderRadius: radii.full,
@@ -486,9 +660,9 @@ const styles = StyleSheet.create({
     avoidPin: {
         alignItems: 'center',
         borderRadius: radii.full,
-        height: 24,
+        height: 22,
         justifyContent: 'center',
-        width: 24,
+        width: 22,
     },
     avoidPinLabel: {
         ...typography.caption,
@@ -503,15 +677,32 @@ const styles = StyleSheet.create({
         gap: spacing.md,
         minHeight: layout.buttonHeight,
     },
+    avoidTarget: {
+        alignItems: 'center',
+        height: 44,
+        justifyContent: 'center',
+        width: 44,
+    },
     avoidTip: {
         borderLeftWidth: 5,
         borderRightWidth: 5,
-        borderTopWidth: 6,
+        borderTopWidth: 4,
         height: 0,
         width: 0,
     },
     avoidTitle: {
         ...typography.label,
+    },
+    cameraAddress: {
+        borderRadius: radii.full,
+        borderWidth: 1,
+        marginLeft: 2,
+        maxWidth: 180,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+    },
+    cameraAddressLabel: {
+        ...typography.caption,
     },
     cameraBody: {
         alignItems: 'center',
@@ -534,11 +725,24 @@ const styles = StyleSheet.create({
         height: 8,
         width: 8,
     },
+    cameraMarker: {
+        alignItems: 'center',
+        height: 30,
+        justifyContent: 'center',
+        width: 30,
+    },
     cameraPin: {
         alignItems: 'center',
         flexDirection: 'row',
         height: 26,
         justifyContent: 'center',
+    },
+    cameraRing: {
+        borderRadius: radii.lg,
+        borderWidth: 2,
+        height: 30,
+        position: 'absolute',
+        width: 30,
     },
     cameraSpeed: {
         borderRadius: radii.full,
@@ -640,6 +844,13 @@ const styles = StyleSheet.create({
         ...typography.caption,
         fontWeight: '700',
     },
+    pinnedDot: {
+        borderRadius: radii.full,
+        borderWidth: 2,
+        elevation: 2,
+        height: 14,
+        width: 14,
+    },
     placeAddress: {
         ...typography.caption,
         marginTop: spacing.xs,
@@ -655,6 +866,18 @@ const styles = StyleSheet.create({
         borderBottomWidth: StyleSheet.hairlineWidth,
         minHeight: 56,
         paddingVertical: spacing.sm,
+    },
+    recenterButton: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        borderWidth: 1,
+        elevation: 3,
+        height: layout.buttonHeight,
+        justifyContent: 'center',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 6,
+        width: layout.buttonHeight,
     },
     removeButton: {
         justifyContent: 'center',

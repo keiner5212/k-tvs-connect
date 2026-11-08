@@ -1,10 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+    BackHandler,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MapViewRef } from '@maplibre/maplibre-react-native';
 
 import { IconLabelButton } from '@components/controls';
-import { MapCanvas, RouteSheet } from '@components/map';
+import { GoogleAttribution, MapCanvas, RecenterButton, RouteSheet, TOOLBAR_HEIGHT } from '@components/map';
+import { AvoidPointMenu, AVOID_POINT_MENU_WIDTH, POINT_MENU_WIDTH, PointMenu } from '@components/mapMenu';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,10 +23,12 @@ import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
-import { Place, RootStackParamList } from '@typings/types';
+import { useTilesStore } from '@stores/tilesStore';
+import { AvoidPoint, Place, RootStackParamList } from '@typings/types';
 import { distanceAlongPath, decodePolyline, pointAtDistance } from '@utils/polyline';
 import { distanceMeters } from '@utils/geo';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
+import { GEOCODE_COUNTRY } from '@config/geocoding';
 import { layout, radii, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -31,6 +42,22 @@ const FALLBACK_CENTER: [number, number] = [11.2407, -74.1947];
  */
 const RECOMPUTE_MIN_METERS = 200;
 
+/** the zoom when the map points at one camera, close enough to tell them apart */
+const FOCUS_ZOOM = 18;
+
+/** a tap on the map that lands this close to an avoid point opens its menu */
+const AVOID_TAP_METERS = 15;
+
+/** the gap between the point and the menu that opens on it */
+const MENU_GAP = 16;
+
+interface MenuPoint {
+    latitude: number;
+    longitude: number;
+    x: number;
+    y: number;
+}
+
 export const MapScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
@@ -41,41 +68,75 @@ export const MapScreen = () => {
         addAvoidPoint,
         arrival,
         avoidPoints,
+        cameraKey,
         clearRoute,
         compute,
         computing,
         destination,
         error,
+        focus,
         loadAvoidPoints,
+        recenter,
+        removeAvoidPoint,
         replayRoute,
         setReplayRoute,
         route,
         setDestination,
     } = useMapStore();
 
-    const { nearby: nearbyCameras, routeSplit } = useCameraStore();
+    const { cameras: allCameras, nearby: nearbyCameras, routeSplit } = useCameraStore();
+    const {
+        googleStyle,
+        unavailable: tilesUnavailable,
+        load: loadTiles,
+        useOpenFreeMap,
+    } = useTilesStore();
     const {
         navigation: progress,
         startNavigation: startNavigationAction,
         stopNavigation: stopNavigationAction,
     } = useMapStore();
-    const cameraMarkers = useMemo(
-        () =>
-            nearbyCameras.map((camera) => ({
-                id: camera.cameraId,
-                latitude: camera.latitude,
-                longitude: camera.longitude,
-                maxSpeedKmh: camera.maxSpeedKmh,
-                isAvoided: camera.avoidEnabled,
-                label: camera.address || 'ANSV camera',
-            })),
-        [nearbyCameras],
-    );
+    const focusedCamera = useMemo(() => {
+        const cameraId = focus?.cameraId;
+        if (!cameraId) {
+            return null;
+        }
+        return allCameras.find((camera) => camera.cameraId === cameraId) ?? null;
+    }, [allCameras, focus?.cameraId]);
+
+    const cameraMarkers = useMemo(() => {
+        const markers = nearbyCameras.map((camera) => ({
+            id: camera.cameraId,
+            latitude: camera.latitude,
+            longitude: camera.longitude,
+            maxSpeedKmh: camera.maxSpeedKmh,
+            isAvoided: camera.avoidEnabled,
+            label: camera.address || 'ANSV camera',
+        }));
+        if (focusedCamera && !markers.some((marker) => marker.id === focusedCamera.cameraId)) {
+            markers.push({
+                id: focusedCamera.cameraId,
+                latitude: focusedCamera.latitude,
+                longitude: focusedCamera.longitude,
+                maxSpeedKmh: focusedCamera.maxSpeedKmh,
+                isAvoided: focusedCamera.avoidEnabled,
+                label: focusedCamera.address || 'ANSV camera',
+            });
+        }
+        return markers;
+    }, [focusedCamera, nearbyCameras]);
     const position = useLocationStore((state) => state.position);
     const [sentToBike, setSentToBike] = useState<boolean | null>(null);
     const connectionState = useBleStore((state) => state.state);
     const [locationError, setLocationError] = useState<string | null>(null);
-    const [followKey, setFollowKey] = useState(0);
+    const mapRef = useRef<MapViewRef>(null);
+    const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+    const [pointMenu, setPointMenu] = useState<MenuPoint | null>(null);
+    const [avoidMenu, setAvoidMenu] = useState<(MenuPoint & { id: string; number: number }) | null>(
+        null,
+    );
+    const [menuHeight, setMenuHeight] = useState(0);
+    const [bottomStackTop, setBottomStackTop] = useState(screenHeight);
     const [replay, setReplay] = useState<{
         points: { lat: number; lon: number }[];
         distance: number;
@@ -113,6 +174,12 @@ export const MapScreen = () => {
         void loadAvoidPoints();
     }, [loadAvoidPoints]);
 
+    useEffect(() => {
+        if (settings.mapProvider === 'google') {
+            void loadTiles();
+        }
+    }, [loadTiles, settings.mapProvider]);
+
     const lastComputed = useRef<{
         destinationId: string;
         latitude: number;
@@ -146,25 +213,123 @@ export const MapScreen = () => {
      * camera drops the tracking when the rider drags the map and it never
      * picks it up again on its own.
      */
-    useEffect(() => {
-        if (destination) {
-            setFollowKey((key) => key + 1);
-        }
-    }, [destination]);
-
     const recompute = useCallback(() => {
         if (position) {
             void compute(position[0], position[1]);
         }
     }, [compute, position]);
 
-    const onLongPress = useCallback(
-        (latitude: number, longitude: number) => {
-            void addAvoidPoint(latitude, longitude);
-            recompute();
+    const openAvoidMenu = useCallback(
+        async (point: AvoidPoint) => {
+            const screen = await mapRef.current?.getPointInView([
+                point.longitude,
+                point.latitude,
+            ]);
+            if (!screen) {
+                return;
+            }
+            const index = avoidPoints.findIndex((item) => item.id === point.id);
+            setPointMenu(null);
+            setAvoidMenu({
+                id: point.id,
+                latitude: point.latitude,
+                longitude: point.longitude,
+                number: index + 1,
+                x: screen[0],
+                y: screen[1],
+            });
         },
-        [addAvoidPoint, recompute],
+        [avoidPoints],
     );
+
+    const onMapPress = useCallback(
+        async (latitude: number, longitude: number) => {
+            const screen = await mapRef.current?.getPointInView([longitude, latitude]);
+            if (!screen) {
+                return;
+            }
+            const near = avoidPoints.find(
+                (point) =>
+                    distanceMeters(
+                        { lat: point.latitude, lon: point.longitude },
+                        { lat: latitude, lon: longitude },
+                    ) < AVOID_TAP_METERS,
+            );
+            if (near) {
+                await openAvoidMenu(near);
+                return;
+            }
+            setAvoidMenu(null);
+            setPointMenu({ latitude, longitude, x: screen[0], y: screen[1] });
+        },
+        [avoidPoints, openAvoidMenu],
+    );
+
+    const avoidTappedPoint = useCallback(() => {
+        if (!pointMenu) {
+            return;
+        }
+        void addAvoidPoint(pointMenu.latitude, pointMenu.longitude);
+        setPointMenu(null);
+        recompute();
+    }, [addAvoidPoint, pointMenu, recompute]);
+
+    const routeToTappedPoint = useCallback(() => {
+        if (!pointMenu) {
+            return;
+        }
+        const { latitude, longitude } = pointMenu;
+        setPointMenu(null);
+        setDestination({
+            id: `pinned-${latitude}-${longitude}`,
+            name: 'Pinned point',
+            address: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+            latitude,
+            longitude,
+            countryCode: GEOCODE_COUNTRY,
+        });
+    }, [pointMenu, setDestination]);
+
+    const removeAvoidedPoint = useCallback(() => {
+        if (!avoidMenu) {
+            return;
+        }
+        void removeAvoidPoint(avoidMenu.id);
+        setAvoidMenu(null);
+        recompute();
+    }, [avoidMenu, recompute, removeAvoidPoint]);
+
+    const menuStyle = useCallback(
+        (x: number, y: number, width: number) => {
+            const left = Math.min(
+                Math.max(x - width / 2, layout.screenPadding),
+                screenWidth - width - layout.screenPadding,
+            );
+            const topLimit = insets.top + spacing.sm + TOOLBAR_HEIGHT;
+            const above = y - MENU_GAP - menuHeight;
+            const below = y + MENU_GAP;
+            const top =
+                above >= topLimit
+                    ? above
+                    : below + menuHeight <= bottomStackTop
+                        ? below
+                        : Math.max(topLimit, bottomStackTop - menuHeight);
+            return { left, top };
+        },
+        [bottomStackTop, insets.top, menuHeight, screenWidth],
+    );
+
+    useEffect(() => {
+        const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (!pointMenu && !avoidMenu) {
+                return false;
+            }
+            setPointMenu(null);
+            setAvoidMenu(null);
+            return true;
+        });
+        return () => subscription.remove();
+    }, [avoidMenu, pointMenu]);
 
     const startNavigation = async () => {
         const sent = await startNavigationAction();
@@ -229,17 +394,46 @@ export const MapScreen = () => {
             <MapCanvas
                 avoidPoints={avoidPoints}
                 cameras={cameraMarkers}
-                center={position ?? FALLBACK_CENTER}
+                center={focus ? [focus.latitude, focus.longitude] : position ?? FALLBACK_CENTER}
                 destination={destination}
-                followKey={followKey}
-                followUser={position !== null}
+                followKey={cameraKey}
+                followUser={position !== null && !focus}
+                focusedCameraId={focus?.cameraId ?? null}
+                mapRef={mapRef}
+                pinnedPoint={pointMenu ? [pointMenu.latitude, pointMenu.longitude] : null}
+                onAvoidPointPress={openAvoidMenu}
                 onCameraPress={(cameraId) => navigation.navigate('CameraDetail', { cameraId })}
-                onLongPress={onLongPress}
+                onMapPress={onMapPress}
+                onTilesFail={useOpenFreeMap}
                 replayPosition={replayState?.position ?? null}
                 routeGeometry={route?.geometry}
-                styleURL={settings.mapStyleUrl}
-                zoom={13}
+                style={
+                    settings.mapProvider === 'google' && googleStyle
+                        ? googleStyle
+                        : settings.mapStyleUrl
+                }
+                zoom={focus ? FOCUS_ZOOM : 13}
             />
+
+            {pointMenu ? (
+                <PointMenu
+                    latitude={pointMenu.latitude}
+                    longitude={pointMenu.longitude}
+                    onAvoid={avoidTappedPoint}
+                    onMeasure={setMenuHeight}
+                    onRoute={routeToTappedPoint}
+                    style={menuStyle(pointMenu.x, pointMenu.y, POINT_MENU_WIDTH)}
+                />
+            ) : null}
+
+            {avoidMenu ? (
+                <AvoidPointMenu
+                    number={avoidMenu.number}
+                    onMeasure={setMenuHeight}
+                    onRemove={removeAvoidedPoint}
+                    style={menuStyle(avoidMenu.x, avoidMenu.y, AVOID_POINT_MENU_WIDTH)}
+                />
+            ) : null}
 
             <View style={[styles.toolbar, { top: insets.top + spacing.sm }]}>
                 <IconLabelButton
@@ -263,8 +457,12 @@ export const MapScreen = () => {
             </View>
 
             <View
+                onLayout={(event) => setBottomStackTop(event.nativeEvent.layout.y)}
                 style={[styles.bottom, { paddingBottom: spacing.md }]}
             >
+                {tilesUnavailable ? (
+                    <Banner message="Google map unavailable, using OpenFreeMap instead." tone="info" />
+                ) : null}
                 {locationError ? <Banner tone="warning" message={locationError} /> : null}
                 {error ? (
                     <Banner
@@ -274,6 +472,19 @@ export const MapScreen = () => {
                         tone="error"
                     />
                 ) : null}
+
+                <View style={styles.mapControlsRow}>
+                    <View style={styles.mapControlsSlot}>
+                        <GoogleAttribution
+                            visible={
+                                settings.mapProvider === 'google' &&
+                                googleStyle !== null &&
+                                !tilesUnavailable
+                            }
+                        />
+                    </View>
+                    <RecenterButton disabled={!position} onPress={recenter} />
+                </View>
 
                 {replayState && replay ? (
                     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -288,7 +499,7 @@ export const MapScreen = () => {
                             accessibilityRole="button"
                             onPress={() => {
                                 setReplay(null);
-                                setFollowKey((key) => key + 1);
+                                recenter();
                             }}
                             style={[styles.replayStop, { backgroundColor: colors.secondary }]}
                         >
@@ -373,6 +584,17 @@ const styles = StyleSheet.create({
         marginHorizontal: layout.screenPadding,
         marginTop: spacing.sm,
         padding: layout.cardPadding,
+    },
+    mapControlsRow: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginBottom: spacing.sm,
+        marginHorizontal: layout.screenPadding,
+    },
+    mapControlsSlot: {
+        flex: 1,
+        pointerEvents: 'box-none',
     },
     replayDistance: {
         ...typography.readout,

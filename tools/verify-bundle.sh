@@ -6,9 +6,9 @@ target="${1:?usage: verify-bundle.sh <apk|bundle>}"
 
 patterns='tvsmotor|tvsm\.connect|tvsmotor\.net|p360\.tvsmotor|cdpcom-dev|tvsmapisrvr|tvsiqubeapi|bluconnect|aptener|servicebus\.windows\.net|firebaseio|firebaseapp|RSA_TOKEN|indicosmic'
 
-# The google key of this app is allowed, every other google key is a TVS
-# surface. The hash is committed, the key is not.
-allowed_key_sha256='72b614d7faaadbe6b7bc804387e93b631f73775979f6140c8a5d74bc47600b88'
+# The google keys of this app are allowed, every other google key is a TVS
+# surface. The hashes are committed, the keys are not.
+allowed_key_sha256='72b614d7faaadbe6b7bc804387e93b631f73775979f6140c8a5d74bc47600b88 dc21bc4bf7bca683cdbc14375ad92ada270596e5884b975e90e8f8d178791850'
 
 if [ ! -e "$target" ]; then
   echo "target not found: $target" >&2
@@ -37,10 +37,18 @@ fi
 
 for key in $(grep -rhoE 'AIza[0-9A-Za-z_-]{35}' "$scan" | sort -u); do
   hash=$(printf '%s' "$key" | sha256sum | cut -d' ' -f1)
-  if [ "$hash" != "$allowed_key_sha256" ]; then
-    echo "FAIL: an unexpected google api key is present in $target" >&2
-    exit 1
-  fi
+  case " $allowed_key_sha256 " in
+    *" $hash "*) ;;
+    *)
+      echo "FAIL: an unexpected google api key is present in $target" >&2
+      exit 1
+      ;;
+  esac
 done
+
+if grep -rIqE 'session=[A-Za-z0-9_-]{30,}' "$scan"; then
+  echo "FAIL: a google tiles session token is baked into $target" >&2
+  exit 1
+fi
 
 echo "OK: no TVS surface in $target"

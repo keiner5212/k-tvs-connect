@@ -5,7 +5,11 @@ import { PrimaryButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { TrafficCamera } from '@typings/types';
 import { formatDistance, UnitSystem } from '@utils/format';
+import { describeInfraction } from '@config/infractions';
 import { layout, radii, spacing, typography } from '@config/theme';
+
+/** how many infractions the card lists before it only counts the rest */
+const INFRACTION_PREVIEW_COUNT = 8;
 
 const TECHNOLOGY_DESCRIPTIONS: Record<string, string> = {
     'Radar Doppler': 'Speed measured with a Doppler radar',
@@ -53,6 +57,12 @@ export const CameraCard = ({
 
     const address = camera.address || 'No address reported';
     const place = [camera.municipality, camera.department].filter(Boolean).join(', ');
+    const infractions = camera.infractions.map((code) => ({
+        code,
+        description: describeInfraction(code) ?? code,
+    }));
+    const shownInfractions = infractions.slice(0, INFRACTION_PREVIEW_COUNT);
+    const hiddenInfractions = infractions.length - shownInfractions.length;
 
     return (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -117,6 +127,24 @@ export const CameraCard = ({
             {variant === 'full' ? (
                 <>
                     <View style={styles.fieldRow}>
+                        <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+                            Maximum speed
+                        </Text>
+                        <Text style={[styles.fieldValue, { color: colors.foreground }]}>
+                            {camera.maxSpeedKmh !== null
+                                ? `${camera.maxSpeedKmh} km/h`
+                                : 'Not published'}
+                        </Text>
+                    </View>
+
+                    {camera.maxSpeedKmh !== null ? (
+                        <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
+                            The limit the agency published for this camera, the one it measures
+                            against.
+                        </Text>
+                    ) : null}
+
+                    <View style={styles.fieldRow}>
                         <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Road type</Text>
                         <Text style={[styles.fieldValue, { color: colors.foreground }]}>
                             {camera.roadType || 'Not reported'}
@@ -128,15 +156,38 @@ export const CameraCard = ({
                             Declared infractions
                         </Text>
                         <Text style={[styles.fieldValue, { color: colors.foreground }]}>
-                            {camera.infractions.length > 0 ? camera.infractions.join(', ') : 'None published'}
+                            {infractions.length > 0
+                                ? `${infractions.length} published`
+                                : 'None published'}
                         </Text>
                     </View>
 
-                    {camera.infractions.length > 0 ? (
-                        <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
-                            These codes are agency identifiers. The app does not publish what they
-                            mean.
-                        </Text>
+                    {infractions.length > 0 ? (
+                        <View style={styles.infractionList}>
+                            {shownInfractions.map((entry) => (
+                                <View key={entry.code} style={styles.infractionRow}>
+                                    <Text
+                                        style={[styles.infractionCode, { color: colors.primary }]}
+                                    >
+                                        {entry.code}
+                                    </Text>
+                                    <Text
+                                        style={[styles.infractionText, { color: colors.foreground }]}
+                                    >
+                                        {entry.description}
+                                    </Text>
+                                </View>
+                            ))}
+                            {hiddenInfractions > 0 ? (
+                                <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
+                                    {`and ${hiddenInfractions} more that the agency published for this equipment`}
+                                </Text>
+                            ) : null}
+                            <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
+                                The wording is the one of the national traffic code. The app does not
+                                publish any fine amount.
+                            </Text>
+                        </View>
                     ) : null}
 
                     <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
@@ -335,6 +386,23 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: spacing.sm,
         justifyContent: 'space-between',
+    },
+    infractionCode: {
+        ...typography.label,
+        width: 44,
+    },
+    infractionList: {
+        marginTop: spacing.sm,
+    },
+    infractionRow: {
+        alignItems: 'flex-start',
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginBottom: spacing.xs,
+    },
+    infractionText: {
+        ...typography.body,
+        flex: 1,
     },
     listTitle: {
         ...typography.label,

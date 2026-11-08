@@ -27,6 +27,12 @@ export const GEOCODE_LANGUAGE = 'es';
 /** a search is repeated for a day before it goes out again */
 export const GEOCODE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * The version of the cache key. It changes when the answer changes, so the
+ * answers written by an older build are not read again.
+ */
+export const GEOCODE_CACHE_VERSION = 'v2';
+
 /** the position bias is rounded to this cell, so the cache key says what was asked */
 export const GEOCODE_BIAS_CELL_DEGREES = 0.05;
 

@@ -35,7 +35,8 @@ export const SettingsScreen = () => {
 
     const [valhallaUrl, setValhallaUrl] = useState(settings.valhallaBaseUrl);
     const [styleUrl, setStyleUrl] = useState(settings.mapStyleUrl);
-    const [urlError, setUrlError] = useState<string | null>(null);
+    const [routingError, setRoutingError] = useState<string | null>(null);
+    const [styleError, setStyleError] = useState<string | null>(null);
 
     useEffect(() => {
         void load();
@@ -46,13 +47,27 @@ export const SettingsScreen = () => {
         setStyleUrl(settings.mapStyleUrl);
     }, [settings]);
 
-    const saveUrls = () => {
+    const normalizeUrl = (value: string): string => value.trim().replace(/\/+$/, '');
+
+    const saveRoutingUrl = () => {
         if (!isAllowedBaseUrl(valhallaUrl)) {
-            setUrlError('Enter a full URL starting with http:// or https://');
+            setRoutingError('Enter a full URL starting with http:// or https://');
             return;
         }
-        setUrlError(null);
-        void update({ valhallaBaseUrl: valhallaUrl, mapStyleUrl: styleUrl });
+        setRoutingError(null);
+        void update({ valhallaBaseUrl: normalizeUrl(valhallaUrl) });
+    };
+
+    const saveStyleUrl = () => {
+        if (!isAllowedBaseUrl(styleUrl)) {
+            setStyleError('Enter a full URL starting with http:// or https://');
+            return;
+        }
+        setStyleError(null);
+        void update({
+            mapProvider: 'openfreemap',
+            mapStyleUrl: normalizeUrl(styleUrl),
+        });
     };
 
     return (
@@ -93,16 +108,31 @@ export const SettingsScreen = () => {
                     />
                 </SettingsSection>
 
-                <SettingsSection title="Map style" footer="OpenFreeMap styles, no account and no key needed.">
+                <SettingsSection
+                    title="Map style"
+                    footer="Google Maps uses the map tiles api. The OpenFreeMap styles need no account and no key."
+                >
+                    <SettingsChoice
+                        description="The google map, with the traffic cameras on it."
+                        label="Google Maps"
+                        onSelect={() => void update({ mapProvider: 'google' })}
+                        selected={settings.mapProvider === 'google'}
+                    />
                     {MAP_STYLES.map((style) => (
                         <SettingsChoice
                             key={style.value}
                             label={style.label}
                             onSelect={() => {
                                 setStyleUrl(style.value);
-                                void update({ mapStyleUrl: style.value });
+                                void update({
+                                    mapProvider: 'openfreemap',
+                                    mapStyleUrl: style.value,
+                                });
                             }}
-                            selected={settings.mapStyleUrl === style.value}
+                            selected={
+                                settings.mapProvider === 'openfreemap' &&
+                                settings.mapStyleUrl === style.value
+                            }
                         />
                     ))}
                 </SettingsSection>
@@ -110,14 +140,14 @@ export const SettingsScreen = () => {
                 <SettingsSection title="Custom map style">
                     <SettingsBody>
                         <TextField
-                            errorText={urlError ?? undefined}
+                            errorText={styleError ?? undefined}
                             helperText="Any MapLibre style json url."
                             label="Style url"
                             onChangeText={setStyleUrl}
                             value={styleUrl}
                         />
                     </SettingsBody>
-                    <SettingsRow label="Save style url" onPress={saveUrls} />
+                    <SettingsRow label="Save style url" onPress={saveStyleUrl} />
                 </SettingsSection>
 
                 <SettingsSection
@@ -147,12 +177,14 @@ export const SettingsScreen = () => {
                 >
                     <View style={styles.padded}>
                         <TextField
+                            errorText={routingError ?? undefined}
+                            helperText="The base url of the routing service."
                             label="Routing url"
                             onChangeText={setValhallaUrl}
                             value={valhallaUrl}
                         />
                     </View>
-                    <SettingsRow label="Save service url" onPress={saveUrls} />
+                    <SettingsRow label="Save routing url" onPress={saveRoutingUrl} />
                 </SettingsSection>
 
                 <SettingsSection title="Privacy">

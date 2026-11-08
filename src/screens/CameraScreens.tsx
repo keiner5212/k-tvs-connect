@@ -11,6 +11,7 @@ import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
 import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
+import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { layout, spacing, typography } from '@config/theme';
@@ -50,6 +51,15 @@ export const CamerasScreen = () => {
     }, [position]);
 
     const radiusMeters = useCameraStore((state) => state.radiusMeters);
+    const focusOn = useMapStore((state) => state.focusOn);
+
+    const showOnMap = (cameraId: string) => {
+        const camera = nearby.find((item) => item.cameraId === cameraId);
+        if (camera) {
+            focusOn(camera.latitude, camera.longitude, camera.cameraId);
+        }
+        navigation.navigate('Main', { screen: 'Map' });
+    };
 
     return (
         <ScreenContainer edges={['bottom']} scroll>
@@ -98,7 +108,7 @@ export const CamerasScreen = () => {
                             true,
                         )
                     }
-                    onShowOnMap={() => navigation.navigate('Main')}
+                    onShowOnMap={showOnMap}
                     onToggleAvoid={(cameraId) =>
                         void setAvoidEnabled(cameraId, !camera.avoidEnabled)
                     }
@@ -126,6 +136,7 @@ export const CameraDetailScreen = () => {
         state.cameras.find((item) => item.cameraId === route.params.cameraId),
     );
     const { setAvoidEnabled } = useCameraStore();
+    const focusOn = useMapStore((state) => state.focusOn);
 
     if (!camera) {
         return (
@@ -153,7 +164,10 @@ export const CameraDetailScreen = () => {
                         true,
                     )
                 }
-                onShowOnMap={() => navigation.navigate('Main')}
+                onShowOnMap={() => {
+                    focusOn(camera.latitude, camera.longitude, camera.cameraId);
+                    navigation.navigate('Main', { screen: 'Map' });
+                }}
                 onToggleAvoid={(cameraId) =>
                     void setAvoidEnabled(cameraId, !camera.avoidEnabled)
                 }
