@@ -4,12 +4,15 @@ import { State } from 'react-native-ble-plx';
 import { Bike, BikeTelemetry, ConnectionState } from '@typings/types';
 import { startClusterService, stopClusterService } from '@services/cluster.service';
 import { logger, describeError } from '@utils/logger';
-import { bleService, DiscoveredDevice, LinkFailure } from './bleService';
+import { bleService, ClusterKind, DiscoveredDevice, LinkFailure } from './bleService';
 import { ensureBlePermissions } from './permissions';
 import { DATA_TIMEOUT_MS, FIRST_FRAME_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
-import { parseFrame, telemetryFromFrame } from './parser';
+import { emptyTelemetry, parseFrame, parseLegacyFrame, telemetryFromFrame } from './parser';
 import {
     NavigationUpdate,
+    buildLegacyNamePacket,
+    buildLegacySignalPacket,
+    buildLegacyTimePacket,
     buildLocationAddressPacket,
     buildMobileDataPacket,
     buildNavigationControlPacket,
@@ -33,12 +36,13 @@ export interface ConnectionInfo {
 const FAILURE_REASONS: Record<LinkFailure, string> = {
     'not-a-bike': 'This device is not a bike. It does not have the bike service.',
     'bond-refused':
-        'The phone could not pair with this device. If it asks for a PIN, use 222333.',
+        'The phone could not pair with this device. Type the code the bike shows in the pairing dialog of the phone.',
     'connect-failed': 'The bike did not answer the connection.',
 };
 
 /** the cluster shows a code on its screen and the phone has to answer it */
-const PAIRING_HINT = 'Answer the code the bike shows. The pin of the cluster is 222333.';
+const PAIRING_HINT =
+    'The bike is showing a code. Type that code in the pairing dialog of the phone.';
 
 const CLUSTER_UPDATE_INTERVAL_MS = 2000;
 
@@ -122,6 +126,8 @@ export class ConnectionController {
     private watchdog: ReturnType<typeof setInterval> | null = null;
 
     private receivedFrames = 0;
+
+    private clusterKind: ClusterKind = 'modern';
 
     private clusterTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -464,6 +470,7 @@ export class ConnectionController {
                     this.setState('pairing');
                 });
                 await this.ble.discover(device, (bytes) => this.handleData(bytes));
+                this.clusterKind = this.ble.kind;
                 this.reconnectAttempt = 0;
                 this.nextRetryAt = null;
                 this.failureReason = null;
@@ -523,6 +530,11 @@ export class ConnectionController {
     }
 
     private handleData(bytes: Uint8Array): void {
+        if (this.clusterKind === 'legacy') {
+            this.handleLegacyData(bytes);
+            return;
+        }
+
         const frame = parseFrame(bytes);
         if (!frame) {
             /**
@@ -578,6 +590,49 @@ export class ConnectionController {
     }
 
     /**
+     * The older family of the cluster sends letter frames without
+     * encryption. The values that are not ported yet are logged raw, so the
+     * rest can be read from the log of a real ride.
+     */
+    private handleLegacyData(bytes: Uint8Array): void {
+        const legacy = parseLegacyFrame(bytes);
+        this.lastDataAt = Date.now();
+        this.receivedFrames += 1;
+
+        if (this.receivedFrames <= 5) {
+            logger.info('a legacy frame came in', {
+                service: 'ble',
+                event: 'ble_frame',
+                count: this.receivedFrames,
+                pathTemplate: legacy.raw,
+            });
+        }
+
+        const previous = this.telemetry;
+        const speed = legacy.speedKmh ?? previous?.speedKmh ?? null;
+        const fuel = legacy.fuelLevelPercent ?? previous?.fuelLevelPercent ?? null;
+        if (speed === null && fuel === null) {
+            return;
+        }
+
+        this.telemetry = {
+            ...(previous ?? emptyTelemetry()),
+            speedKmh: speed,
+            fuelLevelPercent: fuel,
+            receivedAt: Date.now(),
+        };
+
+        if (this.state !== 'connected') {
+            this.failureReason = null;
+            this.setState('connected');
+        }
+
+        for (const listener of this.telemetryListeners) {
+            listener(this.telemetry);
+        }
+    }
+
+    /**
      * The original app writes the rider name once after the connection and then
      * refreshes the mobile data packet every two seconds. The cluster shows the
      * clock, the phone battery, the signal and the overspeed limit from it.
@@ -595,7 +650,11 @@ export class ConnectionController {
         const riderName = useSettingsStore.getState().settings.riderName.trim();
         const name = riderName || this.bike?.nickname || '';
         if (name) {
-            await this.ble.write(buildRiderNamePacket(name)).catch(() => undefined);
+            const packet =
+                this.clusterKind === 'legacy'
+                    ? buildLegacyNamePacket(name)
+                    : buildRiderNamePacket(name);
+            await this.ble.write(packet).catch(() => undefined);
             logger.info('the rider name was sent to the bike', {
                 service: 'ble',
                 event: 'ble_rider_name',
@@ -653,6 +712,23 @@ export class ConnectionController {
 
         const battery = await getBatteryLevel();
         const networkType = await getNetworkType();
+
+        /**
+         * The older family of the cluster takes a plain letter frame with the
+         * signal, the battery, the missed calls and the kind of network, the
+         * way the original app sends it.
+         */
+        if (this.clusterKind === 'legacy') {
+            await this.ble
+                .write(
+                    buildLegacySignalPacket(0, battery, 0, networkType === 4 ? 1 : 0),
+                )
+                .catch(() => undefined);
+            await this.ble
+                .write(buildLegacyTimePacket(new Date()))
+                .catch(() => undefined);
+            return;
+        }
 
         await this.ble
             .write(

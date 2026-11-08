@@ -40,6 +40,13 @@ export type DiscoveredDevice = {
     rssi: number;
 };
 
+/**
+ * Which family of the cluster the phone is talking to. The modern one speaks
+ * frames with a start byte and a data id, the older one (the RTR 160 IoT V2
+ * and the families that share its protocol) speaks plain letter frames.
+ */
+export type ClusterKind = 'modern' | 'legacy';
+
 export type TelemetryListener = (bytes: Uint8Array) => void;
 export type StateListener = (state: State) => void;
 
@@ -86,6 +93,8 @@ export class BleService {
     private device: Device | null = null;
 
     private writeCharacteristic: Characteristic | null = null;
+
+    private clusterKind: ClusterKind = 'modern';
 
     constructor() {
         this.manager = new BleManager();
@@ -206,7 +215,10 @@ export class BleService {
         });
     }
 
-    async discover(device: Device, onTelemetry: TelemetryListener): Promise<void> {
+    async discover(
+        device: Device,
+        onTelemetry: TelemetryListener,
+    ): Promise<ClusterKind> {
         await device.discoverAllServicesAndCharacteristics();
         const services = await device.services();
 
@@ -238,7 +250,9 @@ export class BleService {
          * the characteristic that notifies is the one that reads, and the one
          * that writes is the one that writes.
          */
+        let kind: ClusterKind = 'modern';
         if (!read || !write) {
+            kind = 'legacy';
             const cluster = services.find((service) =>
                 service.uuid.toUpperCase().includes(CLUSTER_SERVICE_MARK),
             );
@@ -250,6 +264,15 @@ export class BleService {
                     null;
                 write =
                     write ??
+                    /**
+                     * The original app writes the commands of this family
+                     * with the write type "without response", so the command
+                     * endpoint is the one that only takes that.
+                     */
+                    characteristics.find(
+                        (item) => item.isWritableWithoutResponse && !item.isWritableWithResponse,
+                    ) ??
+                    characteristics.find((item) => item.isWritableWithResponse) ??
                     characteristics.find((item) => canWrite(item)) ??
                     null;
             }
@@ -296,13 +319,31 @@ export class BleService {
                 'the device does not have the bike service',
             );
         }
+
+        this.clusterKind = kind;
+        return kind;
     }
 
     async write(bytes: Uint8Array): Promise<void> {
-        if (!this.writeCharacteristic) {
+        const characteristic = this.writeCharacteristic;
+        if (!characteristic) {
             throw new Error('write characteristic is not available');
         }
-        await this.writeCharacteristic.writeWithResponse(bytesToBase64(bytes));
+        /**
+         * The write has to use the method the characteristic supports. The
+         * original app writes this family without a response, and a write
+         * with a response to a characteristic that does not take it is
+         * dropped by the stack, so the cluster never answers.
+         */
+        if (characteristic.isWritableWithResponse) {
+            await characteristic.writeWithResponse(bytesToBase64(bytes));
+        } else {
+            await characteristic.writeWithoutResponse(bytesToBase64(bytes));
+        }
+    }
+
+    get kind(): ClusterKind {
+        return this.clusterKind;
     }
 
     async disconnect(): Promise<void> {

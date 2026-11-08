@@ -13,12 +13,12 @@ import {
 import { getSettings, setSetting } from '@services/db/settingsRepository';
 import { bearingDegrees, distanceMeters, distanceToSegmentMeters } from '@utils/geo';
 import { isRiskyDirection } from '@utils/cameraSense';
-import { decodePolyline } from '@utils/polyline';
+import { decodePolyline, encodePolyline } from '@utils/polyline';
 import { logger } from '@utils/logger';
 const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const NEARBY_RADIUS_METERS = 5000;
-const ROUTE_CORRIDOR_METERS = 80;
-const ROUTE_MAX_CAMERAS = 40;
+/** a camera farther than this from the route is not on it */
+const ROUTE_CORRIDOR_METERS = 40;
 
 /** The list of cameras only changes when the rider moves this far. */
 const CAMERA_RELOAD_METERS = 50;
@@ -28,6 +28,19 @@ let lastLoadPosition: [number, number] | null = null;
 export interface CameraRefreshResult {
     sent: number;
     leftOut: number;
+}
+
+/**
+ * One camera the route passes close to, and the stretches where the rider
+ * would have that camera behind the bike.
+ */
+export interface CameraPassage {
+    camera: TrafficCamera;
+    /** polyline6 of those stretches, in the direction the rider was going */
+    shapes: string[];
+    distanceMeters: number;
+    /** no single watched direction, so the spot itself has to be closed */
+    everyDirection: boolean;
 }
 
 interface CameraState {
@@ -51,9 +64,9 @@ interface CameraState {
     setRouteSplit: (split: CameraRefreshResult) => void;
     setRouteCameras: (cameras: TrafficCamera[]) => void;
     restoreRemovedCameras: () => Promise<void>;
-    selectForRoute: (geometry: string) => Promise<{
-        risky: TrafficCamera[];
-        safe: TrafficCamera[];
+    classifyRoute: (geometry: string) => Promise<{
+        back: CameraPassage[];
+        facing: TrafficCamera[];
     }>;
 }
 
@@ -212,81 +225,82 @@ export const useCameraStore = create<CameraState>((set, get) => ({
         await clearCameraPreferences();
         await get().load(true);
     },
-    selectForRoute: async (geometry: string) => {
+    classifyRoute: async (geometry: string) => {
         const points = decodePolyline(geometry, 6);
-        if (points.length < 2) {
-            return { risky: [] as TrafficCamera[], safe: [] as TrafficCamera[] };
+        const empty = { back: [] as CameraPassage[], facing: [] as TrafficCamera[] };
+        if (points.length < 2 || !get().avoidEnabled) {
+            return empty;
         }
 
         const preferences = await listCameraPreferences();
         const allowed = get().cameras.filter((camera) => preferences[camera.cameraId] !== false);
+        const back: CameraPassage[] = [];
+        const facing: TrafficCamera[] = [];
 
-        const scored = allowed
-            .map((camera) => {
-                const point = { lat: camera.latitude, lon: camera.longitude };
-                let distance = Infinity;
-                let risky = false;
+        for (const camera of allowed) {
+            const point = { lat: camera.latitude, lon: camera.longitude };
+            const sense = camera.sense;
+            const everyDirection =
+                !sense ||
+                (sense.bothWays ? sense.axisBearing === null : sense.riskyBearing === null);
+            let distance = Infinity;
+            const runs: { start: number; end: number }[] = [];
+            let runStart = -1;
 
-                /**
-                 * Every stretch of the route that goes by the camera counts, not
-                 * only the closest point. At a crossing the closest point can be
-                 * on the leg before the turn, and the rider leaves the camera
-                 * behind with the back turned to it.
-                 */
-                for (let index = 1; index < points.length; index += 1) {
-                    const toSegment = distanceToSegmentMeters(point, points[index - 1], points[index]);
-                    if (toSegment > ROUTE_CORRIDOR_METERS) {
-                        continue;
+            /**
+             * The leaving stretch counts, not only the closest point. A turn
+             * onto the direction the camera looks puts the camera behind the
+             * rider even when the approach itself faces the camera.
+             */
+            for (let index = 1; index < points.length; index += 1) {
+                const toSegment = distanceToSegmentMeters(point, points[index - 1], points[index]);
+                if (toSegment > ROUTE_CORRIDOR_METERS) {
+                    if (runStart >= 0) {
+                        runs.push({ start: runStart, end: index - 1 });
+                        runStart = -1;
                     }
-                    distance = Math.min(distance, toSegment);
-                    const travel = bearingDegrees(points[index - 1], points[index]);
-                    if (isRiskyDirection(camera.sense, travel)) {
-                        risky = true;
+                    continue;
+                }
+                distance = Math.min(distance, toSegment);
+                const travel = bearingDegrees(points[index - 1], points[index]);
+                if (!isRiskyDirection(sense, travel)) {
+                    if (runStart >= 0) {
+                        runs.push({ start: runStart, end: index - 1 });
+                        runStart = -1;
                     }
+                    continue;
                 }
-
-                if (distance === Infinity) {
-                    return null;
+                if (runStart < 0) {
+                    runStart = index - 1;
                 }
-                return { camera, distance, risky };
-            })
-            .filter((entry): entry is { camera: TrafficCamera; distance: number; risky: boolean } =>
-                entry !== null,
-            )
-            .sort((a, b) => a.distance - b.distance);
+            }
+            if (runStart >= 0) {
+                runs.push({ start: runStart, end: points.length - 1 });
+            }
+            if (distance === Infinity) {
+                continue;
+            }
 
-        /**
-         * A camera that watches the traffic that goes the same way the rider
-         * goes ends up behind the rider and photographs the plate. The other
-         * ones see the front of the bike and are left alone.
-         */
-        const risky = scored
-            .filter((entry) => entry.risky)
-            .slice(0, ROUTE_MAX_CAMERAS)
-            .map((entry) => ({
-                ...entry.camera,
-                /**
-                 * The ring has to reach the route, or the camera is flagged and
-                 * the route goes past it anyway.
-                 */
-                radiusMeters: Math.min(
-                    50,
-                    Math.max(entry.camera.radiusMeters, Math.round(entry.distance) + 15),
-                ),
-            }));
-        const safe = scored
-            .filter((entry) => !entry.risky)
-            .map((entry) => entry.camera);
+            if (runs.length === 0) {
+                facing.push(camera);
+                continue;
+            }
 
-        const enabled = get().avoidEnabled;
-        const avoided = enabled ? risky : [];
+            const shapes = runs
+                .map((run) => points.slice(run.start, run.end + 1))
+                .filter((slice) => slice.length >= 2 && distanceMeters(slice[0], slice[slice.length - 1]) >= 1)
+                .map((slice) => encodePolyline(slice, 6));
 
-        set({
-            routeSplit: { sent: avoided.length, leftOut: enabled ? safe.length : risky.length + safe.length },
-            routeCameras: avoided,
-        });
+            back.push({
+                camera,
+                shapes,
+                distanceMeters: distance,
+                everyDirection: everyDirection || shapes.length === 0,
+            });
+        }
 
-        return { risky: avoided, safe };
+        back.sort((a, b) => a.distanceMeters - b.distanceMeters);
+        return { back, facing };
     },
 }));
 

@@ -3,7 +3,9 @@ import { create } from 'zustand';
 import { AvoidPoint, Place, RouteResult, TrafficCamera } from '@typings/types';
 import { NavigationUpdate } from '@ble/protocol';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
-import { computeRoute } from '@services/valhalla.service';
+import { CAMERA_AVOID_RADIUS_METERS } from '@services/ansv.service';
+import { Costing, computeRoute, DirectedAvoid } from '@services/valhalla.service';
+import { CameraPassage, useCameraStore } from '@stores/cameraStore';
 import { decodePolyline, nearestPointIndex, remainingDistanceMeters } from '@utils/polyline';
 import {
     listObservations,
@@ -16,7 +18,6 @@ import {
     insertAvoidPoint,
     listAvoidPoints,
 } from '@services/db/avoidPointRepository';
-import { useCameraStore } from '@stores/cameraStore';
 import { useSettingsStore } from '@stores/settingsStore';
 
 export interface ReplayRoute {
@@ -43,8 +44,8 @@ export interface FocusPoint {
 
 export type RouteVariant = 'short' | 'safe';
 
-/** the detour that is still worth it to get away from a camera */
-const MAX_CAMERA_DETOUR_METERS = 400;
+const CAMERA_BEHIND = 'No route avoids a camera behind the bike.';
+const REPAIR_PASSES = 4;
 
 export interface RouteVariants {
     /** the shortest way, it can cut between neighbourhoods */
@@ -59,8 +60,6 @@ interface MapState {
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
     routes: RouteVariants;
-    /** the cameras the short route goes past because avoiding them is too long */
-    skippedCameras: TrafficCamera[];
     variant: RouteVariant;
     arrival: ArrivalEstimate | null;
     routeContext: RouteContext | null;
@@ -125,6 +124,9 @@ const pointsOfRoute = (geometry: string): { lat: number; lon: number }[] => {
 
 const describeRouteError = (error: unknown): string => {
     const message = error instanceof Error ? error.message : '';
+    if (message.includes('camera behind')) {
+        return CAMERA_BEHIND;
+    }
     if (message.includes('too large')) {
         return 'The routing answer was too large. Try a shorter route.';
     }
@@ -137,13 +139,167 @@ const describeRouteError = (error: unknown): string => {
     return 'Could not compute the route.';
 };
 
+interface CameraPlan {
+    sent: number;
+    leftOut: number;
+    cameras: TrafficCamera[];
+}
+
+interface CameraBans {
+    directed: DirectedAvoid[];
+    hard: AvoidPoint[];
+    seen: Set<string>;
+    cameras: Map<string, TrafficCamera>;
+}
+
+const EMPTY_PLAN: CameraPlan = { sent: 0, leftOut: 0, cameras: [] };
+
+let cameraPlans: { short: CameraPlan; safe: CameraPlan } = {
+    short: EMPTY_PLAN,
+    safe: EMPTY_PLAN,
+};
+
+const emptyBans = (): CameraBans => ({
+    directed: [],
+    hard: [],
+    seen: new Set<string>(),
+    cameras: new Map<string, TrafficCamera>(),
+});
+
+const hardRadius = (distanceMeters: number): number =>
+    Math.min(45, Math.max(CAMERA_AVOID_RADIUS_METERS, Math.round(distanceMeters) + 12));
+
+const addHard = (bans: CameraBans, passage: CameraPassage): boolean => {
+    const id = `ansv-${passage.camera.cameraId}`;
+    const radius = hardRadius(passage.distanceMeters);
+    const existing = bans.hard.find((point) => point.id === id);
+    bans.cameras.set(passage.camera.cameraId, passage.camera);
+    if (!existing) {
+        bans.hard.push({
+            id,
+            latitude: passage.camera.latitude,
+            longitude: passage.camera.longitude,
+            label: passage.camera.address || 'ANSV camera',
+            radiusMeters: radius,
+            createdAt: Date.now(),
+            source: 'ansv',
+        });
+        return true;
+    }
+    if (radius > existing.radiusMeters) {
+        existing.radiusMeters = radius;
+        return true;
+    }
+    return false;
+};
+
+/**
+ * A watched direction is banned only along the stretches the route actually
+ * rode that way, so the opposite direction stays rideable. A camera with no
+ * published sense closes the spot in every direction.
+ */
+const addPassage = (bans: CameraBans, passage: CameraPassage): boolean => {
+    if (passage.everyDirection) {
+        return addHard(bans, passage);
+    }
+    let added = false;
+    for (const shape of passage.shapes) {
+        const key = `${passage.camera.cameraId}:${shape}`;
+        if (bans.seen.has(key)) {
+            continue;
+        }
+        bans.directed.push({ id: key, shape });
+        bans.seen.add(key);
+        bans.cameras.set(passage.camera.cameraId, passage.camera);
+        added = true;
+    }
+    if (added) {
+        return true;
+    }
+    return addHard(bans, passage);
+};
+
+const planOf = (bans: CameraBans, facing: TrafficCamera[]): CameraPlan => {
+    const facingIds = new Set(facing.map((camera) => camera.cameraId));
+    const avoided = [...bans.cameras.values()].filter((camera) => !facingIds.has(camera.cameraId));
+    return { sent: avoided.length, leftOut: facing.length, cameras: avoided };
+};
+
+const publishPlan = (plan: CameraPlan): void => {
+    useCameraStore.getState().setRouteSplit({ sent: plan.sent, leftOut: plan.leftOut });
+    useCameraStore.getState().setRouteCameras(plan.cameras);
+};
+
+/**
+ * Recompute until the route no longer leaves a camera behind the rider.
+ * Facing a camera, and crossing it, are left as they are.
+ */
+const routeAroundCameras = async (
+    baseUrl: string,
+    originLat: number,
+    originLon: number,
+    destinationLat: number,
+    destinationLon: number,
+    manual: AvoidPoint[],
+    costing: Costing,
+): Promise<{ route: RouteResult; plan: CameraPlan }> => {
+    const bans = emptyBans();
+    const ask = () =>
+        computeRoute(baseUrl, {
+            originLat,
+            originLon,
+            destinationLat,
+            destinationLon,
+            avoidPoints: [...manual, ...bans.hard],
+            relaxableCount: manual.length,
+            directedAvoids: bans.directed,
+            costing,
+        });
+
+    let route = await ask();
+
+    for (let pass = 0; pass < REPAIR_PASSES; pass += 1) {
+        const { back, facing } = await useCameraStore.getState().classifyRoute(route.geometry);
+        if (back.length === 0) {
+            return { route, plan: planOf(bans, facing) };
+        }
+        let added = false;
+        for (const passage of back) {
+            if (addPassage(bans, passage)) {
+                added = true;
+            }
+        }
+        if (!added) {
+            throw new Error(CAMERA_BEHIND);
+        }
+        try {
+            route = await ask();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '';
+            if (
+                message.includes('timeout') ||
+                message.includes('aborted') ||
+                message.includes('too large')
+            ) {
+                throw error;
+            }
+            throw new Error(CAMERA_BEHIND);
+        }
+    }
+
+    const last = await useCameraStore.getState().classifyRoute(route.geometry);
+    if (last.back.length > 0) {
+        throw new Error(CAMERA_BEHIND);
+    }
+    return { route, plan: planOf(bans, last.facing) };
+};
+
 export const useMapStore = create<MapState>((set, get) => ({
     destination: null,
     replayRoute: null,
     avoidPoints: [],
     route: null,
     routes: { short: null, safe: null },
-    skippedCameras: [],
     variant: 'short',
     arrival: null,
     routeContext: null,
@@ -209,76 +365,33 @@ export const useMapStore = create<MapState>((set, get) => ({
 
         try {
             /**
-             * The first route is the shortest one, without the cameras. It shows
-             * which way the rider goes through every street, and that is what
-             * decides whether a camera watches the back of the bike or the
-             * front of it.
-             */
-            const baseline = await computeRoute(valhallaBaseUrl, {
-                originLat,
-                originLon,
-                destinationLat: destination.latitude,
-                destinationLon: destination.longitude,
-                avoidPoints: manualPoints,
-                costing: 'motor_scooter',
-            });
-
-            const { risky, safe } = await useCameraStore
-                .getState()
-                .selectForRoute(baseline.geometry);
-
-            const cameraPoints: AvoidPoint[] = risky.map((camera) => ({
-                id: `ansv-${camera.cameraId}`,
-                latitude: camera.latitude,
-                longitude: camera.longitude,
-                label: camera.address || 'ANSV camera',
-                radiusMeters: camera.radiusMeters,
-                createdAt: Date.now(),
-                source: 'ansv',
-            }));
-            const avoidPoints = [...manualPoints, ...cameraPoints];
-
-            /**
              * The short route cuts between neighbourhoods, the safe one stays
-             * on the main roads. Both of them avoid the cameras that are in the
-             * way.
+             * on the main roads. Each one is repaired until it no longer leaves
+             * a camera behind the rider. Facing a camera stays allowed.
              */
-            const avoidedRoute =
-                cameraPoints.length > 0
-                    ? await computeRoute(valhallaBaseUrl, {
-                          originLat,
-                          originLon,
-                          destinationLat: destination.latitude,
-                          destinationLon: destination.longitude,
-                          avoidPoints,
-                          costing: 'motor_scooter',
-                      })
-                    : baseline;
-
-            /**
-             * Avoiding a camera on a main avenue can cost a whole block, and
-             * the rider has to know that. When the detour is too big the short
-             * route keeps its length and the app says which camera it goes
-             * past.
-             */
-            const detourMeters = avoidedRoute.distanceMeters - baseline.distanceMeters;
-            const detourTooBig =
-                cameraPoints.length > 0 &&
-                detourMeters > MAX_CAMERA_DETOUR_METERS &&
-                detourMeters > avoidedRoute.distanceMeters * 0.2;
-            const shortRoute = detourTooBig ? baseline : avoidedRoute;
-
-            const safeRoute = await computeRoute(valhallaBaseUrl, {
+            const short = await routeAroundCameras(
+                valhallaBaseUrl,
                 originLat,
                 originLon,
-                destinationLat: destination.latitude,
-                destinationLon: destination.longitude,
-                avoidPoints,
-                costing: 'auto',
-            }).catch(() => null);
+                destination.latitude,
+                destination.longitude,
+                manualPoints,
+                'motor_scooter',
+            );
+            const safe = await routeAroundCameras(
+                valhallaBaseUrl,
+                originLat,
+                originLon,
+                destination.latitude,
+                destination.longitude,
+                manualPoints,
+                'auto',
+            ).catch(() => null);
+
+            cameraPlans = { short: short.plan, safe: safe?.plan ?? EMPTY_PLAN };
 
             const variant = get().variant;
-            const route = variant === 'safe' && safeRoute ? safeRoute : shortRoute;
+            const chosen = variant === 'safe' && safe ? safe : short;
 
             const context = await recordRouteContext({
                 destinationKey: destinationKey(destination.latitude, destination.longitude),
@@ -286,8 +399,8 @@ export const useMapStore = create<MapState>((set, get) => ({
                 originLon,
                 destinationLat: destination.latitude,
                 destinationLon: destination.longitude,
-                routerSeconds: route.durationSeconds,
-                routerMeters: route.distanceMeters,
+                routerSeconds: chosen.route.durationSeconds,
+                routerMeters: chosen.route.distanceMeters,
             });
 
             const observations = await listObservations(
@@ -295,23 +408,16 @@ export const useMapStore = create<MapState>((set, get) => ({
                 context.originAnchorId,
             );
             const arrival = estimateArrival(
-                route.durationSeconds,
-                route.distanceMeters,
+                chosen.route.durationSeconds,
+                chosen.route.distanceMeters,
                 observations,
             );
 
-            if (detourTooBig) {
-                useCameraStore.getState().setRouteSplit({
-                    sent: 0,
-                    leftOut: risky.length + safe.length,
-                });
-                useCameraStore.getState().setRouteCameras([]);
-            }
+            publishPlan(chosen.plan);
 
             set({
-                route,
-                routes: { short: shortRoute, safe: safeRoute },
-                skippedCameras: detourTooBig ? risky : [],
+                route: chosen.route,
+                routes: { short: short.route, safe: safe?.route ?? null },
                 arrival,
                 routeContext: context,
                 computing: false,
@@ -330,10 +436,11 @@ export const useMapStore = create<MapState>((set, get) => ({
         }
     },
     clearRoute: () => {
+        cameraPlans = { short: EMPTY_PLAN, safe: EMPTY_PLAN };
+        publishPlan(EMPTY_PLAN);
         set({
             route: null,
             routes: { short: null, safe: null },
-            skippedCameras: [],
             arrival: null,
             routeContext: null,
             destination: null,
@@ -349,6 +456,7 @@ export const useMapStore = create<MapState>((set, get) => ({
         if (!next) {
             return;
         }
+        publishPlan(cameraPlans[variant]);
         set({ variant, route: next });
 
         if (!routeContext) {

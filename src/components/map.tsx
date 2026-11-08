@@ -19,7 +19,9 @@ import { IconLabelButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
 import { SegmentedControl } from '@components/controls';
-import { RouteVariant } from '@stores/mapStore'; import { decodePolyline } from '@utils/polyline';
+import { RouteVariant } from '@stores/mapStore';
+import { compassName } from '@utils/cameraSense';
+import { decodePolyline } from '@utils/polyline';
 import { rgba } from '@utils/hexToRgb';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -27,6 +29,43 @@ import { layout, radii, spacing, typography } from '@config/theme';
 export const TOOLBAR_HEIGHT = 3 * 44 + 2 * spacing.sm;
 
 /** the name of the focused camera goes in a band, not on the marker */
+
+/**
+ * The wedge sits outside the body and points the way the camera looks.
+ * Bearing 0 is north, and the wedge is drawn pointing up, so a clockwise
+ * rotation by the bearing aims it.
+ */
+const DirectionWedge = ({
+    bearing,
+    bothWays,
+    color,
+}: {
+    bearing: number;
+    bothWays: boolean;
+    color: string;
+}) => {
+    const { colors } = useTheme();
+    const side = {
+        borderLeftColor: colors.transparent,
+        borderRightColor: colors.transparent,
+    };
+
+    return (
+        <View
+            pointerEvents="none"
+            style={[
+                styles.cameraOrbit,
+                bothWays ? styles.cameraOrbitBoth : null,
+                { transform: [{ rotate: `${bearing}deg` }] },
+            ]}
+        >
+            <View style={[styles.cameraWedge, side, { borderBottomColor: color }]} />
+            {bothWays ? (
+                <View style={[styles.cameraWedgeDown, side, { borderTopColor: color }]} />
+            ) : null}
+        </View>
+    );
+};
 
 export interface MapCanvasProps {
     style: string | object;
@@ -195,6 +234,12 @@ export const MapCanvas = ({
                         ? `Speed camera, ${camera.maxSpeedKmh} kilometres per hour, ${camera.label}`
                         : `Speed camera, speed not published, ${camera.label}`;
                 const stateLabel = camera.isExpired ? ', expired but still on the road' : '';
+                const bearing = camera.bothWays ? camera.axisBearing : camera.watchBearing;
+                const directionLabel = camera.bothWays
+                    ? ', both directions'
+                    : camera.watchBearing !== null
+                        ? `, looks ${compassName(camera.watchBearing)}`
+                        : '';
 
                 return (
                     <MarkerView
@@ -206,52 +251,41 @@ export const MapCanvas = ({
                             <TouchableOpacity
                                 accessibilityLabel={
                                     focused
-                                        ? `Selected camera, ${speedLabel}${stateLabel}`
-                                        : `${speedLabel}${stateLabel}`
+                                        ? `Selected camera, ${speedLabel}${stateLabel}${directionLabel}`
+                                        : `${speedLabel}${stateLabel}${directionLabel}`
                                 }
                                 accessibilityRole="button"
                                 onPress={() => onCameraPress?.(camera.id)}
-                                style={[
-                                    styles.cameraBody,
-                                    {
-                                        backgroundColor: camera.isAvoided ? accent : colors.card,
-                                        borderColor: focused ? colors.foreground : accent,
-                                        borderWidth: focused ? 3 : 2,
-                                    },
-                                ]}
+                                style={styles.cameraHit}
                             >
+                                {bearing !== null ? (
+                                    <DirectionWedge
+                                        bearing={bearing}
+                                        bothWays={camera.bothWays}
+                                        color={accent}
+                                    />
+                                ) : null}
                                 <View
                                     style={[
-                                        styles.cameraLens,
+                                        styles.cameraBody,
                                         {
-                                            backgroundColor: camera.isAvoided
-                                                ? colors.primaryForeground
-                                                : accent,
+                                            backgroundColor: camera.isAvoided ? accent : colors.card,
+                                            borderColor: focused ? colors.foreground : accent,
+                                            borderWidth: focused ? 3 : 2,
                                         },
                                     ]}
-                                />
-                                {camera.watchBearing !== null ? (
+                                >
                                     <View
-                                        pointerEvents="none"
                                         style={[
-                                            styles.cameraArrow,
-                                            { transform: [{ rotate: `${camera.watchBearing}deg` }] },
+                                            styles.cameraLens,
+                                            {
+                                                backgroundColor: camera.isAvoided
+                                                    ? colors.primaryForeground
+                                                    : accent,
+                                            },
                                         ]}
-                                    >
-                                        <View
-                                            style={[
-                                                styles.cameraArrowHead,
-                                                {
-                                                    borderBottomColor: camera.isAvoided
-                                                        ? colors.primaryForeground
-                                                        : accent,
-                                                    borderLeftColor: colors.transparent,
-                                                    borderRightColor: colors.transparent,
-                                                },
-                                            ]}
-                                        />
-                                    </View>
-                                ) : null}
+                                    />
+                                </View>
                             </TouchableOpacity>
                         </View>
                     </MarkerView>
@@ -718,40 +752,55 @@ const styles = StyleSheet.create({
     avoidTitle: {
         ...typography.label,
     },
-    cameraArrow: {
-        alignItems: 'center',
-        height: 22,
-        justifyContent: 'flex-start',
-        left: 0,
-        position: 'absolute',
-        top: 0,
-        width: 22,
-    },
-    cameraArrowHead: {
-        borderBottomWidth: 7,
-        borderLeftWidth: 5,
-        borderRightWidth: 5,
-        height: 0,
-        width: 0,
-    },
     cameraBody: {
         alignItems: 'center',
         borderRadius: radii.sm,
         borderWidth: 2,
-        height: 22,
+        height: 18,
         justifyContent: 'center',
-        width: 22,
+        width: 18,
+        zIndex: 1,
+    },
+    cameraHit: {
+        alignItems: 'center',
+        flex: 1,
+        justifyContent: 'center',
     },
     cameraLens: {
         borderRadius: radii.full,
-        height: 8,
-        width: 8,
+        height: 7,
+        width: 7,
     },
     cameraMarker: {
+        height: 44,
+        width: 44,
+    },
+    cameraOrbit: {
         alignItems: 'center',
-        height: 34,
-        justifyContent: 'center',
-        width: 34,
+        bottom: 0,
+        left: 0,
+        position: 'absolute',
+        right: 0,
+        top: 0,
+    },
+    cameraOrbitBoth: {
+        justifyContent: 'space-between',
+    },
+    cameraWedge: {
+        borderBottomWidth: 7,
+        borderLeftWidth: 5,
+        borderRightWidth: 5,
+        height: 0,
+        marginTop: 1,
+        width: 0,
+    },
+    cameraWedgeDown: {
+        borderLeftWidth: 5,
+        borderRightWidth: 5,
+        borderTopWidth: 7,
+        height: 0,
+        marginBottom: 1,
+        width: 0,
     },
     card: {
         borderRadius: radii.lg,

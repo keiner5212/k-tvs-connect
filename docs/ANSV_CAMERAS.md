@@ -94,22 +94,35 @@ publishes in its own cache header.
 
 ## How the avoid points work
 
-The route is computed twice. The first one has no cameras, so it is the shortest
-way to the destination, and it shows which way the rider goes through every
-street. The cameras near that route, within 40 m of it, are then split in two:
-the ones that watch the traffic the rider goes against, and the ones that watch
-the other way. Only the first group goes to the routing service as an exclusion,
-with a 25 m radius, so the route only leaves the spot of the camera and not the
-streets around it.
+Four passages matter at a camera that watches one direction:
 
-The second request is the route the rider gets. The map tells how many cameras
-were avoided and how many nearby ones were left alone because they watch the
-other way.
+1. Riding the way the camera looks leaves the camera behind the bike. Forbidden.
+2. Riding toward the camera shows it the front of the bike. Allowed.
+3. Turning off the cross street onto the way the camera looks leaves the camera
+   behind after the turn. Forbidden.
+4. Turning off the cross street toward the camera leaves the rider facing it.
+   Allowed.
 
-The exclusion radius used to be 100 m and the corridor a straight line between
-the two ends. With that, the router answered "no path could be found" and the
-app fell back to avoiding half of the cameras, and the routes came out much
-longer than the road.
+A camera that watches both directions of its street forbids both of those
+directions and still allows a crossing. A camera with no published sense is
+closed in every direction.
+
+The route is computed, then read. Every stretch within 40 m of a camera is
+compared with the direction that camera looks. A stretch within 60 degrees of
+that direction is the rider with the camera behind them. The router is asked
+again with those stretches banned and the opposite direction left open, and
+this repeats until the route has none of those stretches. The ban is a cost
+factor on the exact edges the route rode, drawn in that one direction, so a
+circle is not dropped on the spot and the facing direction stays rideable.
+
+A camera with no published sense, or a banned stretch the router still rides,
+is closed with a ring of 25 to 45 m. Manual avoid points can still be dropped
+when they make the destination unreachable. A camera ban is not dropped. When
+every remaining route would leave a camera behind the bike, the app says so
+and does not offer that route.
+
+The map tells how many cameras were avoided and how many nearby ones were left
+alone because the route faces them.
 
 ## What the app says about each camera
 

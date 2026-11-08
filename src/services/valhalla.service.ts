@@ -40,14 +40,76 @@ interface ValhallaResponse {
     };
 }
 
+export interface DirectedAvoid {
+    id: string;
+    /** polyline6, drawn in the one direction that must not be ridden */
+    shape: string;
+}
+
 export interface RouteRequest {
     originLat: number;
     originLon: number;
     destinationLat: number;
     destinationLon: number;
     avoidPoints?: AvoidPoint[];
+    /**
+     * Leading avoid points that may be dropped when they make the route
+     * impossible. The rest are kept on every attempt.
+     */
+    relaxableCount?: number;
+    directedAvoids?: DirectedAvoid[];
     costing?: Costing;
 }
+
+/**
+ * The public router clamps a factor of 0 up to 1, which changes nothing, and
+ * a factor of 20 only nudges the route. A factor this large is what makes it
+ * leave the matched edges. The match follows the shape, so the opposite
+ * direction of the same road stays open.
+ */
+const DIRECTED_AVOID_FACTOR = 1000000;
+
+/**
+ * Short cuts the barrio on secondary and tertiary streets. Safe stays on
+ * primary roads. Service roads, living streets and tracks lose in both,
+ * because those are the alleys. A maneuver stays cheap enough that stepping
+ * one block off a camera and rejoining beats a long detour.
+ * use_distance above 0.6, and shortest, were measured to dive into residential.
+ */
+const costingOptionsFor = (costing: Costing): Record<string, unknown> | null => {
+    if (costing === 'motor_scooter') {
+        return {
+            motor_scooter: {
+                top_speed: 70,
+                use_highways: 0.15,
+                use_primary: 0.45,
+                use_distance: 0.55,
+                use_living_streets: 0,
+                use_tracks: 0,
+                service_penalty: 200,
+                service_factor: 40,
+                maneuver_penalty: 5,
+                disable_hierarchy_pruning: true,
+            },
+        };
+    }
+    if (costing === 'auto') {
+        return {
+            auto: {
+                use_highways: 1,
+                use_tolls: 0.5,
+                top_speed: 120,
+                use_living_streets: 0,
+                use_tracks: 0,
+                service_penalty: 80,
+                service_factor: 15,
+                maneuver_penalty: 10,
+                disable_hierarchy_pruning: true,
+            },
+        };
+    }
+    return null;
+};
 
 /**
  * How many of the avoid points the router actually managed to exclude. A
@@ -100,41 +162,63 @@ export const computeRoute = async (
     request: RouteRequest,
 ): Promise<RouteResult> => {
     const avoidPoints = request.avoidPoints ?? [];
+    const relaxableCount = Math.min(request.relaxableCount ?? avoidPoints.length, avoidPoints.length);
+    const relaxable = avoidPoints.slice(0, relaxableCount);
+    const required = avoidPoints.slice(relaxableCount);
+    const directed = [
+        ...new Map(
+            (request.directedAvoids ?? [])
+                .filter((item) => item.shape.length > 0)
+                .map((item) => [item.shape, item]),
+        ).values(),
+    ];
+    const costing = request.costing ?? 'motor_scooter';
+    const profile = costingOptionsFor(costing);
     const base: Record<string, unknown> = {
         locations: [
             { lat: request.originLat, lon: request.originLon },
             { lat: request.destinationLat, lon: request.destinationLon },
         ],
-        costing: request.costing ?? 'motor_scooter',
+        costing,
         language: 'es-ES',
         directions_options: { units: 'kilometers', language: 'es-ES' },
         units: 'kilometers',
+        ...(profile ? { costing_options: profile } : {}),
     };
 
     const url = `${baseUrl.replace(/\/$/, '')}/route`;
     const options = { service: 'valhalla', minIntervalMs: 1000, maxBytes: 5 * 1024 * 1024 };
 
-    const attempts: { payload: Record<string, unknown>; applied: number }[] = attemptCounts(
-        avoidPoints.length,
-    ).map((count) => ({
-        payload: {
-            ...base,
-            exclude_polygons: avoidPoints.slice(0, count).map(buildPolygon),
-        },
-        applied: count,
-    }));
+    const attempts: { payload: Record<string, unknown>; applied: number; relaxed: boolean }[] =
+        attemptCounts(relaxable.length).map((count) => {
+            const polygons = [...relaxable.slice(0, count), ...required].map(buildPolygon);
+            const payload: Record<string, unknown> = { ...base };
+            if (polygons.length > 0) {
+                payload.exclude_polygons = polygons;
+            }
+            if (directed.length > 0) {
+                payload.linear_cost_factors = directed.map((item) => ({
+                    shape: item.shape,
+                    factor: DIRECTED_AVOID_FACTOR,
+                }));
+            }
+            return {
+                payload,
+                applied: count + required.length,
+                relaxed: count < relaxable.length,
+            };
+        });
 
     let body: ValhallaResponse | null = null;
     let applied = 0;
+    let relaxed = false;
 
     for (const attempt of attempts) {
-        if (avoidPoints.length === 0 && attempt.applied > 0) {
-            continue;
-        }
         try {
             const response = await httpPostJson<ValhallaResponse>(url, attempt.payload, options);
             body = response.body;
             applied = attempt.applied;
+            relaxed = attempt.relaxed;
             break;
         } catch (error) {
             if (error instanceof Error && error.message.includes('status 4')) {
@@ -176,6 +260,6 @@ export const computeRoute = async (
         geometry,
         legs,
         maneuvers,
-        avoidOutcome: { applied, relaxed: applied < avoidPoints.length },
+        avoidOutcome: { applied, relaxed },
     };
 };

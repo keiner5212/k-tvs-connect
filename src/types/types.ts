@@ -42,6 +42,10 @@ export interface CameraMarkerData {
     isExpired: boolean;
     /** the direction the camera watches, when the agency published one */
     watchBearing: number | null;
+    /** the equipment watches both directions of its street */
+    bothWays: boolean;
+    /** the street axis, used when the camera watches both directions */
+    axisBearing: number | null;
     label: string;
 }
 

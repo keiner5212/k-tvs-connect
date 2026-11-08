@@ -50,9 +50,88 @@ export const parseFrame = (raw: Uint8Array): ParsedFrame | null => {
     return { dataId, values, checksumValid: isValidChecksum(bytes) };
 };
 
+/** A telemetry with nothing in it, for the values the bike has not sent. */
+export const emptyTelemetry = (): BikeTelemetry => ({
+    speedKmh: null,
+    engineRpm: null,
+    fuelLevelPercent: null,
+    batteryVoltage: null,
+    odometerKm: null,
+    tripDistanceKm: null,
+    tripTimeSeconds: null,
+    tripMileage: null,
+    tripFuel: null,
+    averageSpeedKmh: null,
+    topSpeedKmh: null,
+    throttlePercent: null,
+    leanAngleDegree: null,
+    gearPosition: null,
+    sideStandDown: false,
+    turnSignal: 'none',
+    turnSignalStatus: 0,
+    vehicleState: 0,
+    switchStatus: 0,
+    overspeedThreshold: 0,
+    engineTemperature: null,
+    intakeAirTemperature: null,
+    cruisingRange: null,
+    lapNumber: null,
+    lapTimeMs: null,
+    bestLapNumber: null,
+    bestLapMs: null,
+    latitude: null,
+    longitude: null,
+    receivedAt: Date.now(),
+});
+
 const SIDE_STAND_BIT = 0x01;
 const LEFT_SIGNAL_BIT = 0x02;
 const RIGHT_SIGNAL_BIT = 0x04;
+
+/**
+ * The older family of the cluster (the RTR 160 IoT V2 and the families that
+ * share its protocol) sends a stream of letter frames: a prefix byte, the
+ * value and a couple of extra bytes. The data arrives without encryption.
+ */
+export interface LegacyFrame {
+    speedKmh: number | null;
+    fuelLevelPercent: number | null;
+    /** the raw bytes, so the rest of the frames can be read from the log */
+    raw: string;
+}
+
+const LEGACY_SPEED = 0x41; // A
+const LEGACY_FUEL = 0x46; // F
+
+export const parseLegacyFrame = (bytes: Uint8Array): LegacyFrame => {
+    let speedKmh: number | null = null;
+    let fuelLevelPercent: number | null = null;
+
+    for (let index = 0; index < bytes.length - 1; index += 1) {
+        const prefix = bytes[index];
+        if (prefix === LEGACY_SPEED) {
+            const value = bytes[index + 1];
+            const unit = bytes[index + 2];
+            if (unit === 0) {
+                speedKmh = value;
+            } else if (unit === 1) {
+                speedKmh = Math.round(value * 1.60934);
+            }
+        }
+        if (prefix === LEGACY_FUEL) {
+            const value = bytes[index + 1];
+            if (value !== 255) {
+                fuelLevelPercent = value;
+            }
+        }
+    }
+
+    const raw = Array.from(bytes)
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+
+    return { speedKmh, fuelLevelPercent, raw };
+};
 
 export const telemetryFromFrame = (
     frame: ParsedFrame,

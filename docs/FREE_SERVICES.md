@@ -100,14 +100,25 @@ met yet.
 
 ## Routing
 
-Valhalla is the routing engine of OpenStreetMap. It is used by the app for two
+Valhalla is the routing engine of OpenStreetMap. The app uses it for three
 things that matter here:
 
-- `motor_scooter` as the costing profile, so the route prefers the kind of road a
-  scooter can use.
+- `motor_scooter` for the short route. It cuts through the barrio on secondary
+  and tertiary streets. `use_distance` is `0.55` and `top_speed` is 70, so a
+  50 km/h barrio avenue beats a 13 km/h alley, and a long highway is not worth
+  it. Service roads, living streets and tracks are penalized. `auto` with
+  `use_highways` at 1 is the safe route, so it stays on primary roads. Both
+  keep the maneuver penalty low enough that a camera dodge is a one-block step
+  off and a rejoin. `shortest`, and `use_distance` above 0.6, dive into
+  residential streets, so they are not used.
 - `exclude_polygons` at the root of the request, so a marked point is excluded
   by the engine itself. No polyline inspection and no detour waypoint needed on
   the client.
+- `linear_cost_factors` for a camera that watches one direction. The shape is a
+  piece of the route the rider would ride with the camera behind them, and the
+  factor is `1000000`. The match follows that direction only, so the opposite
+  direction of the same road stays open. A factor of `0` is clamped to `1` on
+  the public server and changes nothing. A factor of `20` only nudges the route.
 
 Request shape:
 
@@ -116,8 +127,10 @@ Request shape:
   "locations": [{ "lat": 0, "lon": 0 }, { "lat": 0, "lon": 0 }],
   "language": "es-ES",
   "costing": "motor_scooter",
+  "costing_options": { "motor_scooter": { "use_distance": 0.55, "top_speed": 70 } },
   "units": "kilometers",
-  "exclude_polygons": [[[0, 0], [0, 0], [0, 0], [0, 0]]]
+  "exclude_polygons": [[[0, 0], [0, 0], [0, 0], [0, 0]]],
+  "linear_cost_factors": [{ "shape": "encoded-polyline6", "factor": 1000000 }]
 }
 ```
 
@@ -129,13 +142,15 @@ Three things the public instance does not tell you:
 - **`exclude_polygons` takes plain rings of coordinates, not GeoJSON objects.** A
   GeoJSON polygon is refused with a parse error.
 - **An exclusion removes every road that crosses the ring.** The ring is a
-  circle of the radius of the point, 50 metres for a camera, so the route keeps
-  at least that distance from it. The `exclude_locations` form is not sent:
-  it removes the closest road entirely, even when the road is far from the
-  point, and that is what made the route jump to another street. When a ring
-  makes the destination unreachable the router answers "no path could be
-  found", and the app then tries again with half of the points and finally with
-  none, and tells the rider how many cameras were left out.
+  circle of the radius of the point. Manual points use their own radius. A
+  camera with no published sense uses 25 to 45 m, enough to reach the road and
+  not the next street. The `exclude_locations` form is not sent: it removes the
+  closest road entirely, even when the road is far from the point, and that is
+  what made the route jump to another street. When a ring makes the destination
+  unreachable the router answers "no path could be found". Manual points are
+  then tried again with half of them and finally with none. A camera ban stays
+  in the request. If that leaves no path, the app does not return a route that
+  puts a camera behind the bike.
 
 The FOSSGIS demo server `https://valhalla1.openstreetmap.de` is open to the public
 with one request per second and asks published apps to send an `X-Client-Id`

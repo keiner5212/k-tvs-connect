@@ -92,7 +92,6 @@ export const MapScreen = () => {
         arrival,
         routes,
         setVariant,
-        skippedCameras,
         variant,
         avoidPoints,
         cameraKey,
@@ -140,6 +139,8 @@ export const MapScreen = () => {
             isAvoided: camera.avoidEnabled,
             isExpired: camera.operatingState === 'Expired',
             watchBearing: camera.sense?.riskyBearing ?? null,
+            bothWays: camera.sense?.bothWays ?? false,
+            axisBearing: camera.sense?.axisBearing ?? null,
             label: camera.address || 'ANSV camera',
         }));
         if (focusedCamera && !markers.some((marker) => marker.id === focusedCamera.cameraId)) {
@@ -151,6 +152,8 @@ export const MapScreen = () => {
                 isAvoided: focusedCamera.avoidEnabled,
                 isExpired: focusedCamera.operatingState === 'Expired',
                 watchBearing: focusedCamera.sense?.riskyBearing ?? null,
+                bothWays: focusedCamera.sense?.bothWays ?? false,
+                axisBearing: focusedCamera.sense?.axisBearing ?? null,
                 label: focusedCamera.address || 'ANSV camera',
             });
         }
@@ -662,15 +665,9 @@ export const MapScreen = () => {
                     />
                 )}
 
-                {skippedCameras.length > 0 && variant === 'short' ? (
-                    <Banner
-                        message={`${skippedCameras.length === 1 ? 'A camera on this route watches' : `${skippedCameras.length} cameras on this route watch`} this way. Avoiding it makes the route much longer, so this route goes past it. The safe route avoids it.`}
-                        tone="warning"
-                    />
-                ) : null}
                 {route?.avoidOutcome?.relaxed ? (
                     <Banner
-                        message="The router could not avoid every camera on this route, some of them are still on the way."
+                        message="Some points to avoid were left out, because with them the router found no path."
                         tone="warning"
                     />
                 ) : null}

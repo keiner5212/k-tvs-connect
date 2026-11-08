@@ -218,16 +218,33 @@ export const compassName = (bearing: number): string => {
 };
 
 /**
- * True when the rider is at risk at that camera: the route goes in the
- * direction the camera looks, so the camera ends up behind the rider and
- * photographs the plate.
+ * Same direction as the camera looks. Wide enough for a coarse compass label
+ * (northeast versus east is 45 degrees) and still short of a side-on crossing,
+ * which is 90. The rider is at risk only when the camera is behind the bike.
+ */
+const SAME_DIRECTION_DEGREES = 60;
+
+/**
+ * True when this heading leaves the camera behind the rider, so it sees the
+ * plate. Heading toward the camera, and crossing it, are not that case.
+ * A camera with no published sense is treated as risky from every heading.
  */
 export const isRiskyDirection = (sense: CameraSense | null, travelBearing: number): boolean => {
     if (!sense) {
         return true;
     }
+    if (sense.bothWays) {
+        if (sense.axisBearing === null) {
+            return true;
+        }
+        const opposite = (sense.axisBearing + 180) % 360;
+        return (
+            angleBetween(sense.axisBearing, travelBearing) < SAME_DIRECTION_DEGREES ||
+            angleBetween(opposite, travelBearing) < SAME_DIRECTION_DEGREES
+        );
+    }
     if (sense.riskyBearing === null) {
         return true;
     }
-    return angleBetween(sense.riskyBearing, travelBearing) < 90;
+    return angleBetween(sense.riskyBearing, travelBearing) < SAME_DIRECTION_DEGREES;
 };

@@ -169,6 +169,51 @@ export const sanitizeClusterText = (value: string): string => {
 };
 
 /**
+ * The older generation of the cluster (the RTR 160 IoT V2 and the families
+ * that share its protocol) writes plain letter frames: a prefix byte, the
+ * data and a postfix. There is no start byte and no data id.
+ */
+export const LEGACY_PREFIX_NAME = 0x4d; // M
+export const LEGACY_PREFIX_TIME = 0x48; // H
+export const LEGACY_PREFIX_SIGNAL = 0x58; // X
+export const LEGACY_POSTFIX = 0x24; // $
+
+export const buildLegacyNamePacket = (name: string): Uint8Array => {
+    const text = sanitizeClusterText(name).slice(0, 16);
+    const bytes = utf8Encode(text);
+    const packet = new Uint8Array(bytes.length + 2);
+    packet[0] = LEGACY_PREFIX_NAME;
+    packet.set(bytes, 1);
+    packet[packet.length - 1] = LEGACY_POSTFIX;
+    return packet;
+};
+
+export const buildLegacyTimePacket = (date: Date): Uint8Array => {
+    const hours = date.getHours() % 12;
+    return new Uint8Array([
+        LEGACY_PREFIX_TIME,
+        hours,
+        date.getMinutes(),
+        date.getHours() >= 12 ? 1 : 0,
+    ]);
+};
+
+export const buildLegacySignalPacket = (
+    signal: number,
+    batteryPercent: number,
+    missedCalls: number,
+    signalType: number,
+): Uint8Array =>
+    new Uint8Array([
+        LEGACY_PREFIX_SIGNAL,
+        signal,
+        batteryPercent,
+        missedCalls,
+        0,
+        signalType,
+    ]);
+
+/**
  * The name the cluster shows. Header 0x5B 0x52.
  */
 export const buildRiderNamePacket = (name: string, key = APACHE_XOR_KEY): Uint8Array => {
