@@ -11,13 +11,13 @@ import {
     setCameraAvoidEnabled,
 } from '@services/db/cameraRepository';
 import { getSettings, setSetting } from '@services/db/settingsRepository';
-import { bearingDegrees, distanceMeters } from '@utils/geo';
+import { bearingDegrees, distanceMeters, distanceToSegmentMeters } from '@utils/geo';
 import { isRiskyDirection } from '@utils/cameraSense';
-import { decodePolyline, nearestPointIndex } from '@utils/polyline';
+import { decodePolyline } from '@utils/polyline';
 import { logger } from '@utils/logger';
 const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const NEARBY_RADIUS_METERS = 5000;
-const ROUTE_CORRIDOR_METERS = 40;
+const ROUTE_CORRIDOR_METERS = 80;
 const ROUTE_MAX_CAMERAS = 40;
 
 /** The list of cameras only changes when the rider moves this far. */
@@ -223,42 +223,59 @@ export const useCameraStore = create<CameraState>((set, get) => ({
 
         const scored = allowed
             .map((camera) => {
-                const index = nearestPointIndex(points, {
-                    lat: camera.latitude,
-                    lon: camera.longitude,
-                });
-                if (index < 0) {
+                const point = { lat: camera.latitude, lon: camera.longitude };
+                let distance = Infinity;
+                let risky = false;
+
+                /**
+                 * Every stretch of the route that goes by the camera counts, not
+                 * only the closest point. At a crossing the closest point can be
+                 * on the leg before the turn, and the rider leaves the camera
+                 * behind with the back turned to it.
+                 */
+                for (let index = 1; index < points.length; index += 1) {
+                    const toSegment = distanceToSegmentMeters(point, points[index - 1], points[index]);
+                    if (toSegment > ROUTE_CORRIDOR_METERS) {
+                        continue;
+                    }
+                    distance = Math.min(distance, toSegment);
+                    const travel = bearingDegrees(points[index - 1], points[index]);
+                    if (isRiskyDirection(camera.sense, travel)) {
+                        risky = true;
+                    }
+                }
+
+                if (distance === Infinity) {
                     return null;
                 }
-                const distance = distanceMeters(
-                    { lat: camera.latitude, lon: camera.longitude },
-                    points[index],
-                );
-                if (distance > ROUTE_CORRIDOR_METERS) {
-                    return null;
-                }
-                const travel = bearingDegrees(
-                    points[Math.max(0, index - 1)],
-                    points[Math.min(points.length - 1, index + 1)],
-                );
-                return { camera, distance, travel };
+                return { camera, distance, risky };
             })
-            .filter((entry): entry is { camera: TrafficCamera; distance: number; travel: number } =>
+            .filter((entry): entry is { camera: TrafficCamera; distance: number; risky: boolean } =>
                 entry !== null,
             )
             .sort((a, b) => a.distance - b.distance);
 
         /**
-         * A camera that watches the traffic coming from the side the rider goes
-         * ends up behind the rider and photographs the plate. The other ones
-         * see the front of the bike and are left alone.
+         * A camera that watches the traffic that goes the same way the rider
+         * goes ends up behind the rider and photographs the plate. The other
+         * ones see the front of the bike and are left alone.
          */
         const risky = scored
-            .filter((entry) => isRiskyDirection(entry.camera.sense, entry.travel))
+            .filter((entry) => entry.risky)
             .slice(0, ROUTE_MAX_CAMERAS)
-            .map((entry) => entry.camera);
+            .map((entry) => ({
+                ...entry.camera,
+                /**
+                 * The ring has to reach the route, or the camera is flagged and
+                 * the route goes past it anyway.
+                 */
+                radiusMeters: Math.min(
+                    50,
+                    Math.max(entry.camera.radiusMeters, Math.round(entry.distance) + 15),
+                ),
+            }));
         const safe = scored
-            .filter((entry) => !isRiskyDirection(entry.camera.sense, entry.travel))
+            .filter((entry) => !entry.risky)
             .map((entry) => entry.camera);
 
         const enabled = get().avoidEnabled;

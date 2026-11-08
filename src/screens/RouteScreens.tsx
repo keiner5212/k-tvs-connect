@@ -385,7 +385,7 @@ export const RouteDetailsScreen = () => {
     const connectionState = useBleStore((state) => state.state);
     const { routeCameras, routeSplit, publishedAt, stale } = useCameraStore();
     const { navigation: progress, startNavigation, stopNavigation } = useMapStore();
-    const { arrival, avoidPoints, destination, route } = useMapStore();
+    const { arrival, avoidPoints, destination, route, skippedCameras } = useMapStore();
     const [sent, setSent] = useState<boolean | null>(null);
 
     const staleCameraData = stale;
@@ -494,7 +494,7 @@ export const RouteDetailsScreen = () => {
             </View>
             <Text style={[styles.note, { color: colors.mutedForeground }]}>
                 {routeSplit.leftOut > 0
-                    ? `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} avoided. ${routeSplit.leftOut} nearby camera${routeSplit.leftOut === 1 ? '' : 's'} watch the other way and do not need avoiding.`
+                    ? `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} avoided. ${routeSplit.leftOut} nearby camera${routeSplit.leftOut === 1 ? '' : 's'} ${skippedCameras.length > 0 ? 'are not avoided in this route' : 'watch the other way and do not need avoiding'}.`
                     : `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} avoided.`}
             </Text>
             {cameras.length === 0 ? (

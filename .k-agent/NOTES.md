@@ -14,7 +14,7 @@
 - The scooter service uuid is derived from the phone imei: `imei[0:8]-imei[8:12]-imei[12:15]9-5342-454E544F5251`. Read characteristic `00005354-...`, write `00005352-...`.
 - MapLibre React Native is pinned to 10.4.2 because the project is on the legacy architecture and v11 dropped it.
 - The map stack: Google Map Tiles API for the background map, Google Places API (New) text search for the search, Valhalla for routing, OpenFreeMap as the keyless fallback.
-- The ANSV camera dataset is `https://fotodeteccion.ansv.gov.co/map/data/sast.json`, a public file with no key. Only `estado_operacion == "Operando"` is treated as active. Its infraction codes (C35, D02, ...) are the national ones and their wording is in `src/config/infractions.ts`; the app never shows a fine amount.
+- The ANSV camera dataset is `https://fotodeteccion.ansv.gov.co/map/data/sast.json`, a public file with no key. The running ones and the expired ones are in the app (the expired are still on the road). Its infraction codes (C35, D02, ...) are the national ones and their wording is in `src/config/infractions.ts`; the app never shows a fine amount.
 - Long decompiles run inside a docker container so they survive the session: `docker run -d --entrypoint java ... jadx.cli.JadxCLI`.
 - The scratch of this project stays inside the folder: `tools/env.sh` points `GHIDRA_PROJECTS` at `analysis/ghidra-projects` and the scripts use `.tmp/` instead of `/tmp`.
 - The phone is connected over usb as RCUSTSEQTSK7RKSW (model 2602DPT53G). `npx expo run:android` installs the dev build on it.
@@ -28,9 +28,8 @@
 - Metro caches aggressively in /tmp/metro-cache, so a stale bundle can hide a code change. Start it with `--clear` on a fresh port when the bundle looks wrong.
 - The `write` tool reports type diagnostics against a stale snapshot in this build, so trust `npx tsc --noEmit` over the tool output.
 - The cluster does its own routing: the phone only sends the destination address as text over the write characteristic, never the geometry.
-- The Valhalla summary length comes back in kilometres whatever the units parameter says, so the route distance is measured from the encoded shape with `src/utils/polyline.ts`.
 - The Photon geocoder is gone, the search is Google now. The search key is in the gitignored `.env.local` as `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`, the tiles key as `EXPO_PUBLIC_GOOGLE_TILES_API_KEY`, and `tools/verify-bundle.sh` allows both by sha256.
-- Valhalla reports the summary length in kilometres whatever the `units` parameter says, so the distance comes from the encoded shape. Its `exclude_polygons` takes plain rings, not GeoJSON. Only the polygons are sent: `exclude_locations` removes the whole closest road, the polygon removes just the roads that cross a 50 m circle around the point. Measured: a route passes 37 m from a camera without the ring and 70 m with it.
+- Valhalla reports the summary length in kilometres whatever the `units` parameter says, so the distance comes from the encoded shape with `src/utils/polyline.ts`. Its `exclude_polygons` takes plain rings, not GeoJSON: `exclude_locations` removes the whole closest road, the polygon removes just the roads that cross the ring around the point. Blocking one intersection sends the route 686 m away and 1.8 km longer.
 - The cluster shows the rider name and the phone clock, not the route. The phone sends the destination address as text over the write characteristic and the cluster routes with its own engine.
 - The official app sends no notification text to the cluster, only the social media counters and the media metadata.
 - The app palette is TVS red and black: primary `#E4002B` in the light theme, `#FF2743` in the dark one, and the icon is a motorcycle on a red tile.

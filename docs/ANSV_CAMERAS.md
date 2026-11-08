@@ -64,10 +64,15 @@ The pair is written in the direction of the traffic the equipment watches: the
 traffic comes from the first place and goes to the second one. The warning signs
 of the camera are placed on that first side, which is what confirms the reading.
 
-A camera that watches one sense photographs the vehicles that come towards it,
-so it sees their front. The rider that goes the other way leaves the camera
-behind and it photographs the plate. The app therefore only avoids a camera when
-the route goes in the direction the camera watches, and leaves the rest alone.
+The camera is aimed towards the second place, the way the traffic goes, so it
+photographs that traffic from behind as it leaves. A rider that goes the same way
+leaves the camera behind and it reads the plate. A rider that goes the other way
+faces the camera and shows it the front of the bike, and a motorcycle has its
+plate at the back.
+
+So the app avoids a camera when the route goes in the direction the camera
+looks, and leaves it alone when the route faces it. The marker of a camera with
+a published sense carries an arrow with the direction the camera looks.
 
 The sense is only published for 413 of the cameras. The others are avoided in
 every direction, which is the safe answer.

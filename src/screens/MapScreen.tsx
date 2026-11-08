@@ -91,8 +91,9 @@ export const MapScreen = () => {
         addAvoidPoint,
         arrival,
         routes,
-        variant,
         setVariant,
+        skippedCameras,
+        variant,
         avoidPoints,
         cameraKey,
         clearRoute,
@@ -661,6 +662,12 @@ export const MapScreen = () => {
                     />
                 )}
 
+                {skippedCameras.length > 0 && variant === 'short' ? (
+                    <Banner
+                        message={`${skippedCameras.length === 1 ? 'A camera on this route watches' : `${skippedCameras.length} cameras on this route watch`} this way. Avoiding it makes the route much longer, so this route goes past it. The safe route avoids it.`}
+                        tone="warning"
+                    />
+                ) : null}
                 {route?.avoidOutcome?.relaxed ? (
                     <Banner
                         message="The router could not avoid every camera on this route, some of them are still on the way."

@@ -1,5 +1,5 @@
 import { TrafficCamera } from '@typings/types';
-import { CameraSense } from '@utils/cameraSense';
+import { parseCameraSense } from '@utils/cameraSense';
 import { getDatabase } from './database';
 
 interface CameraRow {
@@ -14,24 +14,11 @@ interface CameraRow {
     municipality: string;
     department: string;
     operating_state: string;
-    sense: string | null;
     infractions: string;
     dataset_published_at: number | null;
     snapshot_id: string;
     last_seen_at: number;
 }
-
-const toSense = (value: string | null): CameraSense | null => {
-    if (!value) {
-        return null;
-    }
-    try {
-        const parsed = JSON.parse(value) as CameraSense;
-        return parsed && typeof parsed.axisBearing === 'number' ? parsed : null;
-    } catch {
-        return null;
-    }
-};
 
 const toOperatingState = (value: string): TrafficCamera['operatingState'] => {
     if (value === 'Operating') {
@@ -62,7 +49,7 @@ const toCamera = (row: CameraRow): TrafficCamera => ({
     municipality: row.municipality,
     department: row.department,
     operatingState: toOperatingState(row.operating_state),
-    sense: toSense(row.sense),
+    sense: parseCameraSense(row.address),
     infractions: JSON.parse(row.infractions) as string[],
     datasetPublishedAt: row.dataset_published_at,
     distanceMeters: null,
@@ -132,8 +119,8 @@ export const replaceCameraSnapshot = async (
             await db.runAsync(
                 `INSERT INTO cameras (camera_id, latitude, longitude, radius_meters, max_speed_kmh,
              technology, road_type, address, municipality, department, operating_state,
-             sense, infractions, dataset_published_at, snapshot_id, last_seen_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             infractions, dataset_published_at, snapshot_id, last_seen_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(camera_id) DO UPDATE SET
              latitude = excluded.latitude,
              longitude = excluded.longitude,
@@ -145,7 +132,6 @@ export const replaceCameraSnapshot = async (
              municipality = excluded.municipality,
              department = excluded.department,
              operating_state = excluded.operating_state,
-             sense = excluded.sense,
              infractions = excluded.infractions,
              dataset_published_at = excluded.dataset_published_at,
              snapshot_id = excluded.snapshot_id,
@@ -161,7 +147,6 @@ export const replaceCameraSnapshot = async (
                 camera.municipality,
                 camera.department,
                 camera.operatingState,
-                camera.sense ? JSON.stringify(camera.sense) : null,
                 JSON.stringify(camera.infractions),
                 publishedAt,
                 snapshotId,

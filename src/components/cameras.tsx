@@ -143,8 +143,8 @@ export const CameraCard = ({
                     </View>
                     {camera.sense.riskyBearing !== null ? (
                         <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
-                            The camera photographs the traffic that comes towards it. Going the
-                            other way is the one that gets the plate read.
+                            It photographs the traffic that goes that way, from behind. The other
+                            way is the one that shows the front of the bike.
                         </Text>
                     ) : null}
                 </>

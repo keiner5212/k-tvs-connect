@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { AvoidPoint, Place, RouteResult } from '@typings/types';
+import { AvoidPoint, Place, RouteResult, TrafficCamera } from '@typings/types';
 import { NavigationUpdate } from '@ble/protocol';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { computeRoute } from '@services/valhalla.service';
@@ -43,6 +43,9 @@ export interface FocusPoint {
 
 export type RouteVariant = 'short' | 'safe';
 
+/** the detour that is still worth it to get away from a camera */
+const MAX_CAMERA_DETOUR_METERS = 400;
+
 export interface RouteVariants {
     /** the shortest way, it can cut between neighbourhoods */
     short: RouteResult | null;
@@ -56,6 +59,8 @@ interface MapState {
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
     routes: RouteVariants;
+    /** the cameras the short route goes past because avoiding them is too long */
+    skippedCameras: TrafficCamera[];
     variant: RouteVariant;
     arrival: ArrivalEstimate | null;
     routeContext: RouteContext | null;
@@ -138,6 +143,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     avoidPoints: [],
     route: null,
     routes: { short: null, safe: null },
+    skippedCameras: [],
     variant: 'short',
     arrival: null,
     routeContext: null,
@@ -217,7 +223,9 @@ export const useMapStore = create<MapState>((set, get) => ({
                 costing: 'motor_scooter',
             });
 
-            const { risky } = await useCameraStore.getState().selectForRoute(baseline.geometry);
+            const { risky, safe } = await useCameraStore
+                .getState()
+                .selectForRoute(baseline.geometry);
 
             const cameraPoints: AvoidPoint[] = risky.map((camera) => ({
                 id: `ansv-${camera.cameraId}`,
@@ -235,7 +243,7 @@ export const useMapStore = create<MapState>((set, get) => ({
              * on the main roads. Both of them avoid the cameras that are in the
              * way.
              */
-            const shortRoute =
+            const avoidedRoute =
                 cameraPoints.length > 0
                     ? await computeRoute(valhallaBaseUrl, {
                           originLat,
@@ -246,6 +254,19 @@ export const useMapStore = create<MapState>((set, get) => ({
                           costing: 'motor_scooter',
                       })
                     : baseline;
+
+            /**
+             * Avoiding a camera on a main avenue can cost a whole block, and
+             * the rider has to know that. When the detour is too big the short
+             * route keeps its length and the app says which camera it goes
+             * past.
+             */
+            const detourMeters = avoidedRoute.distanceMeters - baseline.distanceMeters;
+            const detourTooBig =
+                cameraPoints.length > 0 &&
+                detourMeters > MAX_CAMERA_DETOUR_METERS &&
+                detourMeters > avoidedRoute.distanceMeters * 0.2;
+            const shortRoute = detourTooBig ? baseline : avoidedRoute;
 
             const safeRoute = await computeRoute(valhallaBaseUrl, {
                 originLat,
@@ -279,9 +300,18 @@ export const useMapStore = create<MapState>((set, get) => ({
                 observations,
             );
 
+            if (detourTooBig) {
+                useCameraStore.getState().setRouteSplit({
+                    sent: 0,
+                    leftOut: risky.length + safe.length,
+                });
+                useCameraStore.getState().setRouteCameras([]);
+            }
+
             set({
                 route,
                 routes: { short: shortRoute, safe: safeRoute },
+                skippedCameras: detourTooBig ? risky : [],
                 arrival,
                 routeContext: context,
                 computing: false,
@@ -303,6 +333,7 @@ export const useMapStore = create<MapState>((set, get) => ({
         set({
             route: null,
             routes: { short: null, safe: null },
+            skippedCameras: [],
             arrival: null,
             routeContext: null,
             destination: null,

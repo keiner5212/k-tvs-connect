@@ -3,15 +3,15 @@
  * its address: "Sentido Sur - Norte", "sentido NORTE-SUR", "(N-S)", "este
  * equipo funciona en sentidos NORTE - SUR".
  *
- * The pair is written in the direction of the traffic the equipment watches:
- * the traffic comes from the first place and goes to the second one. The
- * warning signs of the camera are placed on that first side, which is what
- * confirms the reading of the pairs.
+ * The pair is written in the direction of the traffic the equipment watches: the
+ * traffic comes from the first place and goes to the second one. The warning
+ * signs of the camera are placed on that first side, which is what confirms the
+ * reading of the pairs.
  *
- * A camera that watches one sense photographs the vehicles that come towards
- * it, so it sees their front. The rider that goes the other way leaves the
- * camera behind and it photographs the plate. That is the direction the app
- * has to avoid.
+ * The camera is aimed towards the second place, the way the traffic goes, so it
+ * photographs that traffic from behind as it leaves. A rider that goes the same
+ * way leaves the camera behind and it reads the plate. A rider that goes the
+ * other way faces the camera and shows it the front of the bike.
  */
 
 const COMPASS_WORDS: Record<string, number> = {
@@ -67,7 +67,7 @@ const SPANISH_WORDS: Record<string, string> = {
 const THREE_LETTERS = ['NNE', 'NNO', 'ENE', 'ENO', 'ESE', 'ESO', 'SSE', 'SSO'];
 
 export interface CameraSense {
-    /** the bearing the watched traffic comes from, the direction the rider risks */
+    /** the direction the camera looks, the risky one for the rider */
     riskyBearing: number | null;
     /** the bearing of the road, the axis of the camera */
     axisBearing: number | null;
@@ -174,7 +174,7 @@ export const parseCameraSense = (address: string): CameraSense | null => {
 
     if (bearings.length >= 2) {
         return {
-            riskyBearing: bearings[0],
+            riskyBearing: bearings[1],
             axisBearing: bearings[0],
             bothWays: false,
         };
@@ -219,15 +219,12 @@ export const compassName = (bearing: number): string => {
 
 /**
  * True when the rider is at risk at that camera: the route goes in the
- * direction the camera watches, so the camera ends up behind the rider and
+ * direction the camera looks, so the camera ends up behind the rider and
  * photographs the plate.
  */
 export const isRiskyDirection = (sense: CameraSense | null, travelBearing: number): boolean => {
     if (!sense) {
         return true;
-    }
-    if (sense.bothWays) {
-        return false;
     }
     if (sense.riskyBearing === null) {
         return true;
