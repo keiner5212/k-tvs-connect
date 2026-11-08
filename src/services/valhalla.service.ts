@@ -33,11 +33,28 @@ interface ValhallaLeg {
     maneuvers: ValhallaManeuver[];
 }
 
+interface ValhallaTrip {
+    legs: ValhallaLeg[];
+    summary: { length: number; time: number };
+}
+
 interface ValhallaResponse {
-    trip: {
-        legs: ValhallaLeg[];
-        summary: { length: number; time: number };
-    };
+    trip: ValhallaTrip;
+    alternates?: { trip: ValhallaTrip }[];
+}
+
+interface TraceEdge {
+    road_class?: string;
+    length?: number;
+}
+
+interface TraceResponse {
+    edges?: TraceEdge[];
+}
+
+interface RoadShares {
+    main: number;
+    small: number;
 }
 
 export interface DirectedAvoid {
@@ -70,12 +87,21 @@ export interface RouteRequest {
 const DIRECTED_AVOID_FACTOR = 1000000;
 
 /**
- * Short cuts the barrio on secondary and tertiary streets. Safe stays on
- * primary roads. Service roads, living streets and tracks lose in both,
- * because those are the alleys. A maneuver stays cheap enough that stepping
- * one block off a camera and rejoining beats a long detour.
+ * Short cuts the barrio on secondary and tertiary streets. Safe leaves
+ * hierarchy pruning on, so a mid-route alley is not searched, then keeps an
+ * alternate with more primary and trunk when that path stays within 1.7x.
+ * use_highways only nudges motorway and trunk, so it does not pull a trip off
+ * a secondary avenue by itself.
  * use_distance above 0.6, and shortest, were measured to dive into residential.
  */
+const MAIN_ROADS = new Set(['motorway', 'trunk', 'primary']);
+const SEMI_ROADS = new Set(['secondary', 'tertiary', 'unclassified']);
+const MAIN_ROAD_ENOUGH = 0.7;
+const MAIN_ROAD_GAIN = 0.12;
+const SMALL_ROAD_SLACK = 0.08;
+const MAIN_ROAD_STRETCH = 1.7;
+const ALTERNATE_ROUTES = 2;
+
 const costingOptionsFor = (costing: Costing): Record<string, unknown> | null => {
     if (costing === 'motor_scooter') {
         return {
@@ -103,8 +129,7 @@ const costingOptionsFor = (costing: Costing): Record<string, unknown> | null => 
                 use_tracks: 0,
                 service_penalty: 80,
                 service_factor: 15,
-                maneuver_penalty: 10,
-                disable_hierarchy_pruning: true,
+                maneuver_penalty: 15,
             },
         };
     }
@@ -157,6 +182,93 @@ const attemptCounts = (total: number): number[] =>
         (count, index, all) => index === 0 || count < all[index - 1],
     );
 
+const tripShape = (trip: ValhallaTrip): string =>
+    (trip.legs ?? []).map((leg) => leg.shape).join('');
+
+const roadShares = async (
+    baseUrl: string,
+    shape: string,
+    httpOptions: { service: string; minIntervalMs: number; maxBytes: number },
+): Promise<RoadShares | null> => {
+    if (!shape) {
+        return null;
+    }
+    try {
+        const response = await httpPostJson<TraceResponse>(
+            `${baseUrl.replace(/\/$/, '')}/trace_attributes`,
+            {
+                encoded_polyline: shape,
+                costing: 'auto',
+                shape_match: 'map_snap',
+                filters: {
+                    action: 'include',
+                    attributes: ['edge.road_class', 'edge.length'],
+                },
+            },
+            httpOptions,
+        );
+        const totals = new Map<string, number>();
+        for (const edge of response.body.edges ?? []) {
+            const kind = edge.road_class || 'unknown';
+            totals.set(kind, (totals.get(kind) ?? 0) + (edge.length ?? 0));
+        }
+        const total = [...totals.values()].reduce((sum, length) => sum + length, 0);
+        if (total <= 0) {
+            return null;
+        }
+        const share = (names: Set<string>): number =>
+            [...totals.entries()].reduce(
+                (sum, [kind, length]) => (names.has(kind) ? sum + length : sum),
+                0,
+            ) / total;
+        const main = share(MAIN_ROADS);
+        const semi = share(SEMI_ROADS);
+        return { main, small: Math.max(0, 1 - main - semi) };
+    } catch {
+        return null;
+    }
+};
+
+// Fastest auto path can be the secondary avenue. Keep a main-road alternate inside 1.7x.
+const preferMainRoads = async (
+    baseUrl: string,
+    body: ValhallaResponse,
+    httpOptions: { service: string; minIntervalMs: number; maxBytes: number },
+): Promise<ValhallaTrip> => {
+    const first = body.trip;
+    const firstShape = tripShape(first);
+    const firstShares = await roadShares(baseUrl, firstShape, httpOptions);
+    const alternates = body.alternates ?? [];
+    if (!firstShares || firstShares.main >= MAIN_ROAD_ENOUGH || alternates.length === 0) {
+        return first;
+    }
+    const firstMeters = pathLengthMeters(firstShape);
+    let best = first;
+    let bestMain = firstShares.main;
+    for (const alternate of alternates) {
+        const shape = tripShape(alternate.trip);
+        const meters = pathLengthMeters(shape);
+        if (firstMeters > 0 && meters > firstMeters * MAIN_ROAD_STRETCH) {
+            continue;
+        }
+        const shares = await roadShares(baseUrl, shape, httpOptions);
+        if (!shares) {
+            continue;
+        }
+        if (shares.main < firstShares.main + MAIN_ROAD_GAIN) {
+            continue;
+        }
+        if (shares.small > firstShares.small + SMALL_ROAD_SLACK) {
+            continue;
+        }
+        if (shares.main > bestMain) {
+            best = alternate.trip;
+            bestMain = shares.main;
+        }
+    }
+    return best;
+};
+
 export const computeRoute = async (
     baseUrl: string,
     request: RouteRequest,
@@ -183,6 +295,7 @@ export const computeRoute = async (
         language: 'es-ES',
         directions_options: { units: 'kilometers', language: 'es-ES' },
         units: 'kilometers',
+        ...(costing === 'auto' ? { alternates: ALTERNATE_ROUTES } : {}),
         ...(profile ? { costing_options: profile } : {}),
     };
 
@@ -232,7 +345,10 @@ export const computeRoute = async (
         throw new Error('no route could be computed');
     }
 
-    const maneuvers: RouteManeuver[] = (body.trip?.legs ?? []).flatMap((leg) =>
+    const trip =
+        costing === 'auto' ? await preferMainRoads(baseUrl, body, options) : body.trip;
+
+    const maneuvers: RouteManeuver[] = (trip?.legs ?? []).flatMap((leg) =>
         (leg.maneuvers ?? []).map((maneuver, index) => ({
             instruction: maneuver.instruction ?? '',
             distance: maneuver.distance ?? 0,
@@ -241,7 +357,7 @@ export const computeRoute = async (
         })),
     );
 
-    const legs: RouteLeg[] = (body.trip?.legs ?? []).map((leg) => {
+    const legs: RouteLeg[] = (trip?.legs ?? []).map((leg) => {
         const legMeters = pathLengthMeters(leg.shape);
         return {
             distanceMeters: legMeters > 0 ? legMeters : (leg.summary?.length ?? 0) * 1000,
@@ -251,12 +367,12 @@ export const computeRoute = async (
         };
     });
 
-    const geometry = (body.trip?.legs ?? []).map((leg) => leg.shape).join('');
+    const geometry = tripShape(trip);
     const routeMeters = pathLengthMeters(geometry);
 
     return {
-        distanceMeters: routeMeters > 0 ? routeMeters : (body.trip?.summary?.length ?? 0) * 1000,
-        durationSeconds: body.trip?.summary?.time ?? 0,
+        distanceMeters: routeMeters > 0 ? routeMeters : (trip?.summary?.length ?? 0) * 1000,
+        durationSeconds: trip?.summary?.time ?? 0,
         geometry,
         legs,
         maneuvers,

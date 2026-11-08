@@ -106,11 +106,15 @@ things that matter here:
 - `motor_scooter` for the short route. It cuts through the barrio on secondary
   and tertiary streets. `use_distance` is `0.55` and `top_speed` is 70, so a
   50 km/h barrio avenue beats a 13 km/h alley, and a long highway is not worth
-  it. Service roads, living streets and tracks are penalized. `auto` with
-  `use_highways` at 1 is the safe route, so it stays on primary roads. Both
-  keep the maneuver penalty low enough that a camera dodge is a one-block step
-  off and a rejoin. `shortest`, and `use_distance` above 0.6, dive into
-  residential streets, so they are not used.
+  it. Service roads, living streets and tracks are penalized. Hierarchy pruning
+  stays off on this profile so a one-block camera dodge is visible. `auto` is
+  the safe route, with hierarchy pruning left on and `use_highways` at 1.
+  `use_highways` only nudges motorway and trunk, so a secondary avenue can
+  still be the fastest path and match the short route. The safe request asks
+  for two alternates and keeps one with at least 12 points more primary or
+  trunk, as long as it is within 1.7 times the length and does not add barrio
+  streets. `shortest`, and `use_distance` above 0.6, dive into residential
+  streets, so they are not used.
 - `exclude_polygons` at the root of the request, so a marked point is excluded
   by the engine itself. No polyline inspection and no detour waypoint needed on
   the client.
