@@ -159,7 +159,7 @@ export const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
         return null;
     }
 
-    const cameras: AnsvCamera[] = [];
+    const byId = new Map<string, AnsvCamera>();
     let rejected = 0;
     let locations = 0;
 
@@ -187,7 +187,18 @@ export const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
             const cameraId = sanitizeText(location.codigo_unico, 60) || `geo-${location.latitud}-${location.longitud}`;
             const address = sanitizeText(location.direccion, 200);
 
-            cameras.push({
+            /**
+             * The agency publishes the same equipment in the list of two
+             * jurisdictions, and the two entries do not always carry the same
+             * state. The one that is running wins, because that is the one that
+             * can fine the rider.
+             */
+            const previous = byId.get(cameraId);
+            if (previous && previous.operatingState === 'Operating') {
+                continue;
+            }
+
+            byId.set(cameraId, {
                 cameraId,
                 latitude: location.latitud as number,
                 longitude: location.longitud as number,
@@ -204,9 +215,11 @@ export const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
         }
     }
 
-    if (cameras.length === 0) {
+    if (byId.size === 0) {
         return null;
     }
+
+    const cameras = Array.from(byId.values());
 
     const publishedAt = typeof body.timestamp === 'number' && Number.isFinite(body.timestamp)
         ? Math.round(body.timestamp * 1000)

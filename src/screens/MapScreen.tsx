@@ -13,7 +13,14 @@ import type { MapViewRef } from '@maplibre/maplibre-react-native';
 
 import { IconLabelButton } from '@components/controls';
 import { GoogleAttribution, MapCanvas, RecenterButton, RouteSheet, TOOLBAR_HEIGHT } from '@components/map';
-import { AvoidPointMenu, AVOID_POINT_MENU_WIDTH, POINT_MENU_WIDTH, PointMenu } from '@components/mapMenu';
+import {
+    AvoidPointMenu,
+    AVOID_POINT_MENU_WIDTH,
+    CAMERA_MENU_WIDTH,
+    CameraMenu,
+    POINT_MENU_WIDTH,
+    PointMenu,
+} from '@components/mapMenu';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,10 +31,11 @@ import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { useTilesStore } from '@stores/tilesStore';
-import { AvoidPoint, Place, RootStackParamList } from '@typings/types';
+import { AvoidPoint, Place, RootStackParamList, TrafficCamera } from '@typings/types';
 import { distanceAlongPath, decodePolyline, pointAtDistance } from '@utils/polyline';
 import { distanceMeters } from '@utils/geo';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
+import { compassName } from '@utils/cameraSense';
 import { GEOCODE_COUNTRY } from '@config/geocoding';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -58,6 +66,21 @@ interface MenuPoint {
     y: number;
 }
 
+/** what the menu of a camera says about the direction it watches */
+const watchTextOf = (camera: TrafficCamera): string | null => {
+    const sense = camera.sense;
+    if (!sense) {
+        return null;
+    }
+    if (sense.bothWays) {
+        return 'Watches both directions of the street';
+    }
+    if (sense.riskyBearing !== null) {
+        return `Looks towards the ${compassName(sense.riskyBearing)}`;
+    }
+    return 'The agency did not publish the side it watches';
+};
+
 export const MapScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
@@ -67,6 +90,9 @@ export const MapScreen = () => {
     const {
         addAvoidPoint,
         arrival,
+        routes,
+        variant,
+        setVariant,
         avoidPoints,
         cameraKey,
         clearRoute,
@@ -112,6 +138,7 @@ export const MapScreen = () => {
             maxSpeedKmh: camera.maxSpeedKmh,
             isAvoided: camera.avoidEnabled,
             isExpired: camera.operatingState === 'Expired',
+            watchBearing: camera.sense?.riskyBearing ?? null,
             label: camera.address || 'ANSV camera',
         }));
         if (focusedCamera && !markers.some((marker) => marker.id === focusedCamera.cameraId)) {
@@ -122,6 +149,7 @@ export const MapScreen = () => {
                 maxSpeedKmh: focusedCamera.maxSpeedKmh,
                 isAvoided: focusedCamera.avoidEnabled,
                 isExpired: focusedCamera.operatingState === 'Expired',
+                watchBearing: focusedCamera.sense?.riskyBearing ?? null,
                 label: focusedCamera.address || 'ANSV camera',
             });
         }
@@ -135,6 +163,9 @@ export const MapScreen = () => {
     const mapRef = useRef<MapViewRef>(null);
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
     const [pointMenu, setPointMenu] = useState<MenuPoint | null>(null);
+    const [cameraMenu, setCameraMenu] = useState<(MenuPoint & { camera: TrafficCamera }) | null>(
+        null,
+    );
     const [avoidMenu, setAvoidMenu] = useState<(MenuPoint & { id: string; number: number }) | null>(
         null,
     );
@@ -264,6 +295,7 @@ export const MapScreen = () => {
                 return;
             }
             setAvoidMenu(null);
+            setCameraMenu(null);
             setPointMenu({ latitude, longitude, x: screen[0], y: screen[1] });
         },
         [avoidPoints, openAvoidMenu],
@@ -303,37 +335,63 @@ export const MapScreen = () => {
         recompute();
     }, [avoidMenu, recompute, removeAvoidPoint]);
 
-    const menuStyle = useCallback(
-        (x: number, y: number, width: number) => {
-            const left = Math.min(
-                Math.max(x - width / 2, layout.screenPadding),
-                screenWidth - width - layout.screenPadding,
-            );
-            const topLimit = insets.top + spacing.sm + TOOLBAR_HEIGHT;
-            const above = y - MENU_GAP - menuHeight;
-            const below = y + MENU_GAP;
-            const top =
-                above >= topLimit
-                    ? above
-                    : below + menuHeight <= bottomStackTop
-                        ? below
-                        : Math.max(topLimit, bottomStackTop - menuHeight);
-            return { left, top };
+    const openCameraMenu = useCallback(
+        async (cameraId: string) => {
+            const camera = allCameras.find((item) => item.cameraId === cameraId);
+            if (!camera) {
+                return;
+            }
+            const screen = await mapRef.current?.getPointInView([
+                camera.longitude,
+                camera.latitude,
+            ]);
+            if (!screen) {
+                return;
+            }
+            setPointMenu(null);
+            setAvoidMenu(null);
+            setCameraMenu({
+                camera,
+                latitude: camera.latitude,
+                longitude: camera.longitude,
+                x: screen[0],
+                y: screen[1],
+            });
         },
+        [allCameras],
+    );
+
+    const menuStyle = useCallback((x: number, y: number, width: number) => {
+        const left = Math.min(
+            Math.max(x - width / 2, layout.screenPadding),
+            screenWidth - width - layout.screenPadding,
+        );
+        const topLimit = insets.top + spacing.sm + TOOLBAR_HEIGHT;
+        const above = y - MENU_GAP - menuHeight;
+        const below = y + MENU_GAP;
+        const top =
+            above >= topLimit
+                ? above
+                : below + menuHeight <= bottomStackTop
+                    ? below
+                    : Math.max(topLimit, bottomStackTop - menuHeight);
+        return { left, top };
+    },
         [bottomStackTop, insets.top, menuHeight, screenWidth],
     );
 
     useEffect(() => {
         const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-            if (!pointMenu && !avoidMenu) {
+            if (!pointMenu && !avoidMenu && !cameraMenu) {
                 return false;
             }
             setPointMenu(null);
             setAvoidMenu(null);
+            setCameraMenu(null);
             return true;
         });
         return () => subscription.remove();
-    }, [avoidMenu, pointMenu]);
+    }, [avoidMenu, cameraMenu, pointMenu]);
 
     const startNavigation = async () => {
         setStartingNavigation(true);
@@ -411,10 +469,13 @@ export const MapScreen = () => {
                 mapRef={mapRef}
                 pinnedPoint={pointMenu ? [pointMenu.latitude, pointMenu.longitude] : null}
                 onAvoidPointPress={openAvoidMenu}
-                onCameraPress={(cameraId) => navigation.navigate('CameraDetail', { cameraId })}
+                onCameraPress={(cameraId) => void openCameraMenu(cameraId)}
                 onMapPress={onMapPress}
                 onTilesFail={useOpenFreeMap}
                 replayPosition={replayState?.position ?? null}
+                alternateGeometry={
+                    variant === 'safe' ? routes.short?.geometry : routes.safe?.geometry
+                }
                 routeGeometry={route?.geometry}
                 style={
                     settings.mapProvider === 'google' && googleStyle
@@ -429,9 +490,34 @@ export const MapScreen = () => {
                     latitude={pointMenu.latitude}
                     longitude={pointMenu.longitude}
                     onAvoid={avoidTappedPoint}
+                    onCancel={() => setPointMenu(null)}
                     onMeasure={setMenuHeight}
                     onRoute={routeToTappedPoint}
                     style={menuStyle(pointMenu.x, pointMenu.y, POINT_MENU_WIDTH)}
+                />
+            ) : null}
+
+            {cameraMenu ? (
+                <CameraMenu
+                    isAvoided={cameraMenu.camera.avoidEnabled}
+                    label={cameraMenu.camera.address || 'ANSV camera'}
+                    onCancel={() => setCameraMenu(null)}
+                    onDetails={() => {
+                        const { camera } = cameraMenu;
+                        setCameraMenu(null);
+                        navigation.navigate('CameraDetail', { cameraId: camera.cameraId });
+                    }}
+                    onMeasure={setMenuHeight}
+                    onToggleAvoid={() => {
+                        const { camera } = cameraMenu;
+                        setCameraMenu(null);
+                        void useCameraStore
+                            .getState()
+                            .setAvoidEnabled(camera.cameraId, !camera.avoidEnabled);
+                        recompute();
+                    }}
+                    style={menuStyle(cameraMenu.x, cameraMenu.y, CAMERA_MENU_WIDTH)}
+                    watchText={watchTextOf(cameraMenu.camera)}
                 />
             ) : null}
 
@@ -567,14 +653,17 @@ export const MapScreen = () => {
                                 void saveRoute(route, destination);
                             }
                         }}
+                        hasSafeRoute={routes.safe !== null}
                         onStart={startNavigation}
                         onStop={stopNavigation}
+                        onVariantChange={(next) => setVariant(next)}
+                        variant={variant}
                     />
                 )}
 
-                {routeSplit.leftOut > 0 && routeSplit.sent === 0 && nearbyCameras.length > 0 ? (
+                {route?.avoidOutcome?.relaxed ? (
                     <Banner
-                        message="The cameras on this route could not be avoided, the destination is inside an avoided area."
+                        message="The router could not avoid every camera on this route, some of them are still on the way."
                         tone="warning"
                     />
                 ) : null}

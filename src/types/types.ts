@@ -40,6 +40,8 @@ export interface CameraMarkerData {
     maxSpeedKmh: number | null;
     isAvoided: boolean;
     isExpired: boolean;
+    /** the direction the camera watches, when the agency published one */
+    watchBearing: number | null;
     label: string;
 }
 

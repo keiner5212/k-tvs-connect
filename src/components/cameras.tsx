@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { TrafficCamera } from '@typings/types';
 import { formatDistance, UnitSystem } from '@utils/format';
 import { describeInfraction } from '@config/infractions';
+import { compassName } from '@utils/cameraSense';
 import { rgba } from '@utils/hexToRgb';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -52,6 +54,7 @@ export const CameraCard = ({
     onOpenDetails,
 }: CameraCardProps) => {
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const [showInfractions, setShowInfractions] = useState(false);
 
     const address = camera.address || 'No address reported';
@@ -123,6 +126,29 @@ export const CameraCard = ({
                     </Text>
                 </View>
             </View>
+
+            {camera.sense ? (
+                <>
+                    <View style={styles.fieldRow}>
+                        <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>
+                            Looks towards
+                        </Text>
+                        <Text style={[styles.fieldValue, { color: colors.foreground }]}>
+                            {camera.sense.bothWays
+                                ? 'Both directions of the street'
+                                : camera.sense.riskyBearing !== null
+                                    ? compassName(camera.sense.riskyBearing)
+                                    : 'Not published'}
+                        </Text>
+                    </View>
+                    {camera.sense.riskyBearing !== null ? (
+                        <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
+                            The camera photographs the traffic that comes towards it. Going the
+                            other way is the one that gets the plate read.
+                        </Text>
+                    ) : null}
+                </>
+            ) : null}
 
             {variant === 'full' ? (
                 <>
@@ -237,7 +263,14 @@ export const CameraCard = ({
                     ]}
                 >
                     <View
-                        style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                        style={[
+                            styles.modalCard,
+                            {
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                                paddingBottom: insets.bottom + layout.cardPadding,
+                            },
+                        ]}
                     >
                         <Text style={[styles.listTitle, { color: colors.foreground }]}>
                             What the agency published for this camera
@@ -246,16 +279,20 @@ export const CameraCard = ({
                             The wording is the one of the national traffic code. The app does not
                             publish any fine amount.
                         </Text>
-                        {infractions.map((entry) => (
-                            <View key={entry.code} style={styles.infractionRow}>
-                                <Text style={[styles.infractionCode, { color: colors.primary }]}>
-                                    {entry.code}
-                                </Text>
-                                <Text style={[styles.infractionText, { color: colors.foreground }]}>
-                                    {entry.description}
-                                </Text>
-                            </View>
-                        ))}
+                        {infractions.length > 0 ? (
+                            <ScrollView style={styles.infractionScroll}>
+                                {infractions.map((entry) => (
+                                    <View key={entry.code} style={styles.infractionRow}>
+                                        <Text style={[styles.infractionCode, { color: colors.primary }]}>
+                                            {entry.code}
+                                        </Text>
+                                        <Text style={[styles.infractionText, { color: colors.foreground }]}>
+                                            {entry.description}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        ) : null}
                         <PrimaryButton label="Close" onPress={() => setShowInfractions(false)} />
                     </View>
                 </View>
@@ -422,6 +459,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: spacing.sm,
         marginBottom: spacing.xs,
+    },
+    infractionScroll: {
+        maxHeight: 340,
     },
     infractionText: {
         ...typography.body,

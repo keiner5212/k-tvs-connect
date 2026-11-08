@@ -41,11 +41,22 @@ export interface FocusPoint {
     cameraId: string | null;
 }
 
+export type RouteVariant = 'short' | 'safe';
+
+export interface RouteVariants {
+    /** the shortest way, it can cut between neighbourhoods */
+    short: RouteResult | null;
+    /** the way that stays on the main roads */
+    safe: RouteResult | null;
+}
+
 interface MapState {
     destination: Place | null;
     replayRoute: ReplayRoute | null;
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
+    routes: RouteVariants;
+    variant: RouteVariant;
     arrival: ArrivalEstimate | null;
     routeContext: RouteContext | null;
     computing: boolean;
@@ -62,6 +73,7 @@ interface MapState {
     removeAvoidPoint: (id: string) => Promise<void>;
     clearAvoidPoints: () => Promise<void>;
     compute: (originLat: number, originLon: number) => Promise<void>;
+    setVariant: (variant: RouteVariant) => void;
     clearRoute: () => void;
     setReplayRoute: (route: ReplayRoute | null) => void;
     startNavigation: () => Promise<boolean>;
@@ -125,6 +137,8 @@ export const useMapStore = create<MapState>((set, get) => ({
     replayRoute: null,
     avoidPoints: [],
     route: null,
+    routes: { short: null, safe: null },
+    variant: 'short',
     arrival: null,
     routeContext: null,
     computing: false,
@@ -200,6 +214,7 @@ export const useMapStore = create<MapState>((set, get) => ({
                 destinationLat: destination.latitude,
                 destinationLon: destination.longitude,
                 avoidPoints: manualPoints,
+                costing: 'motor_scooter',
             });
 
             const { risky } = await useCameraStore.getState().selectForRoute(baseline.geometry);
@@ -213,17 +228,36 @@ export const useMapStore = create<MapState>((set, get) => ({
                 createdAt: Date.now(),
                 source: 'ansv',
             }));
+            const avoidPoints = [...manualPoints, ...cameraPoints];
 
-            const route =
+            /**
+             * The short route cuts between neighbourhoods, the safe one stays
+             * on the main roads. Both of them avoid the cameras that are in the
+             * way.
+             */
+            const shortRoute =
                 cameraPoints.length > 0
                     ? await computeRoute(valhallaBaseUrl, {
-                        originLat,
-                        originLon,
-                        destinationLat: destination.latitude,
-                        destinationLon: destination.longitude,
-                        avoidPoints: [...manualPoints, ...cameraPoints],
-                    })
+                          originLat,
+                          originLon,
+                          destinationLat: destination.latitude,
+                          destinationLon: destination.longitude,
+                          avoidPoints,
+                          costing: 'motor_scooter',
+                      })
                     : baseline;
+
+            const safeRoute = await computeRoute(valhallaBaseUrl, {
+                originLat,
+                originLon,
+                destinationLat: destination.latitude,
+                destinationLon: destination.longitude,
+                avoidPoints,
+                costing: 'auto',
+            }).catch(() => null);
+
+            const variant = get().variant;
+            const route = variant === 'safe' && safeRoute ? safeRoute : shortRoute;
 
             const context = await recordRouteContext({
                 destinationKey: destinationKey(destination.latitude, destination.longitude),
@@ -245,7 +279,14 @@ export const useMapStore = create<MapState>((set, get) => ({
                 observations,
             );
 
-            set({ route, arrival, routeContext: context, computing: false, routeFailures: 0 });
+            set({
+                route,
+                routes: { short: shortRoute, safe: safeRoute },
+                arrival,
+                routeContext: context,
+                computing: false,
+                routeFailures: 0,
+            });
         } catch (error) {
             const failures = get().routeFailures + 1;
             set({
@@ -259,7 +300,40 @@ export const useMapStore = create<MapState>((set, get) => ({
         }
     },
     clearRoute: () => {
-        set({ route: null, arrival: null, routeContext: null, destination: null, error: null });
+        set({
+            route: null,
+            routes: { short: null, safe: null },
+            arrival: null,
+            routeContext: null,
+            destination: null,
+            error: null,
+        });
+    },
+    setVariant: (variant) => {
+        const { routes, routeContext, variant: current } = get();
+        if (variant === current) {
+            return;
+        }
+        const next = routes[variant];
+        if (!next) {
+            return;
+        }
+        set({ variant, route: next });
+
+        if (!routeContext) {
+            return;
+        }
+        void listObservations(routeContext.destinationKey, routeContext.originAnchorId).then(
+            (observations) => {
+                set({
+                    arrival: estimateArrival(
+                        next.durationSeconds,
+                        next.distanceMeters,
+                        observations,
+                    ),
+                });
+            },
+        );
     },
     setReplayRoute: (route) => {
         set({ replayRoute: route });

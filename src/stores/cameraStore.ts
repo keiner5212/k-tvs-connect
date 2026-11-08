@@ -261,12 +261,15 @@ export const useCameraStore = create<CameraState>((set, get) => ({
             .filter((entry) => !isRiskyDirection(entry.camera.sense, entry.travel))
             .map((entry) => entry.camera);
 
+        const enabled = get().avoidEnabled;
+        const avoided = enabled ? risky : [];
+
         set({
-            routeSplit: { sent: risky.length, leftOut: safe.length },
-            routeCameras: risky,
+            routeSplit: { sent: avoided.length, leftOut: enabled ? safe.length : risky.length + safe.length },
+            routeCameras: avoided,
         });
 
-        return { risky: get().avoidEnabled ? risky : [], safe };
+        return { risky: avoided, safe };
     },
 }));
 

@@ -33,6 +33,23 @@ const toSense = (value: string | null): CameraSense | null => {
     }
 };
 
+const toOperatingState = (value: string): TrafficCamera['operatingState'] => {
+    if (value === 'Operating') {
+        return 'Operating';
+    }
+    if (value === 'Expired') {
+        return 'Expired';
+    }
+    // the rows of the installs that came before the expired cameras existed
+    if (value === 'Operando') {
+        return 'Operating';
+    }
+    if (value === 'Vencida' || value === 'Renovada - Expirada' || value === 'Prorrogada - Vencida') {
+        return 'Expired';
+    }
+    return 'Not reported';
+};
+
 const toCamera = (row: CameraRow): TrafficCamera => ({
     cameraId: row.camera_id,
     latitude: row.latitude,
@@ -44,7 +61,7 @@ const toCamera = (row: CameraRow): TrafficCamera => ({
     address: row.address,
     municipality: row.municipality,
     department: row.department,
-    operatingState: row.operating_state as TrafficCamera['operatingState'],
+    operatingState: toOperatingState(row.operating_state),
     sense: toSense(row.sense),
     infractions: JSON.parse(row.infractions) as string[],
     datasetPublishedAt: row.dataset_published_at,

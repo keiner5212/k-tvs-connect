@@ -18,7 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconLabelButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
-import { decodePolyline } from '@utils/polyline';
+import { SegmentedControl } from '@components/controls';
+import { RouteVariant } from '@stores/mapStore'; import { decodePolyline } from '@utils/polyline';
 import { rgba } from '@utils/hexToRgb';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -32,6 +33,8 @@ export interface MapCanvasProps {
     center: [number, number];
     zoom: number;
     routeGeometry?: string | null;
+    /** the other way, drawn behind the one that is selected */
+    alternateGeometry?: string | null;
     avoidPoints: AvoidPoint[];
     destination?: Place | null;
     followUser: boolean;
@@ -52,6 +55,7 @@ export const MapCanvas = ({
     center,
     zoom,
     routeGeometry,
+    alternateGeometry,
     avoidPoints,
     destination,
     followUser,
@@ -80,6 +84,14 @@ export const MapCanvas = ({
     );
 
     const routePoints = routeGeometry ? decodePolyline(routeGeometry) : [];
+    const alternatePoints = alternateGeometry ? decodePolyline(alternateGeometry) : [];
+    const alternateShape =
+        alternatePoints.length > 1
+            ? {
+                type: 'LineString' as const,
+                coordinates: alternatePoints.map((point) => [point.lon, point.lat]),
+            }
+            : null;
     const routeShape =
         routePoints.length > 1
             ? {
@@ -124,9 +136,29 @@ export const MapCanvas = ({
 
             <UserLocation visible renderMode={UserLocationRenderMode.Normal} />
 
+            {alternateShape ? (
+                <ShapeSource id="route-alternate-source" shape={alternateShape}>
+                    <LineLayer
+                        id="route-alternate-line"
+                        style={{
+                            lineColor: colors.primary,
+                            lineOpacity: 0.3,
+                            lineWidth: 3,
+                        }}
+                    />
+                </ShapeSource>
+            ) : null}
+
             {routeShape ? (
                 <ShapeSource id="route-source" shape={routeShape}>
-                    <LineLayer id="route-line" style={{ lineColor: colors.primary, lineWidth: 3 }} />
+                    <LineLayer
+                        id="route-line"
+                        style={{
+                            lineColor: colors.primary,
+                            lineOpacity: 0.95,
+                            lineWidth: 4,
+                        }}
+                    />
                 </ShapeSource>
             ) : null}
 
@@ -198,16 +230,28 @@ export const MapCanvas = ({
                                         },
                                     ]}
                                 />
-                                <View
-                                    style={[
-                                        styles.cameraFoot,
-                                        {
-                                            backgroundColor: camera.isAvoided
-                                                ? colors.primaryForeground
-                                                : accent,
-                                        },
-                                    ]}
-                                />
+                                {camera.watchBearing !== null ? (
+                                    <View
+                                        pointerEvents="none"
+                                        style={[
+                                            styles.cameraArrow,
+                                            { transform: [{ rotate: `${camera.watchBearing}deg` }] },
+                                        ]}
+                                    >
+                                        <View
+                                            style={[
+                                                styles.cameraArrowHead,
+                                                {
+                                                    borderBottomColor: camera.isAvoided
+                                                        ? colors.primaryForeground
+                                                        : accent,
+                                                    borderLeftColor: colors.transparent,
+                                                    borderRightColor: colors.transparent,
+                                                },
+                                            ]}
+                                        />
+                                    </View>
+                                ) : null}
                             </TouchableOpacity>
                         </View>
                     </MarkerView>
@@ -324,6 +368,9 @@ interface RouteSheetProps {
     canStart: boolean;
     instruction: string;
     distanceToManeuverLabel: string | null;
+    variant: RouteVariant;
+    hasSafeRoute: boolean;
+    onVariantChange: (variant: RouteVariant) => void;
     onStart: () => void;
     onStop: () => void;
     onSave: () => void;
@@ -350,6 +397,9 @@ export const RouteSheet = ({
     canStart,
     instruction,
     distanceToManeuverLabel,
+    variant,
+    hasSafeRoute,
+    onVariantChange,
     onStart,
     onStop,
     onSave,
@@ -453,6 +503,24 @@ export const RouteSheet = ({
                             </Text>
                         ) : null}
                     </View>
+                </View>
+            ) : null}
+
+            {hasSafeRoute ? (
+                <View style={styles.variantRow}>
+                    <SegmentedControl
+                        onChange={(value) => onVariantChange(value as RouteVariant)}
+                        options={[
+                            { value: 'short', label: 'Shortest' },
+                            { value: 'safe', label: 'Safest' },
+                        ]}
+                        value={variant}
+                    />
+                    <Text style={[styles.variantHint, { color: colors.mutedForeground }]}>
+                        {variant === 'safe'
+                            ? 'Stays on the main roads.'
+                            : 'Cuts between neighbourhoods when it can.'}
+                    </Text>
                 </View>
             ) : null}
 
@@ -650,6 +718,22 @@ const styles = StyleSheet.create({
     avoidTitle: {
         ...typography.label,
     },
+    cameraArrow: {
+        alignItems: 'center',
+        height: 22,
+        justifyContent: 'flex-start',
+        left: 0,
+        position: 'absolute',
+        top: 0,
+        width: 22,
+    },
+    cameraArrowHead: {
+        borderBottomWidth: 7,
+        borderLeftWidth: 5,
+        borderRightWidth: 5,
+        height: 0,
+        width: 0,
+    },
     cameraBody: {
         alignItems: 'center',
         borderRadius: radii.sm,
@@ -657,14 +741,6 @@ const styles = StyleSheet.create({
         height: 22,
         justifyContent: 'center',
         width: 22,
-    },
-    cameraFoot: {
-        borderRadius: 2,
-        height: 4,
-        left: 3,
-        position: 'absolute',
-        top: 3,
-        width: 6,
     },
     cameraLens: {
         borderRadius: radii.full,
@@ -858,5 +934,13 @@ const styles = StyleSheet.create({
     },
     sheetTitle: {
         ...typography.subheading,
+    },
+    variantHint: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+        textAlign: 'center',
+    },
+    variantRow: {
+        marginBottom: spacing.md,
     },
 });

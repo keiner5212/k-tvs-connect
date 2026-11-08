@@ -192,6 +192,32 @@ export const angleBetween = (a: number, b: number): number =>
     Math.abs(((a - b + 540) % 360) - 180);
 
 /**
+ * The name of a bearing, the way the agency writes it in the address.
+ */
+export const compassName = (bearing: number): string => {
+    const names = [
+        'North',
+        'North-northeast',
+        'Northeast',
+        'East-northeast',
+        'East',
+        'East-southeast',
+        'Southeast',
+        'South-southeast',
+        'South',
+        'South-southwest',
+        'Southwest',
+        'West-southwest',
+        'West',
+        'West-northwest',
+        'Northwest',
+        'North-northwest',
+    ];
+    const index = Math.round(((bearing % 360) + 360) % 360 / 22.5) % 16;
+    return names[index];
+};
+
+/**
  * True when the rider is at risk at that camera: the route goes in the
  * direction the camera watches, so the camera ends up behind the rider and
  * photographs the plate.
