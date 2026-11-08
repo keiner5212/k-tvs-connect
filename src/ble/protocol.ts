@@ -244,3 +244,97 @@ export const buildMobileDataPacket = (
 
     return encryptFrame(frame, key);
 };
+
+export const NAVIGATION_CONTROL_ID = 78;
+export const NAVIGATION_DATA_ID = 79;
+
+/**
+ * The numbers are written the way the original writes them: the smallest number
+ * of bytes, so the frame length changes with the values.
+ */
+const minimalBytes = (value: number): number[] => {
+    if (value <= 0) {
+        return [0, 0];
+    }
+    const bytes: number[] = [];
+    let remaining = Math.floor(value);
+    while (remaining > 0) {
+        bytes.unshift(remaining & 0xff);
+        remaining = Math.floor(remaining / 256);
+    }
+    return bytes.length > 0 ? bytes : [0];
+};
+
+export interface NavigationUpdate {
+    distanceToNextManeuverMeters: number;
+    timeLeftMinutes: number;
+    totalDistanceLeftMeters: number;
+    pictogramId: number;
+    navigationOn: boolean;
+    instruction: string;
+}
+
+/**
+ * What the cluster shows while navigating: the distance to the next turn, the
+ * time left and the distance left. Header 0x5A 0x4E.
+ */
+export const buildNavigationControlPacket = (
+    update: NavigationUpdate,
+    key = APACHE_XOR_KEY,
+): Uint8Array => {
+    const frame = new Uint8Array(OUTBOUND_FRAME_LENGTH);
+    const instruction = update.instruction.slice(0, 17);
+    const instructionBytes = utf8Encode(instruction);
+
+    const distance =
+        update.distanceToNextManeuverMeters <= 255
+            ? [0, update.distanceToNextManeuverMeters]
+            : minimalBytes(update.distanceToNextManeuverMeters);
+    const time =
+        update.timeLeftMinutes <= 255
+            ? [0, update.timeLeftMinutes]
+            : minimalBytes(update.timeLeftMinutes);
+    const remaining =
+        update.totalDistanceLeftMeters <= 255
+            ? [0, 0, update.totalDistanceLeftMeters]
+            : minimalBytes(update.totalDistanceLeftMeters);
+
+    const payload = [
+        0x5a,
+        NAVIGATION_CONTROL_ID,
+        ...distance,
+        ...time,
+        ...remaining,
+        update.pictogramId & 0xff,
+        instruction.length > 17 ? 2 : 1,
+        update.navigationOn ? 1 : 0,
+        0,
+        0,
+        0,
+        0,
+        ...instructionBytes,
+    ].slice(0, OUTBOUND_FRAME_LENGTH - 1);
+
+    frame.set(payload, 0);
+    frame[OUTBOUND_FRAME_LENGTH - 1] = END_BYTE;
+
+    return encryptFrame(frame, key);
+};
+
+/**
+ * The instruction text, in its own packet. Header 0x5B 0x4F.
+ */
+export const buildNavigationTextPacket = (
+    instruction: string,
+    key = APACHE_XOR_KEY,
+): Uint8Array => {
+    const frame = new Uint8Array(OUTBOUND_FRAME_LENGTH);
+    const bytes = utf8Encode(instruction.slice(0, 17));
+
+    frame[0] = 0x5b;
+    frame[1] = NAVIGATION_DATA_ID;
+    frame.set(bytes.subarray(0, 17), 2);
+    frame[OUTBOUND_FRAME_LENGTH - 1] = END_BYTE;
+
+    return encryptFrame(frame, key);
+};

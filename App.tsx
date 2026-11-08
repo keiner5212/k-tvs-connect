@@ -3,12 +3,13 @@ import { Linking, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ErrorBoundary from '@components/ErrorBoundary';
-import { RootNavigator } from '@/navigation/RootNavigator';
+import { RootNavigator, navigationRef } from '@/navigation/RootNavigator';
 import { openDatabase } from '@services/db/database';
 import { useCameraStore } from '@stores/cameraStore';
 import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { bindRideTracker, rideTracker } from '@services/rideTracker';
+import { connectionController } from '@ble/connectionController';
 import { parseSharedLocation } from '@services/sharedLocation';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
@@ -39,6 +40,37 @@ export default function App() {
 
     useEffect(() => {
         /**
+         * While the navigation runs, every new position refreshes what is left on
+         * the route and what the bike shows.
+         */
+        const unsubscribe = useLocationStore.subscribe((state, previous) => {
+            if (!state.position || state.position === previous.position) {
+                return;
+            }
+
+            const map = useMapStore.getState();
+            if (!map.navigation.started) {
+                return;
+            }
+
+            map.updateNavigation(state.position[0], state.position[1]);
+            const progress = useMapStore.getState().navigation;
+
+            void connectionController.sendNavigationUpdate({
+                distanceToNextManeuverMeters: Math.round(progress.distanceToManeuverMeters),
+                timeLeftMinutes: Math.round(progress.timeLeftSeconds / 60),
+                totalDistanceLeftMeters: Math.round(progress.distanceLeftMeters),
+                pictogramId: 0,
+                navigationOn: !progress.arrived,
+                instruction: progress.instruction,
+            });
+        });
+
+        return unsubscribe;
+    }, []);
+
+    useEffect(() => {
+        /**
          * A place shared from another map app becomes the destination and the
          * route is computed from where the rider is right now.
          */
@@ -61,9 +93,15 @@ export default function App() {
                 longitude: place.longitude,
             });
 
+            if (navigationRef.isReady()) {
+                navigationRef.navigate('Main', { screen: 'Map' });
+            }
+
             const position = useLocationStore.getState().position;
             if (position) {
                 await compute(position[0], position[1]);
+            } else {
+                void useLocationStore.getState().request();
             }
         };
 

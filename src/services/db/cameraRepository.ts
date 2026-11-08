@@ -30,7 +30,10 @@ const toCamera = (row: CameraRow): TrafficCamera => ({
     address: row.address,
     municipality: row.municipality,
     department: row.department,
-    operatingState: row.operating_state as TrafficCamera['operatingState'],
+    operatingState:
+        row.operating_state === 'Operando'
+            ? 'Operating'
+            : (row.operating_state as TrafficCamera['operatingState']),
     infractions: JSON.parse(row.infractions) as string[],
     datasetPublishedAt: row.dataset_published_at,
     distanceMeters: null,
@@ -161,4 +164,15 @@ export const listCameraPreferences = async (): Promise<Record<string, boolean>> 
         preferences[row.camera_id] = row.avoid_enabled === 1;
     }
     return preferences;
+};
+
+
+
+/**
+ * Puts every camera back on the routes. The per camera choice is what the rider
+ * turned off, so clearing it restores all of them.
+ */
+export const clearCameraPreferences = async (): Promise<void> => {
+    const db = getDatabase();
+    await db.runAsync('DELETE FROM camera_preferences');
 };

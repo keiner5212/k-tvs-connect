@@ -13,7 +13,6 @@ import { EmptyState } from '@components/feedback';
 import { PrimaryButton, TextField, showConfirm } from '@components/controls';
 import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
-import { connectionController } from '@ble/connectionController';
 import { useBleStore } from '@stores/bleStore';
 import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
@@ -49,7 +48,7 @@ export const PlaceSearchScreen = () => {
             setError(null);
             searchPlaces(settings.photonBaseUrl, query, 10, position)
                 .then(setResults)
-                .catch(() => setError('Place search failed. Check the geocoding url in Settings.'))
+                .catch(() => setError('Place search failed. Try another name.'))
                 .finally(() => setSearching(false));
         }, 300);
 
@@ -279,6 +278,9 @@ export const RoutePreviewScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    actionRow: {
+        marginTop: spacing.md,
+    },
     error: {
         ...typography.caption,
         marginBottom: spacing.md,
@@ -365,7 +367,8 @@ export const RouteDetailsScreen = () => {
     const { colors } = useTheme();
     const { settings } = useSettingsStore();
     const connectionState = useBleStore((state) => state.state);
-    const { nearby: nearbyCameras, routeSplit, publishedAt, stale } = useCameraStore();
+    const { routeCameras, routeSplit, publishedAt, stale } = useCameraStore();
+    const { navigation: progress, startNavigation, stopNavigation } = useMapStore();
     const { arrival, avoidPoints, destination, route } = useMapStore();
     const [sent, setSent] = useState<boolean | null>(null);
 
@@ -384,7 +387,7 @@ export const RouteDetailsScreen = () => {
         );
     }
 
-    const cameras = nearbyCameras.filter((camera) => camera.avoidEnabled);
+    const cameras = routeCameras;
 
     return (
         <ScreenContainer edges={['bottom']} scroll>
@@ -429,28 +432,33 @@ export const RouteDetailsScreen = () => {
             <View style={styles.sectionHeader}>
                 <MaterialIcons color={colors.mutedForeground} name="send" size={18} />
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                    Send to the bike
+                    Navigation to the bike
                 </Text>
             </View>
             <Text style={[styles.note, { color: colors.mutedForeground }]}>
-                The app sends the destination address to the bike as text. It does not send the
-                route.
+                The app sends the destination address to the bike as text and then keeps it
+                updated with the position, so the cluster shows the distance to the next turn. It
+                does not send the route.
             </Text>
             <Text style={[styles.note, { color: colors.mutedForeground }]}>
                 {connectionState === 'connected'
                     ? 'The bike is connected.'
                     : 'The bike is not connected. Turn the bike on to send the destination.'}
             </Text>
-            <PrimaryButton
-                disabled={connectionState !== 'connected'}
-                icon="send"
-                label="Send destination to bike"
-                onPress={() => {
-                    void connectionController
-                        .sendDestinationToCluster(destination.address || destination.name)
-                        .then(setSent);
-                }}
-            />
+            <View style={styles.actionRow}>
+                <PrimaryButton
+                    disabled={connectionState !== 'connected'}
+                    icon={progress.started ? 'stop' : 'navigation'}
+                    label={progress.started ? 'Stop the navigation' : 'Start the navigation'}
+                    onPress={() => {
+                        if (progress.started) {
+                            stopNavigation();
+                            return;
+                        }
+                        void startNavigation().then(setSent);
+                    }}
+                />
+            </View>
             {sent === true ? (
                 <Text style={[styles.note, { color: colors.success }]}>
                     Destination sent to the bike.
@@ -470,8 +478,8 @@ export const RouteDetailsScreen = () => {
             </View>
             <Text style={[styles.note, { color: colors.mutedForeground }]}>
                 {routeSplit.leftOut > 0
-                    ? `${routeSplit.sent} cameras sent with the route. ${routeSplit.leftOut} nearby cameras were left out.`
-                    : `${routeSplit.sent} cameras sent with the route.`}
+                    ? `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} sent with the route. ${routeSplit.leftOut} nearby camera${routeSplit.leftOut === 1 ? '' : 's'} left out.`
+                    : `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} sent with the route.`}
             </Text>
             {cameras.length === 0 ? (
                 <Text style={[styles.note, { color: colors.mutedForeground }]}>

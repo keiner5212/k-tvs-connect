@@ -25,7 +25,61 @@ interface IconButtonProps {
     selected?: boolean;
     disabled?: boolean;
     size?: number;
+    label?: string;
+    variant?: 'plain' | 'pill';
 }
+
+/**
+ * An icon with its text next to it. The text is always there, the icon only
+ * repeats it, so nothing depends on the glyph alone.
+ */
+export const IconLabelButton = ({
+    icon,
+    accessibilityLabel,
+    onPress,
+    selected = false,
+    disabled = false,
+    size = 18,
+    label,
+    variant = 'pill',
+}: IconButtonProps) => {
+    const { colors } = useTheme();
+
+    return (
+        <TouchableOpacity
+            accessibilityLabel={accessibilityLabel}
+            accessibilityRole="button"
+            accessibilityState={{ selected, disabled }}
+            activeOpacity={0.8}
+            disabled={disabled}
+            onPress={onPress}
+            style={[
+                variant === 'pill' ? styles.iconPill : styles.iconButton,
+                {
+                    backgroundColor: selected ? colors.primary : colors.card,
+                    borderColor: selected ? colors.primary : colors.border,
+                },
+                disabled ? styles.disabled : null,
+            ]}
+        >
+            <MaterialIcons
+                color={selected ? colors.primaryForeground : colors.foreground}
+                name={icon}
+                size={size}
+            />
+            {label ? (
+                <Text
+                    style={[
+                        styles.iconPillLabel,
+                        { color: selected ? colors.primaryForeground : colors.foreground },
+                    ]}
+                >
+                    {label}
+                </Text>
+            ) : null}
+        </TouchableOpacity>
+    );
+};
 
 /**
  * An icon only control. It always carries a label for the screen reader and it
@@ -78,8 +132,9 @@ export const PrimaryButton = ({
 }: PrimaryButtonProps) => {
     const { colors } = useTheme();
 
-    const background =
-        variant === 'primary'
+    const background = disabled
+        ? colors.muted
+        : variant === 'primary'
             ? colors.primary
             : variant === 'secondary'
                 ? colors.secondary
@@ -87,8 +142,9 @@ export const PrimaryButton = ({
                     ? colors.destructive
                     : colors.transparent;
 
-    const foreground =
-        variant === 'primary'
+    const foreground = disabled
+        ? colors.mutedForeground
+        : variant === 'primary'
             ? colors.primaryForeground
             : variant === 'secondary'
                 ? colors.secondaryForeground
@@ -224,45 +280,45 @@ export const SegmentedControl = ({ options, value, onChange }: SegmentedControlP
 };
 
 interface ChipGroupProps {
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
+    options: { value: string; label: string }[];
+    value: string;
+    onChange: (value: string) => void;
 }
 
 export const ChipGroup = ({ options, value, onChange }: ChipGroupProps) => {
-  const { colors } = useTheme();
+    const { colors } = useTheme();
 
-  return (
-    <View style={styles.chipRow}>
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <TouchableOpacity
-            accessibilityRole="radio"
-            accessibilityState={{ selected }}
-            key={option.value}
-            onPress={() => onChange(option.value)}
-            style={[
-              styles.chip,
-              {
-                backgroundColor: selected ? colors.primary : colors.card,
-                borderColor: selected ? colors.primary : colors.border,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.chipLabel,
-                { color: selected ? colors.primaryForeground : colors.foreground },
-              ]}
-            >
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
+    return (
+        <View style={styles.chipRow}>
+            {options.map((option) => {
+                const selected = option.value === value;
+                return (
+                    <TouchableOpacity
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                        key={option.value}
+                        onPress={() => onChange(option.value)}
+                        style={[
+                            styles.chip,
+                            {
+                                backgroundColor: selected ? colors.primary : colors.card,
+                                borderColor: selected ? colors.primary : colors.border,
+                            },
+                        ]}
+                    >
+                        <Text
+                            style={[
+                                styles.chipLabel,
+                                { color: selected ? colors.primaryForeground : colors.foreground },
+                            ]}
+                        >
+                            {option.label}
+                        </Text>
+                    </TouchableOpacity>
+                );
+            })}
+        </View>
+    );
 };
 
 interface PinDotsProps {
@@ -314,27 +370,27 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.xl,
     },
     buttonIcon: {
-    marginRight: spacing.sm,
-  },
-  buttonLabel: {
+        marginRight: spacing.sm,
+    },
+    buttonLabel: {
         ...typography.button,
     },
-  chip: {
-    alignItems: 'center',
-    borderRadius: radii.full,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 40,
-    paddingHorizontal: spacing.lg,
-  },
+    chip: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        borderWidth: 1,
+        justifyContent: 'center',
+        minHeight: 40,
+        paddingHorizontal: spacing.lg,
+    },
     chipLabel: {
-    ...typography.label,
-  },
+        ...typography.label,
+    },
     chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.sm,
+    },
     disabled: {
         opacity: 0.5,
     },
@@ -353,13 +409,26 @@ const styles = StyleSheet.create({
         marginTop: spacing.xs,
     },
     iconButton: {
-    alignItems: 'center',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
+        alignItems: 'center',
+        borderRadius: radii.md,
+        borderWidth: 1,
+        height: 44,
+        justifyContent: 'center',
+        width: 44,
+    },
+    iconPill: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.xs,
+        justifyContent: 'center',
+        minHeight: 44,
+        paddingHorizontal: spacing.md,
+    },
+    iconPillLabel: {
+        ...typography.label,
+    },
     input: {
         ...typography.body,
         borderRadius: layout.inputRadius,
@@ -379,16 +448,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginVertical: spacing.lg,
     },
-  segment: {
+    segment: {
         alignItems: 'center',
         borderRadius: radii.full,
         flex: 1,
         paddingVertical: spacing.sm,
     },
-  segmentLabel: {
+    segmentLabel: {
         ...typography.label,
     },
-  segmentTrack: {
+    segmentTrack: {
         borderRadius: radii.full,
         flexDirection: 'row',
         padding: spacing.xs,

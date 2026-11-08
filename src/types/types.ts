@@ -1,3 +1,5 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export type CameraTechnology =
     | 'Radar Doppler'
     | 'Video Detección (Con Analítica de Video)'
@@ -166,7 +168,16 @@ export interface RouteLeg {
     instruction: string;
 }
 
+export interface RouteManeuver {
+    instruction: string;
+    distance: number;
+    type: number;
+    index: number;
+}
+
 export interface RouteResult {
+    maneuvers?: RouteManeuver[];
+    avoidOutcome?: { applied: number; relaxed: boolean };
     distanceMeters: number;
     durationSeconds: number;
     geometry: string;
@@ -188,7 +199,7 @@ export interface AppSettings {
 }
 
 export type RootStackParamList = {
-    Main: undefined;
+    Main: NavigatorScreenParams<MainTabParamList> | undefined;
     RouteDetails: undefined;
     Cameras: undefined;
     CameraDetail: { cameraId: string };

@@ -1,8 +1,20 @@
-# Device tests still pending
+# Device tests
 
-Everything below needs the phone and the bike, so it is written down instead of
-being guessed at. Each item says what to do, what to watch and what it would
-prove.
+Checked on the phone on 7 November 2026:
+
+| # | Test | Result |
+| --- | --- | --- |
+| 1 | The place search | It answered with a street in Spain. The public geocoder was not biased by the position. Fixed, and it now answers with the streets of Santa Marta. |
+| 2 | The route distance | The router reports the summary in kilometres whatever the units parameter says, and the app read it as metres. Fixed, the distance comes from the encoded shape. |
+| 3 | The arrival estimate | It shows the arrival time and the reason next to it. |
+| 4 | The shared location | The app opens on the map with the route to the shared point. |
+| 5 | The screens | The safe area is respected on every screen that was opened. |
+| 6 | The map sheet, the icons and the camera markers | All there, the eight operating cameras show on the map. |
+| 7 | The icon | It shows on the launcher with a margin around the bike. |
+
+The rest needs the bike switched on and close to the phone, so it is written down
+instead of being guessed at. Each item says what to do, what to watch and what it
+would prove.
 
 ## The bike
 

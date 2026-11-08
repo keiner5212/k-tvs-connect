@@ -25,8 +25,18 @@ user agent, the app sends `K-Tvs-Connect/0.1`.
 Photon (komoot) answers with a typeahead search and needs no key:
 
 ```
-https://photon.komoot.io/api/?q=<query>&limit=10
+https://photon.komoot.io/api/?q=<query>&limit=10&lat=<lat>&lon=<lon>&zoom=12
 ```
+
+Two things the public instance does not tell you and that cost a day:
+
+- **It needs the position as a bias.** Without `lat` and `lon` it answers with
+  matches anywhere in the world. A search for "calle 10" came back with a street
+  in Spain. The app sends the rider position and drops anything more than 100 km
+  away.
+- **It has no Spanish name data.** `lang=es` and `lang=es-ES` are refused with a
+  400, only `en`, `de` and `fr` are accepted. The app does not send the parameter
+  and uses the local names, which are Spanish anyway.
 
 The policy is "be fair, extensive usage will be throttled", so the app spaces the
 requests by a second. Do not build on the public Nominatim instance: it allows one
@@ -49,12 +59,25 @@ Request shape:
 ```json
 {
   "locations": [{ "lat": 0, "lon": 0 }, { "lat": 0, "lon": 0 }],
+  "language": "es-ES",
   "costing": "motor_scooter",
   "units": "kilometers",
   "exclude_locations": [{ "lat": 0, "lon": 0 }],
-  "exclude_polygons": [{ "type": "Polygon", "coordinates": [[[0, 0]]] }]
+  "exclude_polygons": [[[0, 0], [0, 0], [0, 0], [0, 0]]]
 }
 ```
+
+Three things the public instance does not tell you:
+
+- **The summary length comes back in kilometres** whatever the `units` parameter
+  says. The distance has to be measured from the encoded shape, which is always in
+  metres, with `src/utils/polyline.ts`.
+- **`exclude_polygons` takes plain rings of coordinates, not GeoJSON objects.** A
+  GeoJSON polygon is refused with a parse error.
+- **An exclusion removes the whole road the point sits on.** When that makes the
+  destination unreachable the router answers "no path could be found". The app
+  then relaxes the request, first to the points only and then to no exclusion at
+  all, and tells the rider that the cameras could not be avoided.
 
 The FOSSGIS demo server `https://valhalla1.openstreetmap.de` is open to the public
 with one request per second and asks published apps to send an `X-Client-Id`

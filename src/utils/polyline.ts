@@ -120,3 +120,41 @@ export const pointAtDistance = (
 
     return points[points.length - 1];
 };
+
+/**
+ * The index of the point of the path that is closest to the target.
+ */
+export const nearestPointIndex = (points: LatLon[], target: LatLon): number => {
+    if (points.length === 0) {
+        return -1;
+    }
+
+    let best = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (let index = 0; index < points.length; index += 1) {
+        const latScale = 111320;
+        const lonScale = 111320 * Math.max(0.1, Math.cos((target.lat * Math.PI) / 180));
+        const dx = (points[index].lon - target.lon) * lonScale;
+        const dy = (points[index].lat - target.lat) * latScale;
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            best = index;
+        }
+    }
+
+    return best;
+};
+
+/**
+ * The meters left on the path from a point to the end.
+ */
+export const remainingDistanceMeters = (points: LatLon[], fromIndex: number): number => {
+    if (fromIndex < 0 || fromIndex >= points.length - 1) {
+        return 0;
+    }
+    const distances = distanceAlongPath(points);
+    const total = distances[distances.length - 1];
+    return Math.max(0, total - distances[fromIndex]);
+};

@@ -7,8 +7,11 @@ import { BleService, DiscoveredDevice } from './bleService';
 import { DATA_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
 import { parseFrame, telemetryFromFrame } from './parser';
 import {
+    NavigationUpdate,
     buildLocationAddressPacket,
     buildMobileDataPacket,
+    buildNavigationControlPacket,
+    buildNavigationTextPacket,
     buildRiderNamePacket,
     buildTrafficSequencePacket,
 } from './protocol';
@@ -143,6 +146,31 @@ export class ConnectionController {
         this.reconnectAttempt = 0;
         this.setState('scanning');
         await this.scanAndConnect();
+    }
+
+    /**
+     * The navigation the cluster shows while riding: the distance to the next
+     * turn, the time left and the instruction text. The original sends it as the
+     * position changes.
+     */
+    async sendNavigationUpdate(update: NavigationUpdate): Promise<boolean> {
+        if (this.state !== 'connected') {
+            return false;
+        }
+
+        try {
+            await this.ble.write(buildNavigationControlPacket(update));
+            if (update.instruction) {
+                await this.ble.write(buildNavigationTextPacket(update.instruction));
+            }
+            return true;
+        } catch (error) {
+            logger.warn('could not write the navigation to the cluster', {
+                event: 'ble_write',
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+            return false;
+        }
     }
 
     /**

@@ -3,16 +3,16 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { IconButton } from '@components/controls';
+import { IconLabelButton } from '@components/controls';
 import { MapCanvas, RouteSheet } from '@components/map';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTheme } from '@hooks/useTheme';
 import { useBleStore } from '@stores/bleStore';
 import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
-import { connectionController } from '@ble/connectionController';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { Place, RootStackParamList } from '@typings/types';
@@ -47,6 +47,11 @@ export const MapScreen = () => {
     } = useMapStore();
 
     const { nearby: nearbyCameras, routeSplit } = useCameraStore();
+    const {
+        navigation: progress,
+        startNavigation: startNavigationAction,
+        stopNavigation: stopNavigationAction,
+    } = useMapStore();
     const cameraMarkers = useMemo(
         () =>
             nearbyCameras.map((camera) => ({
@@ -59,7 +64,7 @@ export const MapScreen = () => {
             })),
         [nearbyCameras],
     );
-    const [position, setPosition] = useState<[number, number] | null>(null);
+    const position = useLocationStore((state) => state.position);
     const [sentToBike, setSentToBike] = useState<boolean | null>(null);
     const connectionState = useBleStore((state) => state.state);
     const [locationError, setLocationError] = useState<string | null>(null);
@@ -81,7 +86,7 @@ export const MapScreen = () => {
                 setLocationError('Location permission needed to plan routes from your position.');
                 return;
             }
-            setPosition(useLocationStore.getState().position);
+            await useLocationStore.getState().startWatching();
         };
         void load();
     }, []);
@@ -89,8 +94,10 @@ export const MapScreen = () => {
     useEffect(() => {
         void useCameraStore.getState().load();
         const unsubscribe = useLocationStore.subscribe((state) => {
-            setPosition(state.position);
             void useCameraStore.getState().load();
+            if (state.position) {
+                useMapStore.getState().updateNavigation(state.position[0], state.position[1]);
+            }
         });
         return unsubscribe;
     }, []);
@@ -119,13 +126,14 @@ export const MapScreen = () => {
         [addAvoidPoint, recompute],
     );
 
-    const sendToBike = async () => {
-        if (!destination) {
-            return;
-        }
-        const address = destination.address || destination.name;
-        const sent = await connectionController.sendDestinationToCluster(address);
+    const startNavigation = async () => {
+        const sent = await startNavigationAction();
         setSentToBike(sent);
+    };
+
+    const stopNavigation = () => {
+        stopNavigationAction();
+        setSentToBike(null);
     };
 
     const saveRoute = async (result: NonNullable<typeof route>, target: Place) => {
@@ -193,28 +201,50 @@ export const MapScreen = () => {
             />
 
             <View style={[styles.toolbar, { top: insets.top + spacing.sm }]}>
-                <IconButton
+                <IconLabelButton
                     accessibilityLabel="Search for a place"
                     icon="search"
+                    label="Search"
                     onPress={() => navigation.navigate('PlaceSearch')}
                 />
-                <IconButton
+                <IconLabelButton
                     accessibilityLabel="Cameras near you"
                     icon="videocam"
+                    label="Cameras"
                     onPress={() => navigation.navigate('Cameras')}
                 />
-                <IconButton
+                <IconLabelButton
                     accessibilityLabel="Saved routes"
                     icon="route"
+                    label="Routes"
                     onPress={() => navigation.navigate('SavedRoutes')}
                 />
-                <IconButton
+                <IconLabelButton
                     accessibilityLabel={followUser ? 'Stop following me' : 'Follow me'}
                     icon="my-location"
+                    label="Me"
                     onPress={() => setFollowUser((value) => !value)}
                     selected={followUser}
                 />
             </View>
+
+            <TouchableOpacity
+                accessibilityLabel="Go to my position"
+                accessibilityRole="button"
+                onPress={() => {
+                    setFollowUser(true);
+                }}
+                style={[
+                    styles.recenter,
+                    {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                        bottom: insets.bottom + 200,
+                    },
+                ]}
+            >
+                <MaterialIcons color={colors.primary} name="my-location" size={22} />
+            </TouchableOpacity>
 
             <View
                 style={[styles.bottom, { paddingBottom: spacing.md }]}
@@ -253,18 +283,37 @@ export const MapScreen = () => {
                     </View>
                 ) : (
                     <RouteSheet
-                        arrivalLabel={arrival ? formatClockTime(arrival.arrivalAt) : null}
+                        arrivalLabel={
+                            progress.started
+                                ? formatClockTime(now + progress.timeLeftSeconds * 1000)
+                                : arrival
+                                  ? formatClockTime(arrival.arrivalAt)
+                                  : null
+                        }
                         avoidPointCount={avoidPoints.length}
                         cameraCount={routeSplit.sent}
-                        canSendToBike={connectionState === 'connected'}
+                        canStart={connectionState === 'connected'}
                         destinationName={destination?.name ?? null}
-                        distanceLabel={formatDistance(route?.distanceMeters ?? 0, settings.unitSystem)}
-                        durationLabel={formatDuration(route?.durationSeconds ?? 0)}
+                        distanceLabel={formatDistance(
+                            progress.started ? progress.distanceLeftMeters : route?.distanceMeters ?? 0,
+                            settings.unitSystem,
+                        )}
+                        distanceToManeuverLabel={
+                            progress.started
+                                ? formatDistance(progress.distanceToManeuverMeters, settings.unitSystem)
+                                : null
+                        }
+                        durationLabel={formatDuration(
+                            progress.started ? progress.timeLeftSeconds : route?.durationSeconds ?? 0,
+                        )}
+                        instruction={progress.instruction}
                         isComputing={computing}
+                        isNavigating={progress.started}
                         onChooseDestination={() => navigation.navigate('PlaceSearch')}
                         onClear={() => {
                             clearRoute();
                             setDestination(null);
+                            stopNavigation();
                         }}
                         onOpenDetails={() => navigation.navigate('RouteDetails')}
                         onSave={() => {
@@ -272,9 +321,17 @@ export const MapScreen = () => {
                                 void saveRoute(route, destination);
                             }
                         }}
-                        onSendToBike={sendToBike}
+                        onStart={startNavigation}
+                        onStop={stopNavigation}
                     />
                 )}
+
+                {routeSplit.leftOut > 0 && routeSplit.sent === 0 && nearbyCameras.length > 0 ? (
+                    <Banner
+                        message="The cameras on this route could not be avoided, the destination is inside an avoided area."
+                        tone="warning"
+                    />
+                ) : null}
 
                 {sentToBike === true ? (
                     <Banner message="Destination sent to the bike." tone="info" />
@@ -300,6 +357,20 @@ const styles = StyleSheet.create({
         marginHorizontal: layout.screenPadding,
         marginTop: spacing.sm,
         padding: layout.cardPadding,
+    },
+    recenter: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        borderWidth: 1,
+        elevation: 3,
+        height: 48,
+        justifyContent: 'center',
+        position: 'absolute',
+        right: layout.screenPadding,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.18,
+        shadowRadius: 6,
+        width: 48,
     },
     replayDistance: {
         ...typography.readout,

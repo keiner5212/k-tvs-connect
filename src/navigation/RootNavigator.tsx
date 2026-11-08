@@ -1,6 +1,6 @@
 import React from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -25,6 +25,11 @@ import { typography } from '@config/theme';
 
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+/**
+ * Lets the deep link handler move the app to the map, outside of a component.
+ */
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const TAB_LABELS: Record<keyof MainTabParamList, string> = {
     Garage: 'Garage',
@@ -73,7 +78,7 @@ export const RootNavigator = () => {
     const { colors } = useTheme();
 
     return (
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
             <Stack.Navigator screenOptions={{
                 headerTintColor: colors.foreground,
                 headerStyle: { backgroundColor: colors.card },

@@ -46,7 +46,9 @@ export const searchPlaces = async (
         return [];
     }
 
-    const params = new URLSearchParams({ q: trimmed, limit: String(limit), lang: 'es' });
+    // The public geocoder only accepts the languages it has name data for. It
+    // answers 400 on lang=es, so the local names are used instead.
+    const params = new URLSearchParams({ q: trimmed, limit: String(limit) });
     if (position) {
         params.set('lat', position[0].toFixed(5));
         params.set('lon', position[1].toFixed(5));

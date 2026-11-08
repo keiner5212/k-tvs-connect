@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { AvoidPoint, Place, RouteResult } from '@typings/types';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { computeRoute } from '@services/valhalla.service';
+import { decodePolyline, nearestPointIndex, remainingDistanceMeters } from '@utils/polyline';
 import {
     listObservations,
     recordRouteContext,
@@ -23,6 +24,15 @@ export interface ReplayRoute {
     durationSeconds: number;
 }
 
+export interface NavigationProgress {
+    started: boolean;
+    distanceLeftMeters: number;
+    timeLeftSeconds: number;
+    distanceToManeuverMeters: number;
+    instruction: string;
+    arrived: boolean;
+}
+
 interface MapState {
     destination: Place | null;
     replayRoute: ReplayRoute | null;
@@ -33,6 +43,7 @@ interface MapState {
     computing: boolean;
     error: string | null;
     routeFailures: number;
+    navigation: NavigationProgress;
     loadAvoidPoints: () => Promise<void>;
     setDestination: (place: Place | null) => void;
     addAvoidPoint: (latitude: number, longitude: number) => Promise<void>;
@@ -41,6 +52,9 @@ interface MapState {
     compute: (originLat: number, originLon: number) => Promise<void>;
     clearRoute: () => void;
     setReplayRoute: (route: ReplayRoute | null) => void;
+    startNavigation: () => Promise<boolean>;
+    stopNavigation: () => void;
+    updateNavigation: (latitude: number, longitude: number) => void;
 }
 
 const describeRouteError = (error: unknown): string => {
@@ -67,6 +81,14 @@ export const useMapStore = create<MapState>((set, get) => ({
     computing: false,
     error: null,
     routeFailures: 0,
+    navigation: {
+        started: false,
+        distanceLeftMeters: 0,
+        timeLeftSeconds: 0,
+        distanceToManeuverMeters: 0,
+        instruction: '',
+        arrived: false,
+    },
     loadAvoidPoints: async () => {
         const points = await listAvoidPoints();
         set({ avoidPoints: points });
@@ -79,7 +101,7 @@ export const useMapStore = create<MapState>((set, get) => ({
             label: `Avoid ${get().avoidPoints.length + 1}`,
             latitude,
             longitude,
-            radiusMeters: 30,
+            radiusMeters: 60,
         });
         set({ avoidPoints: [...get().avoidPoints, saved] });
     },
@@ -99,7 +121,7 @@ export const useMapStore = create<MapState>((set, get) => ({
 
         const { valhallaBaseUrl } = useSettingsStore.getState().settings;
         const { selectForRoute } = useCameraStore.getState();
-        const cameras = selectForRoute(
+        const cameras = await selectForRoute(
             originLat,
             originLon,
             destination.latitude,
@@ -146,6 +168,15 @@ export const useMapStore = create<MapState>((set, get) => ({
                 observations,
             );
 
+            const applied = route.avoidOutcome?.applied ?? cameraPoints.length;
+            if (applied < cameraPoints.length) {
+                useCameraStore.getState().setRouteSplit({
+                    sent: 0,
+                    leftOut: cameraPoints.length,
+                });
+                useCameraStore.getState().setRouteCameras([]);
+            }
+
             set({ route, arrival, routeContext: context, computing: false, routeFailures: 0 });
         } catch (error) {
             const failures = get().routeFailures + 1;
@@ -164,5 +195,88 @@ export const useMapStore = create<MapState>((set, get) => ({
     },
     setReplayRoute: (route) => {
         set({ replayRoute: route });
+    },
+
+    startNavigation: async () => {
+        const { destination, route } = get();
+        if (!destination || !route) {
+            return false;
+        }
+
+        const { connectionController } = await import('@ble/connectionController');
+        const address = destination.address || destination.name;
+        const sent = await connectionController.sendDestinationToCluster(address);
+
+        set({
+            navigation: {
+                ...get().navigation,
+                started: true,
+                arrived: false,
+            },
+        });
+
+        const { useLocationStore } = await import('@stores/locationStore');
+        await useLocationStore.getState().startWatching();
+
+        return sent;
+    },
+
+    stopNavigation: () => {
+        set({
+            navigation: {
+                started: false,
+                distanceLeftMeters: 0,
+                timeLeftSeconds: 0,
+                distanceToManeuverMeters: 0,
+                instruction: '',
+                arrived: false,
+            },
+        });
+    },
+
+    updateNavigation: (latitude, longitude) => {
+        const { route, navigation, arrival } = get();
+        if (!route || !navigation.started || !route.geometry) {
+            return;
+        }
+
+        const points = decodePolyline(route.geometry, 6);
+        const index = nearestPointIndex(points, { lat: latitude, lon: longitude });
+        if (index < 0) {
+            return;
+        }
+
+        const distanceLeftMeters = remainingDistanceMeters(points, index);
+        const factor = arrival?.factor ?? 1;
+        const timeLeftSeconds = Math.max(
+            0,
+            Math.round((route.durationSeconds * distanceLeftMeters) / Math.max(1, route.distanceMeters) * factor),
+        );
+
+        const maneuvers = route.maneuvers ?? [];
+        const travelled = route.distanceMeters - distanceLeftMeters;
+        let accumulated = 0;
+        let next = maneuvers[maneuvers.length - 1];
+        let distanceToManeuver = distanceLeftMeters;
+
+        for (const maneuver of maneuvers) {
+            accumulated += maneuver.distance;
+            if (accumulated > travelled) {
+                next = maneuver;
+                distanceToManeuver = Math.max(0, accumulated - travelled);
+                break;
+            }
+        }
+
+        set({
+            navigation: {
+                started: true,
+                distanceLeftMeters,
+                timeLeftSeconds,
+                distanceToManeuverMeters: distanceToManeuver,
+                instruction: next?.instruction ?? '',
+                arrived: distanceLeftMeters < 25,
+            },
+        });
     },
 }));

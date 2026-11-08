@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { TrafficCamera } from '@typings/types';
 import { ANSV_SOURCE_NAME, CAMERA_AVOID_RADIUS_METERS, fetchAnsvCameras } from '@services/ansv.service';
 import {
+    clearCameraPreferences,
     countCameras,
     listAllCameras,
     listCameraPreferences,
@@ -35,17 +36,22 @@ interface CameraState {
     radiusMeters: number;
     stale: boolean;
     routeSplit: CameraRefreshResult;
+    routeCameras: TrafficCamera[];
+    removedCount: number;
     load: () => Promise<void>;
     refresh: (force?: boolean) => Promise<void>;
     setAvoidEnabled: (cameraId: string, enabled: boolean) => Promise<void>;
     setAvoidEnabledGlobally: (enabled: boolean) => Promise<void>;
     setRadiusMeters: (meters: number) => Promise<void>;
+    setRouteSplit: (split: CameraRefreshResult) => void;
+    setRouteCameras: (cameras: TrafficCamera[]) => void;
+    restoreRemovedCameras: () => Promise<void>;
     selectForRoute: (
         originLat: number,
         originLon: number,
         destinationLat: number,
         destinationLon: number,
-    ) => TrafficCamera[];
+    ) => Promise<TrafficCamera[]>;
 }
 
 const distanceFor = (camera: TrafficCamera, position: [number, number] | null): number | null => {
@@ -69,6 +75,8 @@ export const useCameraStore = create<CameraState>((set, get) => ({
     radiusMeters: NEARBY_RADIUS_METERS,
     stale: false,
     routeSplit: { sent: 0, leftOut: 0 },
+    routeCameras: [],
+    removedCount: 0,
 
     load: async () => {
         const [cameras, preferences, settings] = await Promise.all([
@@ -103,6 +111,7 @@ export const useCameraStore = create<CameraState>((set, get) => ({
             fetchedAt: settings.ansvFetchedAt,
             avoidEnabled: settings.cameraAvoidEnabled,
             radiusMeters: settings.cameraRadiusMeters,
+            removedCount: Object.values(preferences).filter((value) => value === false).length,
             stale:
                 settings.ansvFetchedAt !== null &&
                 Date.now() - settings.ansvFetchedAt > REFRESH_INTERVAL_MS,
@@ -172,7 +181,17 @@ export const useCameraStore = create<CameraState>((set, get) => ({
         await get().load();
     },
 
-    selectForRoute: (originLat, originLon, destinationLat, destinationLon) => {
+    setRouteSplit: (split) => {
+        set({ routeSplit: split });
+    },
+    setRouteCameras: (cameras) => {
+        set({ routeCameras: cameras });
+    },
+    restoreRemovedCameras: async () => {
+        await clearCameraPreferences();
+        await get().load();
+    },
+    selectForRoute: async (originLat, originLon, destinationLat, destinationLon) => {
         const box = boundingBox(
             { lat: originLat, lon: originLon },
             { lat: destinationLat, lon: destinationLon },
@@ -212,8 +231,16 @@ export const useCameraStore = create<CameraState>((set, get) => ({
             )
             .sort((a, b) => a.distance - b.distance);
 
-        const selected = scored.slice(0, ROUTE_MAX_CAMERAS).map((entry) => entry.camera);
-        set({ routeSplit: { sent: selected.length, leftOut: scored.length - selected.length } });
+        const preferences = await listCameraPreferences();
+        const allowed = scored.filter(
+            (entry) => preferences[entry.camera.cameraId] !== false,
+        );
+        const selected = allowed.slice(0, ROUTE_MAX_CAMERAS).map((entry) => entry.camera);
+
+        set({
+            routeSplit: { sent: selected.length, leftOut: allowed.length - selected.length },
+            routeCameras: selected,
+        });
 
         return get().avoidEnabled ? selected : [];
     },

@@ -21,7 +21,16 @@ export const CamerasScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const { unitSystem } = useSettingsStore((state) => state.settings);
-    const { nearby, loading, error, publishedAt, refresh, setAvoidEnabled } = useCameraStore();
+    const {
+        nearby,
+        loading,
+        error,
+        publishedAt,
+        refresh,
+        setAvoidEnabled,
+        removedCount,
+        restoreRemovedCameras,
+    } = useCameraStore();
 
     const position = useLocationStore((state) => state.position);
 
@@ -52,6 +61,14 @@ export const CamerasScreen = () => {
             </Text>
 
             {error ? <Banner message={error} tone="warning" /> : null}
+
+            {removedCount > 0 ? (
+                <PrimaryButton
+                    label={`Restore ${removedCount} removed camera${removedCount === 1 ? '' : 's'}`}
+                    onPress={() => void restoreRemovedCameras()}
+                    variant="secondary"
+                />
+            ) : null}
 
             {loading ? (
                 <Text style={[styles.loading, { color: colors.mutedForeground }]}>Loading cameras...</Text>

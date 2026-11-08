@@ -13,7 +13,7 @@ import {
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
-import { IconButton } from '@components/controls';
+import { IconLabelButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
 import { decodePolyline } from '@utils/polyline';
@@ -126,8 +126,8 @@ export const MapCanvas = ({
                             style={[
                                 styles.cameraBody,
                                 {
-                                    backgroundColor: camera.isAvoided ? colors.error : colors.card,
-                                    borderColor: colors.error,
+                                    backgroundColor: camera.isAvoided ? colors.primary : colors.card,
+                                    borderColor: colors.primary,
                                 },
                             ]}
                         >
@@ -136,8 +136,8 @@ export const MapCanvas = ({
                                     styles.cameraLens,
                                     {
                                         backgroundColor: camera.isAvoided
-                                            ? colors.errorForeground
-                                            : colors.error,
+                                            ? colors.primaryForeground
+                                            : colors.primary,
                                     },
                                 ]}
                             />
@@ -146,8 +146,8 @@ export const MapCanvas = ({
                                     styles.cameraFoot,
                                     {
                                         backgroundColor: camera.isAvoided
-                                            ? colors.errorForeground
-                                            : colors.error,
+                                            ? colors.primaryForeground
+                                            : colors.primary,
                                     },
                                 ]}
                             />
@@ -198,8 +198,12 @@ interface RouteSheetProps {
     cameraCount: number;
     avoidPointCount: number;
     isComputing: boolean;
-    canSendToBike: boolean;
-    onSendToBike: () => void;
+    isNavigating: boolean;
+    canStart: boolean;
+    instruction: string;
+    distanceToManeuverLabel: string | null;
+    onStart: () => void;
+    onStop: () => void;
     onSave: () => void;
     onClear: () => void;
     onOpenDetails: () => void;
@@ -219,8 +223,12 @@ export const RouteSheet = ({
     cameraCount,
     avoidPointCount,
     isComputing,
-    canSendToBike,
-    onSendToBike,
+    isNavigating,
+    canStart,
+    instruction,
+    distanceToManeuverLabel,
+    onStart,
+    onStop,
     onSave,
     onClear,
     onOpenDetails,
@@ -309,40 +317,46 @@ export const RouteSheet = ({
                 </View>
             )}
 
-            <View style={styles.sheetActions}>
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    disabled={!canSendToBike}
-                    onPress={onSendToBike}
-                    style={[
-                        styles.sheetPrimary,
-                        {
-                            backgroundColor: canSendToBike ? colors.primary : colors.muted,
-                            flex: 1,
-                        },
-                    ]}
-                >
-                    <MaterialIcons
-                        color={canSendToBike ? colors.primaryForeground : colors.mutedForeground}
-                        name="send"
-                        size={18}
-                    />
-                    <Text
-                        style={[
-                            styles.sheetPrimaryLabel,
-                            { color: canSendToBike ? colors.primaryForeground : colors.mutedForeground },
-                        ]}
-                    >
-                        {canSendToBike ? 'Send to bike' : 'Bike not connected'}
-                    </Text>
-                </TouchableOpacity>
+            {isNavigating ? (
+                <View style={styles.instructionBox}>
+                    <MaterialIcons color={colors.primary} name="turn-right" size={20} />
+                    <View style={styles.instructionText}>
+                        <Text style={[styles.instruction, { color: colors.foreground }]}>
+                            {instruction || 'Follow the route'}
+                        </Text>
+                        {distanceToManeuverLabel ? (
+                            <Text style={[styles.instructionHint, { color: colors.mutedForeground }]}>
+                                {`in ${distanceToManeuverLabel}`}
+                            </Text>
+                        ) : null}
+                    </View>
+                </View>
+            ) : null}
 
-                <IconButton
+            <View style={styles.sheetActions}>
+                <IconLabelButton
+                    accessibilityLabel={isNavigating ? 'Stop the navigation' : 'Start the navigation'}
+                    disabled={!canStart && !isNavigating}
+                    icon={isNavigating ? 'stop' : 'navigation'}
+                    label={isNavigating ? 'Stop' : 'Start'}
+                    onPress={isNavigating ? onStop : onStart}
+                    variant="pill"
+                />
+
+                <IconLabelButton
                     accessibilityLabel="Save route"
                     icon="bookmark-border"
+                    label="Save"
                     onPress={onSave}
+                    variant="pill"
                 />
-                <IconButton accessibilityLabel="Clear route" icon="close" onPress={onClear} />
+                <IconLabelButton
+                    accessibilityLabel="Clear route"
+                    icon="close"
+                    label="Clear"
+                    onPress={onClear}
+                    variant="pill"
+                />
             </View>
 
             <TouchableOpacity
@@ -574,8 +588,26 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: spacing.sm,
         justifyContent: 'center',
+        marginHorizontal: -layout.cardPadding,
         marginTop: spacing.md,
         minHeight: 44,
+        paddingHorizontal: layout.cardPadding,
+    },
+    instruction: {
+        ...typography.body,
+    },
+    instructionBox: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginTop: spacing.md,
+    },
+    instructionHint: {
+        ...typography.caption,
+        marginTop: 2,
+    },
+    instructionText: {
+        flex: 1,
     },
     map: {
         flex: 1,
@@ -644,10 +676,14 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         marginHorizontal: layout.screenPadding,
         overflow: 'hidden',
+        paddingBottom: layout.cardPadding,
+        paddingHorizontal: layout.cardPadding,
+        paddingTop: layout.cardPadding,
     },
     sheetActions: {
         alignItems: 'center',
         flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: spacing.sm,
         marginTop: spacing.md,
     },

@@ -16,9 +16,8 @@ contacted.
 
 ## Icon
 
-The launcher icon follows the family of the original app, a green tile with a grid and
-a white glyph, but the glyph is our own: a scooter. The sources are an svg rendered
-with sharp, the output goes to `src/assets/images`.
+The launcher icon is a motorcycle in the TVS colours: a red tile with a black bike.
+The sources are an svg rendered with sharp, the output goes to `src/assets/images`.
 
 ```sh
 npx expo prebuild --clean    # the native resources need to pick the new assets up
@@ -42,10 +41,11 @@ npx expo prebuild --clean    # the native resources need to pick the new assets 
 - **Photo detection cameras**: the ANSV list of authorised cameras is fetched and
   the operating ones become automatic points to avoid, with the speed the
   authority published and the infractions it declared for each one.
-- **Send the destination to the bike**: the address goes to the cluster over the
-  write characteristic, the same way the original app does it. The cluster routes
-  with its own engine, so the geometry stays on the phone. The rider name and the
-  clock go over too.
+- **Start the navigation**: the address goes to the cluster over the write
+  characteristic and the app keeps it updated with the position, so the bike shows
+  the distance to the next turn, the same way the original app does it. The cluster
+  routes with its own engine, so the geometry stays on the phone. The rider name
+  and the clock go over too.
 - **Arrival time that learns**: the estimate starts from the router and moves
   towards the times this rider actually took on that route, with the reason shown
   next to it.

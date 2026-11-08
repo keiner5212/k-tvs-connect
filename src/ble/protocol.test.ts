@@ -2,6 +2,8 @@ import {
     APACHE_XOR_KEY,
     batteryNibble,
     buildMobileDataPacket,
+    buildNavigationControlPacket,
+    buildNavigationTextPacket,
     buildRiderNamePacket,
     buildTrafficSequencePacket,
     decryptFrame,
@@ -122,5 +124,59 @@ describe('traffic sequence packet', () => {
         expect(packet[2]).toBe(0x00);
         expect(packet[3]).toBe(0x00);
         expect(packet[19]).toBe(0xff);
+    });
+});
+
+describe('navigation packets', () => {
+    const update = {
+        distanceToNextManeuverMeters: 350,
+        timeLeftMinutes: 12,
+        totalDistanceLeftMeters: 4200,
+        pictogramId: 0,
+        navigationOn: true,
+        instruction: 'Gire a la derecha',
+    };
+
+    it('builds the 5A 4E control frame', () => {
+        const packet = decrypt(buildNavigationControlPacket(update));
+
+        expect(packet[0]).toBe(0x5a);
+        expect(packet[1]).toBe(78);
+        // 350 metres does not fit in one byte, so it takes two
+        expect(packet[2]).toBe(1);
+        expect(packet[3]).toBe(94);
+        expect(packet[4]).toBe(0);
+        expect(packet[5]).toBe(12);
+        // 4200 metres as well
+        expect(packet[6]).toBe(16);
+        expect(packet[7]).toBe(104);
+        expect(packet[8]).toBe(0);
+        expect(packet[9]).toBe(1);
+        expect(packet[10]).toBe(1);
+        expect(packet[19]).toBe(0xff);
+    });
+
+    it('carries the instruction in its own frame', () => {
+        const packet = decrypt(buildNavigationTextPacket(update.instruction));
+
+        expect(packet[0]).toBe(0x5b);
+        expect(packet[1]).toBe(79);
+        expect(String.fromCharCode(...packet.subarray(2, 19))).toContain('Gire a la derecha');
+        expect(packet[19]).toBe(0xff);
+    });
+
+    it('keeps a small distance in one byte', () => {
+        const packet = decrypt(
+            buildNavigationControlPacket({ ...update, distanceToNextManeuverMeters: 80 }),
+        );
+
+        expect(packet[2]).toBe(0);
+        expect(packet[3]).toBe(80);
+    });
+
+    it('cuts the instruction at 17 characters', () => {
+        const packet = decrypt(buildNavigationTextPacket('una instruccion muy larga de verdad'));
+
+        expect(String.fromCharCode(...packet.subarray(2, 19))).toHaveLength(17);
     });
 });
