@@ -19,7 +19,8 @@ import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { Place, RootStackParamList, SavedRoute } from '@typings/types';
-import { searchPlaces } from '@services/photon.service';
+import { searchPlaces } from '@services/geocoding.service';
+import { MIN_QUERY_LENGTH } from '@config/geocoding';
 import { deleteRoute, getRoute, listRoutes, renameRoute } from '@services/db/routeRepository';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
 import { layout, spacing, typography } from '@config/theme';
@@ -29,9 +30,7 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 export const PlaceSearchScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
-    const { settings } = useSettingsStore();
     const setDestination = useMapStore((state) => state.setDestination);
-    const position = useLocationStore((state) => state.position);
 
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Place[]>([]);
@@ -39,61 +38,68 @@ export const PlaceSearchScreen = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (query.trim().length < 3) {
+        if (query.trim().length < MIN_QUERY_LENGTH) {
             return;
         }
 
         const timer = setTimeout(() => {
             setSearching(true);
             setError(null);
-            searchPlaces(settings.photonBaseUrl, query, 10, position)
-                .then(setResults)
-                .catch(() => setError('Place search failed. Try another name.'))
+            searchPlaces(query, useLocationStore.getState().position)
+                .then((outcome) => {
+                    if (outcome.ok) {
+                        setResults(outcome.places);
+                        return;
+                    }
+                    setResults([]);
+                    setError(outcome.message);
+                })
+                .catch(() => setError('The search service failed.'))
                 .finally(() => setSearching(false));
-        }, 300);
+        }, 600);
 
         return () => clearTimeout(timer);
-    }, [query, settings.photonBaseUrl, position]);
+    }, [query]);
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <ScreenContainer edges={['bottom']} scroll keyboardShouldPersistTaps="handled">
 
-            <TextField
-                autoCapitalize="words"
-                label="Where to"
-                onChangeText={setQuery}
-                placeholder="Street, neighbourhood or city"
-                value={query}
-            />
-
-            {error ? (
-                <Text style={[styles.error, { color: colors.error }]}>{error}</Text>
-            ) : results.length === 0 && !searching && query.trim().length >= 3 ? (
-                <EmptyState description="Try a different name or address." title="No places found" />
-            ) : null}
-
-            <PlaceSearchList
-                isSearching={searching}
-                onSelect={(index) => {
-                    const place = results[index];
-                    if (place) {
-                        setDestination(place);
-                        navigation.goBack();
-                    }
-                }}
-                results={results}
-            />
-
-            <View style={styles.footer}>
-                <PrimaryButton
-                    disabled={!results.length}
-                    label="Close"
-                    onPress={() => navigation.goBack()}
-                    variant="secondary"
+                <TextField
+                    autoCapitalize="words"
+                    label="Where to"
+                    onChangeText={setQuery}
+                    placeholder="Street, neighbourhood or city"
+                    value={query}
                 />
-            </View>
-        
+
+                {error ? (
+                    <Text style={[styles.error, { color: colors.error }]}>{error}</Text>
+                ) : results.length === 0 && !searching && query.trim().length >= MIN_QUERY_LENGTH ? (
+                    <EmptyState description="Try a different name or address." title="No places found" />
+                ) : null}
+
+                <PlaceSearchList
+                    isSearching={searching}
+                    onSelect={(index) => {
+                        const place = results[index];
+                        if (place) {
+                            setDestination(place);
+                            navigation.goBack();
+                        }
+                    }}
+                    results={results}
+                />
+
+                <View style={styles.footer}>
+                    <PrimaryButton
+                        disabled={!results.length}
+                        label="Close"
+                        onPress={() => navigation.goBack()}
+                        variant="secondary"
+                    />
+                </View>
+
             </ScreenContainer>
         </View>
     );
@@ -128,99 +134,99 @@ export const SavedRoutesScreen = () => {
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <ScreenContainer edges={['bottom']} scroll>
 
-            <Text style={[styles.title, { color: colors.foreground }]}>Saved routes</Text>
+                <Text style={[styles.title, { color: colors.foreground }]}>Saved routes</Text>
 
-            {routes.length === 0 ? (
-                <EmptyState
-                    description="Plan a route on the map and save it to ride it again."
-                    title="No saved routes"
-                />
-            ) : null}
+                {routes.length === 0 ? (
+                    <EmptyState
+                        description="Plan a route on the map and save it to ride it again."
+                        title="No saved routes"
+                    />
+                ) : null}
 
-            {routes.map((route) => (
-                <View key={route.id} style={styles.routeRow}>
-                    {renaming === route.id ? (
-                        <>
-                            <TextField
-                                label="Name"
-                                onChangeText={setDraft}
-                                value={draft}
-                            />
-                            <View style={styles.routeActions}>
+                {routes.map((route) => (
+                    <View key={route.id} style={styles.routeRow}>
+                        {renaming === route.id ? (
+                            <>
+                                <TextField
+                                    label="Name"
+                                    onChangeText={setDraft}
+                                    value={draft}
+                                />
+                                <View style={styles.routeActions}>
+                                    <TouchableOpacity
+                                        accessibilityRole="button"
+                                        onPress={() => void saveRename(route.id)}
+                                        style={styles.routeAction}
+                                    >
+                                        <Text style={[styles.routeActionLabel, { color: colors.primary }]}>
+                                            Save
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        accessibilityRole="button"
+                                        onPress={() => setRenaming(null)}
+                                        style={styles.routeAction}
+                                    >
+                                        <Text
+                                            style={[styles.routeActionLabel, { color: colors.mutedForeground }]}
+                                        >
+                                            Cancel
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        ) : (
+                            <>
                                 <TouchableOpacity
                                     accessibilityRole="button"
-                                    onPress={() => void saveRename(route.id)}
+                                    onPress={() => navigation.navigate('RoutePreview', { routeId: route.id })}
+                                    style={styles.routeMain}
+                                >
+                                    <Text style={[styles.routeName, { color: colors.foreground }]}>
+                                        {route.name}
+                                    </Text>
+                                    <Text style={[styles.routeMeta, { color: colors.mutedForeground }]}>
+                                        {`${formatDistance(route.distanceMeters, 'metric')} · ${formatDuration(route.durationSeconds)} · ${route.avoidPoints.length} avoided`}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    accessibilityLabel={`Rename ${route.name}`}
+                                    accessibilityRole="button"
+                                    onPress={() => {
+                                        setRenaming(route.id);
+                                        setDraft(route.name);
+                                    }}
                                     style={styles.routeAction}
                                 >
                                     <Text style={[styles.routeActionLabel, { color: colors.primary }]}>
-                                        Save
+                                        Rename
                                     </Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
+                                    accessibilityLabel={`Delete ${route.name}`}
                                     accessibilityRole="button"
-                                    onPress={() => setRenaming(null)}
+                                    onPress={() =>
+                                        showConfirm(
+                                            `Delete ${route.name}?`,
+                                            'The route and its avoid points are removed from this device.',
+                                            'Delete',
+                                            () => {
+                                                void deleteRoute(route.id).then(load);
+                                            },
+                                            true,
+                                        )
+                                    }
                                     style={styles.routeAction}
                                 >
-                                    <Text
-                                        style={[styles.routeActionLabel, { color: colors.mutedForeground }]}
-                                    >
-                                        Cancel
+                                    <Text style={[styles.routeActionLabel, { color: colors.error }]}>
+                                        Delete
                                     </Text>
                                 </TouchableOpacity>
-                            </View>
-                        </>
-                    ) : (
-                        <>
-                            <TouchableOpacity
-                                accessibilityRole="button"
-                                onPress={() => navigation.navigate('RoutePreview', { routeId: route.id })}
-                                style={styles.routeMain}
-                            >
-                                <Text style={[styles.routeName, { color: colors.foreground }]}>
-                                    {route.name}
-                                </Text>
-                                <Text style={[styles.routeMeta, { color: colors.mutedForeground }]}>
-                                    {`${formatDistance(route.distanceMeters, 'metric')} · ${formatDuration(route.durationSeconds)} · ${route.avoidPoints.length} avoided`}
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                accessibilityLabel={`Rename ${route.name}`}
-                                accessibilityRole="button"
-                                onPress={() => {
-                                    setRenaming(route.id);
-                                    setDraft(route.name);
-                                }}
-                                style={styles.routeAction}
-                            >
-                                <Text style={[styles.routeActionLabel, { color: colors.primary }]}>
-                                    Rename
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                accessibilityLabel={`Delete ${route.name}`}
-                                accessibilityRole="button"
-                                onPress={() =>
-                                    showConfirm(
-                                        `Delete ${route.name}?`,
-                                        'The route and its avoid points are removed from this device.',
-                                        'Delete',
-                                        () => {
-                                            void deleteRoute(route.id).then(load);
-                                        },
-                                        true,
-                                    )
-                                }
-                                style={styles.routeAction}
-                            >
-                                <Text style={[styles.routeActionLabel, { color: colors.error }]}>
-                                    Delete
-                                </Text>
-                            </TouchableOpacity>
-                        </>
-                    )}
-                </View>
-            ))}
-        
+                            </>
+                        )}
+                    </View>
+                ))}
+
             </ScreenContainer>
         </View>
     );
@@ -244,34 +250,34 @@ export const RoutePreviewScreen = () => {
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <ScreenContainer edges={['bottom']} scroll>
 
-            {saved ? (
-                <>
-                    <Text style={[styles.title, { color: colors.foreground }]}>{saved.name}</Text>
-                    <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                        {`${formatDistance(saved.distanceMeters, 'metric')} · ${formatDuration(saved.durationSeconds)}`}
-                    </Text>
-                    <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                        {`${saved.avoidPoints.length} points to avoid`}
-                    </Text>
+                {saved ? (
+                    <>
+                        <Text style={[styles.title, { color: colors.foreground }]}>{saved.name}</Text>
+                        <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                            {`${formatDistance(saved.distanceMeters, 'metric')} · ${formatDuration(saved.durationSeconds)}`}
+                        </Text>
+                        <Text style={[styles.meta, { color: colors.mutedForeground }]}>
+                            {`${saved.avoidPoints.length} points to avoid`}
+                        </Text>
 
-                    <View style={styles.footer}>
-                        <PrimaryButton
-                            label="Replay this route"
-                            onPress={() => {
-                                setReplayRoute({
-                                    geometry: saved.geometry,
-                                    distanceMeters: saved.distanceMeters,
-                                    durationSeconds: saved.durationSeconds,
-                                });
-                                navigation.navigate('Main');
-                            }}
-                        />
-                    </View>
-                </>
-            ) : (
-                <EmptyState description="This route is no longer saved." title="Not found" />
-            )}
-        
+                        <View style={styles.footer}>
+                            <PrimaryButton
+                                label="Replay this route"
+                                onPress={() => {
+                                    setReplayRoute({
+                                        geometry: saved.geometry,
+                                        distanceMeters: saved.distanceMeters,
+                                        durationSeconds: saved.durationSeconds,
+                                    });
+                                    navigation.navigate('Main');
+                                }}
+                            />
+                        </View>
+                    </>
+                ) : (
+                    <EmptyState description="This route is no longer saved." title="Not found" />
+                )}
+
             </ScreenContainer>
         </View>
     );

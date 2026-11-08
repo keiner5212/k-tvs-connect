@@ -192,7 +192,6 @@ export interface AppSettings {
     ansvPublishedAt: number | null;
     overspeedLimitKmh: number;
     mapStyleUrl: string;
-    photonBaseUrl: string;
     valhallaBaseUrl: string;
     saveTracks: boolean;
     pinEnabled: boolean;

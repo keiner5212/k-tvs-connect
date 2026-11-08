@@ -454,6 +454,7 @@ export const PlaceSearchList = ({ results, isSearching, onSelect }: PlaceSearchL
                     ) : null}
                 </TouchableOpacity>
             ))}
+            <Text style={[styles.placeAttribution, { color: colors.mutedForeground }]}>Google Maps</Text>
         </View>
     );
 };
@@ -639,6 +640,10 @@ const styles = StyleSheet.create({
     placeAddress: {
         ...typography.caption,
         marginTop: spacing.xs,
+    },
+    placeAttribution: {
+        ...typography.caption,
+        marginTop: spacing.sm,
     },
     placeName: {
         ...typography.body,

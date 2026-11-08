@@ -17,29 +17,29 @@ const PRIVATE_HOST_PATTERN = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d
 const lastRequestAt = new Map<string, number>();
 
 const byteLength = (text: string): number => {
-  let bytes = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    if (code < 0x80) {
-      bytes += 1;
-    } else if (code < 0x800) {
-      bytes += 2;
-    } else if (code >= 0xd800 && code <= 0xdbff) {
-      bytes += 4;
-      index += 1;
-    } else {
-      bytes += 3;
+    let bytes = 0;
+    for (let index = 0; index < text.length; index += 1) {
+        const code = text.charCodeAt(index);
+        if (code < 0x80) {
+            bytes += 1;
+        } else if (code < 0x800) {
+            bytes += 2;
+        } else if (code >= 0xd800 && code <= 0xdbff) {
+            bytes += 4;
+            index += 1;
+        } else {
+            bytes += 3;
+        }
     }
-  }
-  return bytes;
+    return bytes;
 };
 
 const readHeaders = (response: Response): Record<string, string> => {
-  const headers: Record<string, string> = {};
-  response.headers.forEach((value, key) => {
-    headers[key.toLowerCase()] = value;
-  });
-  return headers;
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+    });
+    return headers;
 };
 
 const isPrivateHost = (host: string): boolean => PRIVATE_HOST_PATTERN.test(host);
@@ -74,6 +74,16 @@ export interface HttpOptions {
     timeoutMs?: number;
     maxBytes?: number;
     headers?: Record<string, string>;
+}
+
+export class HttpError extends Error {
+    readonly status: number;
+
+    constructor(status: number, message: string) {
+        super(message);
+        this.name = 'HttpError';
+        this.status = status;
+    }
 }
 
 export interface HttpResult<T> {
@@ -150,7 +160,7 @@ export const httpGetJson = async <T>(
         });
 
         if (!response.ok) {
-            throw new Error(`request failed with status ${response.status}`);
+            throw new HttpError(response.status, `request failed with status ${response.status}`);
         }
 
         return {
@@ -244,7 +254,7 @@ export const httpPostJson = async <T>(
         });
 
         if (!response.ok) {
-            throw new Error(`request failed with status ${response.status}`);
+            throw new HttpError(response.status, `request failed with status ${response.status}`);
         }
 
         return {

@@ -33,7 +33,6 @@ export const SettingsScreen = () => {
     const setAvoidEnabledGlobally = useCameraStore((state) => state.setAvoidEnabledGlobally);
     const setRadiusMeters = useCameraStore((state) => state.setRadiusMeters);
 
-    const [photonUrl, setPhotonUrl] = useState(settings.photonBaseUrl);
     const [valhallaUrl, setValhallaUrl] = useState(settings.valhallaBaseUrl);
     const [styleUrl, setStyleUrl] = useState(settings.mapStyleUrl);
     const [urlError, setUrlError] = useState<string | null>(null);
@@ -43,18 +42,17 @@ export const SettingsScreen = () => {
     }, [load]);
 
     useEffect(() => {
-        setPhotonUrl(settings.photonBaseUrl);
         setValhallaUrl(settings.valhallaBaseUrl);
         setStyleUrl(settings.mapStyleUrl);
     }, [settings]);
 
     const saveUrls = () => {
-        if (!isAllowedBaseUrl(photonUrl) || !isAllowedBaseUrl(valhallaUrl)) {
+        if (!isAllowedBaseUrl(valhallaUrl)) {
             setUrlError('Enter a full URL starting with http:// or https://');
             return;
         }
         setUrlError(null);
-        void update({ photonBaseUrl: photonUrl, valhallaBaseUrl: valhallaUrl, mapStyleUrl: styleUrl });
+        void update({ valhallaBaseUrl: valhallaUrl, mapStyleUrl: styleUrl });
     };
 
     return (
@@ -144,22 +142,17 @@ export const SettingsScreen = () => {
                 </SettingsSection>
 
                 <SettingsSection
-                    title="Free services"
-                    footer="Point these to your own Docker instance to leave the public services completely."
+                    title="Routing"
+                    footer="Valhalla answers the route. Point this to your own instance to leave the public service completely."
                 >
                     <View style={styles.padded}>
-                        <TextField
-                            label="Geocoding url"
-                            onChangeText={setPhotonUrl}
-                            value={photonUrl}
-                        />
                         <TextField
                             label="Routing url"
                             onChangeText={setValhallaUrl}
                             value={valhallaUrl}
                         />
                     </View>
-                    <SettingsRow label="Save service urls" onPress={saveUrls} />
+                    <SettingsRow label="Save service url" onPress={saveUrls} />
                 </SettingsSection>
 
                 <SettingsSection title="Privacy">

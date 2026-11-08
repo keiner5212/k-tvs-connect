@@ -9,7 +9,6 @@ const DEFAULTS: AppSettings = {
     ansvPublishedAt: null,
     overspeedLimitKmh: 80,
     mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
-    photonBaseUrl: 'https://photon.komoot.io/api',
     valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
     saveTracks: false,
     pinEnabled: false,
@@ -43,11 +42,16 @@ export const getSettings = async (): Promise<AppSettings> => {
             ? Number(stored.overspeedLimitKmh)
             : DEFAULTS.overspeedLimitKmh,
         mapStyleUrl: stored.mapStyleUrl ?? DEFAULTS.mapStyleUrl,
-        photonBaseUrl: stored.photonBaseUrl ?? DEFAULTS.photonBaseUrl,
         valhallaBaseUrl: stored.valhallaBaseUrl ?? DEFAULTS.valhallaBaseUrl,
         saveTracks: stored.saveTracks ? stored.saveTracks === 'true' : DEFAULTS.saveTracks,
         pinEnabled: stored.pinEnabled ? stored.pinEnabled === 'true' : DEFAULTS.pinEnabled,
     };
+};
+
+export const getSetting = async (key: string): Promise<string | null> => {
+    const db = getDatabase();
+    const row = await db.getFirstAsync<SettingRow>('SELECT value FROM settings WHERE key = ?', key);
+    return row?.value ?? null;
 };
 
 export const setSetting = async (key: string, value: string): Promise<void> => {

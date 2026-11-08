@@ -19,7 +19,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         ansvPublishedAt: null,
         overspeedLimitKmh: 80,
         mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
-        photonBaseUrl: 'https://photon.komoot.io/api',
         valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
         saveTracks: false,
         pinEnabled: false,

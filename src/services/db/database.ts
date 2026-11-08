@@ -116,6 +116,17 @@ CREATE TABLE IF NOT EXISTS route_observations (
 CREATE INDEX IF NOT EXISTS idx_route_observations_key
   ON route_observations (destination_key, origin_anchor_id, observed_at);
 
+CREATE TABLE IF NOT EXISTS geocode_cache (
+  cache_key TEXT PRIMARY KEY NOT NULL,
+  query TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  results TEXT NOT NULL,
+  fetched_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_geocode_cache_expiry ON geocode_cache (expires_at);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL
