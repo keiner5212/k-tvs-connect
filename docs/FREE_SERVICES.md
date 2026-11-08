@@ -112,8 +112,9 @@ things that matter here:
   `use_highways` only nudges motorway and trunk, so a secondary avenue can
   still be the fastest path and match the short route. The safe request asks
   for two alternates and keeps one with at least 12 points more primary or
-  trunk, as long as it is within 1.7 times the length and does not add barrio
-  streets. `shortest`, and `use_distance` above 0.6, dive into residential
+  trunk. A small gain stays within 1.7 times the length. A jump of 40 points
+  may stretch to 2.5 times when the extra distance is under 5 km. It does not
+  add barrio streets. `shortest`, and `use_distance` above 0.6, dive into residential
   streets, so they are not used.
 - `exclude_polygons` at the root of the request, so a marked point is excluded
   by the engine itself. No polyline inspection and no detour waypoint needed on

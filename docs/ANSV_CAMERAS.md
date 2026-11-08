@@ -107,9 +107,11 @@ A camera that watches both directions of its street forbids both of those
 directions and still allows a crossing. A camera with no published sense is
 closed in every direction.
 
-The route is computed, then read. Every stretch within 40 m of a camera is
-compared with the direction that camera looks. A stretch within 60 degrees of
-that direction is the rider with the camera behind them. The router is asked
+The route is computed, then read. Every stretch within 65 m of a camera is
+compared with the direction that camera looks. The published point can sit
+about 50 m short of the corner, and a 40 m corridor missed a left turn onto
+the watched direction. A stretch within 60 degrees of that direction is the
+rider with the camera behind them. The router is asked
 again with those stretches banned and the opposite direction left open, and
 this repeats until the route has none of those stretches. The ban is a cost
 factor on the exact edges the route rode, drawn in that one direction, so a

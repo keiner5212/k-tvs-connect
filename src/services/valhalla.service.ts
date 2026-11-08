@@ -89,7 +89,8 @@ const DIRECTED_AVOID_FACTOR = 1000000;
 /**
  * Short cuts the barrio on secondary and tertiary streets. Safe leaves
  * hierarchy pruning on, so a mid-route alley is not searched, then keeps an
- * alternate with more primary and trunk when that path stays within 1.7x.
+ * alternate with more primary and trunk. A small gain stays within 1.7x. A
+ * jump of 40 points may stretch to 2.5x when the extra distance is under 5 km.
  * use_highways only nudges motorway and trunk, so it does not pull a trip off
  * a secondary avenue by itself.
  * use_distance above 0.6, and shortest, were measured to dive into residential.
@@ -98,8 +99,11 @@ const MAIN_ROADS = new Set(['motorway', 'trunk', 'primary']);
 const SEMI_ROADS = new Set(['secondary', 'tertiary', 'unclassified']);
 const MAIN_ROAD_ENOUGH = 0.7;
 const MAIN_ROAD_GAIN = 0.12;
+const MAIN_ROAD_STRONG_GAIN = 0.4;
 const SMALL_ROAD_SLACK = 0.08;
 const MAIN_ROAD_STRETCH = 1.7;
+const MAIN_ROAD_STRETCH_STRONG = 2.5;
+const MAIN_ROAD_EXTRA_METERS = 5000;
 const ALTERNATE_ROUTES = 2;
 
 const costingOptionsFor = (costing: Costing): Record<string, unknown> | null => {
@@ -229,7 +233,22 @@ const roadShares = async (
     }
 };
 
-// Fastest auto path can be the secondary avenue. Keep a main-road alternate inside 1.7x.
+const allowsStretch = (meters: number, firstMeters: number, mainGain: number): boolean => {
+    if (firstMeters <= 0) {
+        return true;
+    }
+    const ratio = meters / firstMeters;
+    if (ratio <= MAIN_ROAD_STRETCH) {
+        return true;
+    }
+    return (
+        mainGain >= MAIN_ROAD_STRONG_GAIN &&
+        ratio <= MAIN_ROAD_STRETCH_STRONG &&
+        meters - firstMeters <= MAIN_ROAD_EXTRA_METERS
+    );
+};
+
+// Fastest auto path can be the same secondary avenue. Keep a main-road alternate.
 const preferMainRoads = async (
     baseUrl: string,
     body: ValhallaResponse,
@@ -248,14 +267,15 @@ const preferMainRoads = async (
     for (const alternate of alternates) {
         const shape = tripShape(alternate.trip);
         const meters = pathLengthMeters(shape);
-        if (firstMeters > 0 && meters > firstMeters * MAIN_ROAD_STRETCH) {
-            continue;
-        }
         const shares = await roadShares(baseUrl, shape, httpOptions);
         if (!shares) {
             continue;
         }
-        if (shares.main < firstShares.main + MAIN_ROAD_GAIN) {
+        const gain = shares.main - firstShares.main;
+        if (!allowsStretch(meters, firstMeters, gain)) {
+            continue;
+        }
+        if (gain < MAIN_ROAD_GAIN) {
             continue;
         }
         if (shares.small > firstShares.small + SMALL_ROAD_SLACK) {

@@ -17,8 +17,8 @@ import { decodePolyline, encodePolyline } from '@utils/polyline';
 import { logger } from '@utils/logger';
 const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const NEARBY_RADIUS_METERS = 5000;
-/** a camera farther than this from the route is not on it */
-const ROUTE_CORRIDOR_METERS = 40;
+// Published point sits ~50 m short of the corner. 40 m missed the left turn there.
+const ROUTE_CORRIDOR_METERS = 65;
 
 /** The list of cameras only changes when the rider moves this far. */
 const CAMERA_RELOAD_METERS = 50;
