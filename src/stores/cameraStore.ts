@@ -33,6 +33,7 @@ interface CameraState {
     error: string | null;
     avoidEnabled: boolean;
     radiusMeters: number;
+    stale: boolean;
     routeSplit: CameraRefreshResult;
     load: () => Promise<void>;
     refresh: (force?: boolean) => Promise<void>;
@@ -66,6 +67,7 @@ export const useCameraStore = create<CameraState>((set, get) => ({
     error: null,
     avoidEnabled: true,
     radiusMeters: NEARBY_RADIUS_METERS,
+    stale: false,
     routeSplit: { sent: 0, leftOut: 0 },
 
     load: async () => {
@@ -101,6 +103,9 @@ export const useCameraStore = create<CameraState>((set, get) => ({
             fetchedAt: settings.ansvFetchedAt,
             avoidEnabled: settings.cameraAvoidEnabled,
             radiusMeters: settings.cameraRadiusMeters,
+            stale:
+                settings.ansvFetchedAt !== null &&
+                Date.now() - settings.ansvFetchedAt > REFRESH_INTERVAL_MS,
         });
     },
 

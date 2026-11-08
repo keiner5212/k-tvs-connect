@@ -11,6 +11,9 @@ import {
     UserTrackingMode,
 } from '@maplibre/maplibre-react-native';
 
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+
+import { IconButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
 import { decodePolyline } from '@utils/polyline';
@@ -187,63 +190,170 @@ export const MapCanvas = ({
     );
 };
 
-interface RoutePreviewCardProps {
-    distanceMeters: number;
+interface RouteSheetProps {
     distanceLabel: string;
     durationLabel: string;
+    arrivalLabel: string | null;
+    destinationName: string | null;
+    cameraCount: number;
+    avoidPointCount: number;
     isComputing: boolean;
-    error?: string | null;
-    onGo: () => void;
+    canSendToBike: boolean;
+    onSendToBike: () => void;
     onSave: () => void;
     onClear: () => void;
+    onOpenDetails: () => void;
+    onChooseDestination: () => void;
 }
 
-export const RoutePreviewCard = ({
-    distanceMeters,
+/**
+ * The sheet at the bottom of the map. It reads from the top down, so the least
+ * important line is first and the arrival time is the last thing the rider sees
+ * before the thumb.
+ */
+export const RouteSheet = ({
     distanceLabel,
     durationLabel,
+    arrivalLabel,
+    destinationName,
+    cameraCount,
+    avoidPointCount,
     isComputing,
-    error,
-    onGo,
+    canSendToBike,
+    onSendToBike,
     onSave,
     onClear,
-}: RoutePreviewCardProps) => {
+    onOpenDetails,
+    onChooseDestination,
+}: RouteSheetProps) => {
     const { colors } = useTheme();
 
+    if (!destinationName) {
+        return (
+            <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.sheetTitle, { color: colors.foreground }]}>No destination yet</Text>
+                <Text style={[styles.sheetHint, { color: colors.mutedForeground }]}>
+                    Search for a place to plan a route.
+                </Text>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={onChooseDestination}
+                    style={[styles.sheetPrimary, { backgroundColor: colors.primary }]}
+                >
+                    <Text style={[styles.sheetPrimaryLabel, { color: colors.primaryForeground }]}>
+                        Choose a destination
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
     return (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            {cameraCount > 0 || avoidPointCount > 0 ? (
+                <View style={styles.countsRow}>
+                    {cameraCount > 0 ? (
+                        <View style={styles.countItem}>
+                            <MaterialIcons color={colors.mutedForeground} name="videocam" size={14} />
+                            <Text style={[styles.countLabel, { color: colors.mutedForeground }]}>
+                                {`${cameraCount} camera${cameraCount === 1 ? '' : 's'} avoided`}
+                            </Text>
+                        </View>
+                    ) : null}
+                    {avoidPointCount > 0 ? (
+                        <View style={styles.countItem}>
+                            <MaterialIcons
+                                color={colors.mutedForeground}
+                                name="add-location-alt"
+                                size={14}
+                            />
+                            <Text style={[styles.countLabel, { color: colors.mutedForeground }]}>
+                                {`${avoidPointCount} point${avoidPointCount === 1 ? '' : 's'} to avoid`}
+                            </Text>
+                        </View>
+                    ) : null}
+                </View>
+            ) : null}
+
+            <View style={styles.destinationRow}>
+                <MaterialIcons color={colors.mutedForeground} name="place" size={20} />
+                <Text style={[styles.destinationName, { color: colors.foreground }]} numberOfLines={1}>
+                    {destinationName}
+                </Text>
+            </View>
+
             {isComputing ? (
-                <Text style={[styles.computing, { color: colors.mutedForeground }]}>Computing route...</Text>
+                <Text style={[styles.sheetHint, { color: colors.mutedForeground }]}>
+                    Computing route...
+                </Text>
             ) : (
-                <View style={styles.summaryRow}>
-                    <Text style={[styles.distance, { color: colors.foreground }]}>{distanceLabel}</Text>
-                    <Text style={[styles.duration, { color: colors.mutedForeground }]}>{durationLabel}</Text>
+                <View style={styles.metricsRow}>
+                    <View style={styles.metric}>
+                        <MaterialIcons color={colors.mutedForeground} name="straighten" size={16} />
+                        <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                            {distanceLabel}
+                        </Text>
+                    </View>
+                    <View style={styles.metric}>
+                        <MaterialIcons color={colors.mutedForeground} name="schedule" size={16} />
+                        <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                            {durationLabel}
+                        </Text>
+                    </View>
+                    <View style={styles.metric}>
+                        <MaterialIcons color={colors.mutedForeground} name="flag" size={16} />
+                        <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                            {arrivalLabel ? `Arrives ${arrivalLabel}` : 'Arrival unknown'}
+                        </Text>
+                    </View>
                 </View>
             )}
 
-            {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
+            <View style={styles.sheetActions}>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    disabled={!canSendToBike}
+                    onPress={onSendToBike}
+                    style={[
+                        styles.sheetPrimary,
+                        {
+                            backgroundColor: canSendToBike ? colors.primary : colors.muted,
+                            flex: 1,
+                        },
+                    ]}
+                >
+                    <MaterialIcons
+                        color={canSendToBike ? colors.primaryForeground : colors.mutedForeground}
+                        name="send"
+                        size={18}
+                    />
+                    <Text
+                        style={[
+                            styles.sheetPrimaryLabel,
+                            { color: canSendToBike ? colors.primaryForeground : colors.mutedForeground },
+                        ]}
+                    >
+                        {canSendToBike ? 'Send to bike' : 'Bike not connected'}
+                    </Text>
+                </TouchableOpacity>
 
-            <View style={styles.actions}>
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    disabled={isComputing || !distanceMeters}
-                    onPress={onGo}
-                    style={[styles.action, { backgroundColor: colors.primary }]}
-                >
-                    <Text style={[styles.actionLabel, { color: colors.primaryForeground }]}>Go</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    disabled={isComputing || !distanceMeters}
+                <IconButton
+                    accessibilityLabel="Save route"
+                    icon="bookmark-border"
                     onPress={onSave}
-                    style={[styles.action, { backgroundColor: colors.secondary }]}
-                >
-                    <Text style={[styles.actionLabel, { color: colors.secondaryForeground }]}>Save</Text>
-                </TouchableOpacity>
-                <TouchableOpacity accessibilityRole="button" onPress={onClear} style={styles.action}>
-                    <Text style={[styles.actionLabel, { color: colors.primary }]}>Clear</Text>
-                </TouchableOpacity>
+                />
+                <IconButton accessibilityLabel="Clear route" icon="close" onPress={onClear} />
             </View>
+
+            <TouchableOpacity
+                accessibilityLabel="Open route details"
+                accessibilityRole="button"
+                onPress={onOpenDetails}
+                style={[styles.expandRow, { borderTopColor: colors.border }]}
+            >
+                <MaterialIcons color={colors.primary} name="fullscreen" size={20} />
+                <Text style={[styles.expandLabel, { color: colors.primary }]}>Route details</Text>
+            </TouchableOpacity>
         </View>
     );
 };
@@ -335,21 +445,6 @@ export const PlaceSearchList = ({ results, isSearching, onSelect }: PlaceSearchL
 };
 
 const styles = StyleSheet.create({
-    action: {
-        alignItems: 'center',
-        borderRadius: radii.md,
-        flex: 1,
-        justifyContent: 'center',
-        minHeight: layout.buttonHeight,
-    },
-    actionLabel: {
-        ...typography.button,
-    },
-    actions: {
-        flexDirection: 'row',
-        gap: spacing.sm,
-        marginTop: spacing.md,
-    },
     avoidBadge: {
         alignItems: 'center',
         borderRadius: radii.full,
@@ -448,21 +543,55 @@ const styles = StyleSheet.create({
     clearAll: {
         ...typography.caption,
     },
-    computing: {
-        ...typography.body,
+    countItem: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.xs,
     },
-    distance: {
-        ...typography.readout,
-    },
-    duration: {
-        ...typography.body,
-    },
-    error: {
+    countLabel: {
         ...typography.caption,
+    },
+    countsRow: {
+        flexDirection: 'row',
+        gap: spacing.lg,
+    },
+    destinationName: {
+        ...typography.subheading,
+        flex: 1,
+    },
+    destinationRow: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.sm,
         marginTop: spacing.sm,
+    },
+    expandLabel: {
+        ...typography.label,
+    },
+    expandRow: {
+        alignItems: 'center',
+        borderTopWidth: StyleSheet.hairlineWidth,
+        flexDirection: 'row',
+        gap: spacing.sm,
+        justifyContent: 'center',
+        marginTop: spacing.md,
+        minHeight: 44,
     },
     map: {
         flex: 1,
+    },
+    metric: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.xs,
+    },
+    metricValue: {
+        ...typography.readout,
+    },
+    metricsRow: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.md,
     },
     pin: {
         alignItems: 'center',
@@ -510,9 +639,35 @@ const styles = StyleSheet.create({
         ...typography.body,
         padding: layout.cardPadding,
     },
-    summaryRow: {
-        alignItems: 'baseline',
+    sheet: {
+        borderRadius: radii.xl,
+        borderWidth: 1,
+        marginHorizontal: layout.screenPadding,
+        overflow: 'hidden',
+    },
+    sheetActions: {
+        alignItems: 'center',
         flexDirection: 'row',
-        gap: spacing.md,
+        gap: spacing.sm,
+        marginTop: spacing.md,
+    },
+    sheetHint: {
+        ...typography.body,
+        marginTop: spacing.xs,
+    },
+    sheetPrimary: {
+        alignItems: 'center',
+        borderRadius: radii.md,
+        flexDirection: 'row',
+        gap: spacing.sm,
+        justifyContent: 'center',
+        minHeight: 44,
+        paddingHorizontal: spacing.md,
+    },
+    sheetPrimaryLabel: {
+        ...typography.label,
+    },
+    sheetTitle: {
+        ...typography.subheading,
     },
 });

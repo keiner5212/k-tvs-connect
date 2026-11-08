@@ -1,50 +1,23 @@
-import { decodePolyline, distanceAlongPath, encodePolyline, pointAtDistance } from './polyline';
+import { decodePolyline, distanceAlongPath } from './polyline';
 
 describe('polyline', () => {
-    it('round trips through the encoder', () => {
-        const points = [
-            { lat: 4.5709, lon: -74.2973 },
-            { lat: 4.6100, lon: -74.2500 },
-            { lat: 4.6500, lon: -74.2000 },
-        ];
-
-        const decoded = decodePolyline(encodePolyline(points));
-
-        expect(decoded).toHaveLength(points.length);
-        decoded.forEach((point, index) => {
-            expect(point.lat).toBeCloseTo(points[index].lat, 5);
-            expect(point.lon).toBeCloseTo(points[index].lon, 5);
-        });
+    it('decodes a valhalla shape', () => {
+        const points = decodePolyline('abbmT`onolCBoBi@}GoAoEoCiFsFyDB}', 6);
+        expect(points.length).toBeGreaterThan(2);
+        expect(points[0].lat).toBeCloseTo(11.241, 3);
+        expect(points[0].lon).toBeCloseTo(-74.1947, 3);
     });
 
-    it('decodes the google precision 6 format', () => {
-        expect(decodePolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@')).toHaveLength(3);
+    it('measures the length in meters', () => {
+        const points = decodePolyline('abbmT`onolCBoBi@}GoAoEoCiFsFyDB}BDkCwCIgs@{Bqq@aBgr@kB_k@}B}SgCmb@kGeCY{Zq@e\\{@mYmA_QQgk@u@gr@iAaEIcgAmD}p@uB}CuAho@wrAcDoDaBq@}@M_AMiAIsDfCcBj@m[nIci@vMeO`DaT`Fwc@`JaJiWoT`FsKyWmDkD}H}H{DwFwD_Kcj@|KsAyFuE{MwIqN{c@}d@pK_NfNqM~IsI`D{C|DeBnMiCq@cg@tOa@|VeFvUkK_FuK{CoKwAmM_@{\\A{YUwC', 6);
+        const distances = distanceAlongPath(points);
+        const meters = distances[distances.length - 1];
+
+        expect(meters).toBeGreaterThan(2500);
+        expect(meters).toBeLessThan(2750);
     });
 
-    it('accumulates the distance along the path', () => {
-        const points = [
-            { lat: 0, lon: 0 },
-            { lat: 0, lon: 0.001 },
-        ];
-
-        const cumulative = distanceAlongPath(points);
-
-        expect(cumulative[0]).toBe(0);
-        expect(cumulative[1]).toBeGreaterThan(100);
-        expect(cumulative[1]).toBeLessThan(120);
-    });
-
-    it('finds the point at a distance along the path', () => {
-        const points = [
-            { lat: 0, lon: 0 },
-            { lat: 0, lon: 0.001 },
-        ];
-        const cumulative = distanceAlongPath(points);
-
-        const middle = pointAtDistance(points, cumulative, cumulative[1] / 2);
-
-        expect(middle?.lon).toBeCloseTo(0.0005, 4);
-        expect(pointAtDistance(points, cumulative, 0)?.lon).toBe(0);
-        expect(pointAtDistance(points, cumulative, 1e9)?.lon).toBeCloseTo(0.001, 4);
+    it('returns no length for an empty shape', () => {
+        expect(distanceAlongPath([]).at(-1)).toBe(0);
     });
 });

@@ -26,7 +26,7 @@ npx expo prebuild --clean    # the native resources need to pick the new assets 
 
 ## Features
 
-- **Garage** with full CRUD: add a scooter by scanning for it or by typing its
+- **Garage** with full CRUD: add a bike by scanning for it or by typing its
   bluetooth address, edit the name, model and frame number, delete it, pick the
   active one. A duplicate address is rejected.
 - **Connection** that reconnects on its own while the bike is on, with a scan
@@ -39,8 +39,20 @@ npx expo prebuild --clean    # the native resources need to pick the new assets 
   for a scooter profile, points to avoid that are stored on the device and that the
   routing engine excludes by itself, and saved routes that can be renamed,
   deleted and replayed along their line.
-- **Settings** for units, the overspeed limit, the map style, the service urls,
-  a local pin, data export and data deletion.
+- **Photo detection cameras**: the ANSV list of authorised cameras is fetched and
+  the operating ones become automatic points to avoid, with the speed the
+  authority published and the infractions it declared for each one.
+- **Send the destination to the bike**: the address goes to the cluster over the
+  write characteristic, the same way the original app does it. The cluster routes
+  with its own engine, so the geometry stays on the phone. The rider name and the
+  clock go over too.
+- **Arrival time that learns**: the estimate starts from the router and moves
+  towards the times this rider actually took on that route, with the reason shown
+  next to it.
+- **Shared places**: a location shared from another map app opens the route to
+  that exact point from where the rider is.
+- **Settings** for units, the overspeed limit, the map style, the camera radius,
+  the service urls, a local pin, data export and data deletion.
 
 ## Run it
 
@@ -80,6 +92,9 @@ leaves the machine any more.
 | [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Folder map and boundaries |
 | [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md) | The scooter protocol and the port in `src/ble` |
 | [docs/FREE_SERVICES.md](docs/FREE_SERVICES.md) | Tiles, search and routing without a key |
+| [docs/ANSV_CAMERAS.md](docs/ANSV_CAMERAS.md) | The camera dataset, the active rule and what the app shows |
+| [docs/ARRIVAL_ESTIMATE.md](docs/ARRIVAL_ESTIMATE.md) | The arrival estimate and how it learns |
+| [docs/PENDING_DEVICE_TESTS.md](docs/PENDING_DEVICE_TESTS.md) | What still needs the phone and the bike |
 | [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md) | What the original app does and how it was found |
 
 Conventions live in [AGENTS.md](AGENTS.md).

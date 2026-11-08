@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ErrorBoundary from '@components/ErrorBoundary';
@@ -9,6 +9,9 @@ import { useCameraStore } from '@stores/cameraStore';
 import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { bindRideTracker, rideTracker } from '@services/rideTracker';
+import { parseSharedLocation } from '@services/sharedLocation';
+import { useLocationStore } from '@stores/locationStore';
+import { useMapStore } from '@stores/mapStore';
 import '@/config/i18n';
 
 export default function App() {
@@ -35,6 +38,40 @@ export default function App() {
     }, []);
 
     useEffect(() => {
+        /**
+         * A place shared from another map app becomes the destination and the
+         * route is computed from where the rider is right now.
+         */
+        const handleUrl = async (url: string | null) => {
+            if (!url) {
+                return;
+            }
+
+            const place = parseSharedLocation(url);
+            if (!place) {
+                return;
+            }
+
+            const { setDestination, compute } = useMapStore.getState();
+            setDestination({
+                id: `shared-${place.latitude}-${place.longitude}`,
+                name: place.name ?? 'Shared place',
+                address: place.name ?? `${place.latitude}, ${place.longitude}`,
+                latitude: place.latitude,
+                longitude: place.longitude,
+            });
+
+            const position = useLocationStore.getState().position;
+            if (position) {
+                await compute(position[0], position[1]);
+            }
+        };
+
+        void Linking.getInitialURL().then(handleUrl);
+        const subscription = Linking.addEventListener('url', (event) => {
+            void handleUrl(event.url);
+        });
+
         const bootstrap = async () => {
             try {
                 await openDatabase();
@@ -48,6 +85,10 @@ export default function App() {
             void useCameraStore.getState().refresh();
         };
         void bootstrap();
+
+        return () => {
+            subscription.remove();
+        };
     }, []);
 
     if (!ready) {

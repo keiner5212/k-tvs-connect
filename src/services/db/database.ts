@@ -80,6 +80,42 @@ CREATE TABLE IF NOT EXISTS camera_preferences (
   avoid_enabled INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS route_origins (
+  id TEXT PRIMARY KEY NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS route_contexts (
+  id TEXT PRIMARY KEY NOT NULL,
+  destination_key TEXT NOT NULL,
+  origin_anchor_id TEXT NOT NULL,
+  origin_lat REAL NOT NULL,
+  origin_lon REAL NOT NULL,
+  destination_lat REAL NOT NULL,
+  destination_lon REAL NOT NULL,
+  router_seconds REAL NOT NULL,
+  router_meters REAL NOT NULL,
+  computed_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS route_observations (
+  id TEXT PRIMARY KEY NOT NULL,
+  destination_key TEXT NOT NULL,
+  origin_anchor_id TEXT NOT NULL,
+  observed_at INTEGER NOT NULL,
+  observed_seconds REAL NOT NULL,
+  router_seconds REAL NOT NULL,
+  observed_meters REAL NOT NULL,
+  router_meters REAL NOT NULL,
+  confidence REAL NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_route_observations_key
+  ON route_observations (destination_key, origin_anchor_id, observed_at);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL

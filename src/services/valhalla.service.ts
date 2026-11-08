@@ -1,5 +1,20 @@
 import { AvoidPoint, RouteLeg, RouteResult } from '@typings/types';
+import { decodePolyline, distanceAlongPath } from '@utils/polyline';
 import { httpPostJson } from './http.service';
+
+/**
+ * The router reports the summary length in kilometres whatever the units
+ * parameter says, so the distance comes from the encoded shape, which is always
+ * in metres.
+ */
+const pathLengthMeters = (shape: string): number => {
+    if (!shape) {
+        return 0;
+    }
+    const points = decodePolyline(shape, 6);
+    const distances = distanceAlongPath(points);
+    return distances.length > 0 ? distances[distances.length - 1] : 0;
+};
 
 export type Costing = 'motor_scooter' | 'motorcycle' | 'bicycle' | 'auto';
 
@@ -59,6 +74,7 @@ export const computeRoute = async (
             { lat: request.destinationLat, lon: request.destinationLon },
         ],
         costing: request.costing ?? 'motor_scooter',
+        language: 'es-ES',
         directions_options: { units: 'kilometers', language: 'es-ES' },
         units: 'kilometers',
     };
@@ -78,17 +94,21 @@ export const computeRoute = async (
         maxBytes: 5 * 1024 * 1024,
     });
 
-    const legs: RouteLeg[] = (body.trip?.legs ?? []).map((leg) => ({
-        distanceMeters: leg.summary?.length ?? 0,
-        durationSeconds: leg.summary?.time ?? 0,
-        maneuver: leg.maneuvers?.[0]?.instruction ?? '',
-        instruction: leg.maneuvers?.map((maneuver) => maneuver.instruction).join(' ') ?? '',
-    }));
+    const legs: RouteLeg[] = (body.trip?.legs ?? []).map((leg) => {
+        const legMeters = pathLengthMeters(leg.shape);
+        return {
+            distanceMeters: legMeters > 0 ? legMeters : (leg.summary?.length ?? 0) * 1000,
+            durationSeconds: leg.summary?.time ?? 0,
+            maneuver: leg.maneuvers?.[0]?.instruction ?? '',
+            instruction: leg.maneuvers?.map((maneuver) => maneuver.instruction).join(' ') ?? '',
+        };
+    });
 
     const geometry = (body.trip?.legs ?? []).map((leg) => leg.shape).join('');
+    const routeMeters = pathLengthMeters(geometry);
 
     return {
-        distanceMeters: body.trip?.summary?.length ?? 0,
+        distanceMeters: routeMeters > 0 ? routeMeters : (body.trip?.summary?.length ?? 0) * 1000,
         durationSeconds: body.trip?.summary?.time ?? 0,
         geometry,
         legs,

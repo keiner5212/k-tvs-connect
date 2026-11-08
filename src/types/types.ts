@@ -155,6 +155,8 @@ export interface Place {
     address: string;
     latitude: number;
     longitude: number;
+    countryCode?: string;
+    distanceMeters?: number | null;
 }
 
 export interface RouteLeg {
@@ -187,6 +189,7 @@ export interface AppSettings {
 
 export type RootStackParamList = {
     Main: undefined;
+    RouteDetails: undefined;
     Cameras: undefined;
     CameraDetail: { cameraId: string };
     AddBike: undefined;

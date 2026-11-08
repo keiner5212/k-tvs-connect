@@ -6,9 +6,36 @@ import { logger } from '@utils/logger';
 import { BleService, DiscoveredDevice } from './bleService';
 import { DATA_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
 import { parseFrame, telemetryFromFrame } from './parser';
+import {
+    buildLocationAddressPacket,
+    buildMobileDataPacket,
+    buildRiderNamePacket,
+    buildTrafficSequencePacket,
+} from './protocol';
 
 export type ConnectionListener = (state: ConnectionState) => void;
 export type TelemetryListener = (telemetry: BikeTelemetry) => void;
+
+const CLUSTER_UPDATE_INTERVAL_MS = 2000;
+
+const getBatteryLevel = async (): Promise<number> => {
+    try {
+        const { getBatteryLevelAsync } = await import('expo-battery');
+        return await getBatteryLevelAsync();
+    } catch {
+        return 0;
+    }
+};
+
+const getNetworkType = async (): Promise<number> => {
+    try {
+        const NetInfo = (await import('@react-native-community/netinfo')).default;
+        const state = await NetInfo.fetch();
+        return state.type === 'cellular' ? 4 : 0;
+    } catch {
+        return 0;
+    }
+};
 
 export class ConnectionController {
     private readonly ble = new BleService();
@@ -30,6 +57,10 @@ export class ConnectionController {
     private scanning = false;
 
     private watchdog: ReturnType<typeof setInterval> | null = null;
+
+    private clusterTimer: ReturnType<typeof setInterval> | null = null;
+
+    private overspeedLimitKmh: number | null = null;
 
     private readonly stateListeners = new Set<ConnectionListener>();
 
@@ -96,6 +127,7 @@ export class ConnectionController {
     }
 
     async stop(): Promise<void> {
+        this.stopClusterUpdates();
         this.running = false;
         if (this.watchdog) {
             clearInterval(this.watchdog);
@@ -111,6 +143,29 @@ export class ConnectionController {
         this.reconnectAttempt = 0;
         this.setState('scanning');
         await this.scanAndConnect();
+    }
+
+    /**
+     * Sends the destination to the cluster over the write characteristic. The
+     * cluster routes with its own map engine, so only the address text goes over.
+     */
+    async sendDestinationToCluster(address: string): Promise<boolean> {
+        if (this.state !== 'connected') {
+            return false;
+        }
+
+        try {
+            await this.ble.write(buildLocationAddressPacket(address));
+            await this.ble.write(buildTrafficSequencePacket());
+            logger.info('destination sent to the cluster', { event: 'ble_write', count: 1 });
+            return true;
+        } catch (error) {
+            logger.warn('could not write to the cluster', {
+                event: 'ble_write',
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+            return false;
+        }
     }
 
     private setState(state: ConnectionState): void {
@@ -165,6 +220,9 @@ export class ConnectionController {
                 await this.ble.discover(device, (bytes) => this.handleData(bytes));
                 this.reconnectAttempt = 0;
                 this.setState('connected');
+                const { useSettingsStore } = await import('@stores/settingsStore');
+                this.overspeedLimitKmh = useSettingsStore.getState().settings.overspeedLimitKmh;
+                await this.startClusterUpdates();
             } catch (error) {
                 logger.warn('connect failed', {
                     event: 'connect',
@@ -197,12 +255,72 @@ export class ConnectionController {
             return;
         }
 
+        if (!frame.checksumValid) {
+            this.invalidFrames += 1;
+            logger.warn('frame with a bad checksum', {
+                event: 'ble_frame',
+                count: this.invalidFrames,
+            });
+            return;
+        }
+
         this.telemetry = telemetryFromFrame(frame, this.telemetry);
         this.lastDataAt = Date.now();
 
         for (const listener of this.telemetryListeners) {
             listener(this.telemetry);
         }
+    }
+
+    /**
+     * The original app writes the rider name once after the connection and then
+     * refreshes the mobile data packet every two seconds. The cluster shows the
+     * clock, the phone battery, the signal and the overspeed limit from it.
+     */
+    private async startClusterUpdates(): Promise<void> {
+        this.stopClusterUpdates();
+
+        const name = this.bike?.nickname ?? '';
+        if (name) {
+            await this.ble.write(buildRiderNamePacket(name)).catch(() => undefined);
+        }
+
+        await this.writeMobileData();
+
+        this.clusterTimer = setInterval(() => {
+            void this.writeMobileData();
+        }, CLUSTER_UPDATE_INTERVAL_MS);
+    }
+
+    private stopClusterUpdates(): void {
+        if (this.clusterTimer) {
+            clearInterval(this.clusterTimer);
+            this.clusterTimer = null;
+        }
+    }
+
+    private async writeMobileData(): Promise<void> {
+        if (this.state !== 'connected') {
+            return;
+        }
+
+        const battery = await getBatteryLevel();
+        const networkType = await getNetworkType();
+
+        await this.ble
+            .write(
+                buildMobileDataPacket({
+                    batteryPercent: battery,
+                    signalStrength: 0,
+                    overspeedLimitKmh: this.overspeedLimitKmh,
+                    networkType,
+                    missedCalls: 0,
+                    callState: 0xff,
+                    voiceAssistEnabled: false,
+                    now: new Date(),
+                }),
+            )
+            .catch(() => undefined);
     }
 
     private checkLiveness(): void {

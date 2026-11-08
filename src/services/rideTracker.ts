@@ -1,12 +1,15 @@
 import { BikeTelemetry } from '@typings/types';
 import { connectionController } from '@ble/connectionController';
 import { finishRide, startRide } from '@services/db/rideRepository';
+import { getRouteContext, recordObservation } from '@services/db/etaRepository';
+import { useMapStore } from '@stores/mapStore';
 
 const MOVING_SPEED_KMH = 3;
 const IDLE_TIMEOUT_MS = 30000;
 
 interface ActiveRide {
     id: string;
+    contextId: string | null;
     startedAt: number;
     startOdometerKm: number;
     lastOdometerKm: number;
@@ -44,6 +47,7 @@ class RideTracker {
             }
             this.active = {
                 id: '',
+                contextId: useMapStore.getState().routeContext?.id ?? null,
                 startedAt: now,
                 startOdometerKm: telemetry.odometerKm,
                 lastOdometerKm: telemetry.odometerKm,
@@ -92,6 +96,22 @@ class RideTracker {
             maxSpeedKmh: ride.maxSpeedKmh,
             averageSpeedKmh: ride.speedSum / Math.max(1, ride.samples),
         });
+
+        if (ride.contextId) {
+            const context = await getRouteContext(ride.contextId);
+            if (context) {
+                const rawSeconds = ride.lastMovingAt - ride.startedAt;
+                const observedSeconds = Math.max(
+                    1,
+                    rawSeconds - Math.min(30, rawSeconds * 0.1),
+                );
+                await recordObservation({
+                    context,
+                    observedSeconds,
+                    observedMeters: distanceMeters,
+                });
+            }
+        }
     }
 }
 

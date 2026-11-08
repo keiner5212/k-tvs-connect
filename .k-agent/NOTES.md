@@ -27,3 +27,8 @@
 - The expo dev client shows a welcome sheet on the first launch that only a real touch dismisses, it blocks synthetic `adb input tap`.
 - Metro caches aggressively in /tmp/metro-cache, so a stale bundle can hide a code change. Start it with `--clear` on a fresh port when the bundle looks wrong.
 - The `write` tool reports type diagnostics against a stale snapshot in this build, so trust `npx tsc --noEmit` over the tool output.
+- The cluster does its own routing: the phone only sends the destination address as text over the write characteristic, never the geometry.
+- The Valhalla summary length comes back in kilometres whatever the units parameter says, so the route distance is measured from the encoded shape with `src/utils/polyline.ts`.
+- The Photon geocoder needs the rider position as a bias (`lat`, `lon`) or it answers with matches anywhere in the world, for example a street in Panama for a Colombian query.
+- The cluster shows the rider name and the phone clock, not the route. The phone sends the destination address as text over the write characteristic and the cluster routes with its own engine.
+- The official app sends no notification text to the cluster, only the social media counters and the media metadata.

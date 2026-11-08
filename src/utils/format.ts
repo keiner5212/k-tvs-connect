@@ -26,6 +26,13 @@ export const formatDuration = (seconds: number): string => {
     return `${minutes}m`;
 };
 
+export const formatClockTime = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+};
+
 export const formatAge = (timestamp: number | null, now = Date.now()): string => {
     if (timestamp === null) {
         return 'never';

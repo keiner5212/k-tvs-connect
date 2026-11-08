@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { useTheme } from '@hooks/useTheme';
 import { layout, radii, spacing, typography } from '@config/theme';
@@ -14,7 +15,57 @@ interface PrimaryButtonProps {
     disabled?: boolean;
     loading?: boolean;
     fullWidth?: boolean;
+    icon?: keyof typeof MaterialIcons.glyphMap;
 }
+
+interface IconButtonProps {
+    icon: keyof typeof MaterialIcons.glyphMap;
+    accessibilityLabel: string;
+    onPress: () => void;
+    selected?: boolean;
+    disabled?: boolean;
+    size?: number;
+}
+
+/**
+ * An icon only control. It always carries a label for the screen reader and it
+ * always keeps the 44 by 44 touch target.
+ */
+export const IconButton = ({
+    icon,
+    accessibilityLabel,
+    onPress,
+    selected = false,
+    disabled = false,
+    size = 22,
+}: IconButtonProps) => {
+    const { colors } = useTheme();
+
+    return (
+        <TouchableOpacity
+            accessibilityLabel={accessibilityLabel}
+            accessibilityRole="button"
+            accessibilityState={{ selected, disabled }}
+            activeOpacity={0.8}
+            disabled={disabled}
+            hitSlop={6}
+            onPress={onPress}
+            style={[
+                styles.iconButton,
+                {
+                    backgroundColor: selected ? colors.primary : colors.card,
+                    borderColor: selected ? colors.primary : colors.border,
+                },
+            ]}
+        >
+            <MaterialIcons
+                color={selected ? colors.primaryForeground : colors.foreground}
+                name={icon}
+                size={size}
+            />
+        </TouchableOpacity>
+    );
+};
 
 export const PrimaryButton = ({
     label,
@@ -23,6 +74,7 @@ export const PrimaryButton = ({
     disabled = false,
     loading = false,
     fullWidth = false,
+    icon,
 }: PrimaryButtonProps) => {
     const { colors } = useTheme();
 
@@ -59,6 +111,14 @@ export const PrimaryButton = ({
                 disabled ? styles.disabled : null,
             ]}
         >
+            {icon ? (
+                <MaterialIcons
+                    color={foreground}
+                    name={icon}
+                    size={18}
+                    style={styles.buttonIcon}
+                />
+            ) : null}
             <Text style={[styles.buttonLabel, { color: foreground }]}>{label}</Text>
         </TouchableOpacity>
     );
@@ -253,10 +313,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingHorizontal: spacing.xl,
     },
-    buttonLabel: {
+    buttonIcon: {
+    marginRight: spacing.sm,
+  },
+  buttonLabel: {
         ...typography.button,
     },
-    chip: {
+  chip: {
     alignItems: 'center',
     borderRadius: radii.full,
     borderWidth: 1,
@@ -289,6 +352,14 @@ const styles = StyleSheet.create({
         ...typography.caption,
         marginTop: spacing.xs,
     },
+    iconButton: {
+    alignItems: 'center',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
     input: {
         ...typography.body,
         borderRadius: layout.inputRadius,

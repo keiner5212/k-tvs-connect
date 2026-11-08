@@ -7,6 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from '@hooks/useTheme';
 import { MainTabParamList, RootStackParamList } from '@typings/types';
 import { CameraDetailScreen, CamerasScreen } from '@screens/CameraScreens';
+import { RouteDetailsScreen } from '@screens/RouteScreens';
 import { DashboardScreen } from '@screens/DashboardScreen';
 import { GarageScreen } from '@screens/GarageScreen';
 import { MapScreen } from '@screens/MapScreen';
@@ -94,6 +95,11 @@ export const RootNavigator = () => {
                     options={{ presentation: 'modal', title: 'Where to' }}
                 />
                 <Stack.Screen component={CamerasScreen} name="Cameras" options={{ title: 'Cameras' }} />
+            <Stack.Screen
+                component={RouteDetailsScreen}
+                name="RouteDetails"
+                options={{ title: 'Route details' }}
+            />
                 <Stack.Screen component={CameraDetailScreen} name="CameraDetail" options={{ title: 'Camera' }} />
                 <Stack.Screen component={SavedRoutesScreen} name="SavedRoutes" options={{ title: 'Saved routes' }} />
                 <Stack.Screen component={RoutePreviewScreen} name="RoutePreview" options={{ title: 'Route' }} />

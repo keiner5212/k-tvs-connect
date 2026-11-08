@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 
 import { AvoidPoint, Place, RouteResult } from '@typings/types';
+import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { computeRoute } from '@services/valhalla.service';
+import {
+    listObservations,
+    recordRouteContext,
+    RouteContext,
+} from '@services/db/etaRepository';
 import {
     clearAvoidPoints as clearStoredAvoidPoints,
     deleteAvoidPoint as deleteStoredAvoidPoint,
@@ -22,8 +28,11 @@ interface MapState {
     replayRoute: ReplayRoute | null;
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
+    arrival: ArrivalEstimate | null;
+    routeContext: RouteContext | null;
     computing: boolean;
     error: string | null;
+    routeFailures: number;
     loadAvoidPoints: () => Promise<void>;
     setDestination: (place: Place | null) => void;
     addAvoidPoint: (latitude: number, longitude: number) => Promise<void>;
@@ -34,13 +43,30 @@ interface MapState {
     setReplayRoute: (route: ReplayRoute | null) => void;
 }
 
+const describeRouteError = (error: unknown): string => {
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('too large')) {
+        return 'The routing answer was too large. Try a shorter route.';
+    }
+    if (message.includes('status 4')) {
+        return 'The routing service refused the request. Check the routing url in Settings.';
+    }
+    if (message.includes('timeout') || message.includes('aborted')) {
+        return 'The routing service took too long. Try again.';
+    }
+    return 'Could not compute the route.';
+};
+
 export const useMapStore = create<MapState>((set, get) => ({
     destination: null,
     replayRoute: null,
     avoidPoints: [],
     route: null,
+    arrival: null,
+    routeContext: null,
     computing: false,
     error: null,
+    routeFailures: 0,
     loadAvoidPoints: async () => {
         const points = await listAvoidPoints();
         set({ avoidPoints: points });
@@ -100,13 +126,41 @@ export const useMapStore = create<MapState>((set, get) => ({
                 destinationLon: destination.longitude,
                 avoidPoints: [...get().avoidPoints, ...cameraPoints],
             });
-            set({ route, computing: false });
-        } catch {
-            set({ computing: false, error: 'Could not compute the route.' });
+            const context = await recordRouteContext({
+                destinationKey: destinationKey(destination.latitude, destination.longitude),
+                originLat,
+                originLon,
+                destinationLat: destination.latitude,
+                destinationLon: destination.longitude,
+                routerSeconds: route.durationSeconds,
+                routerMeters: route.distanceMeters,
+            });
+
+            const observations = await listObservations(
+                context.destinationKey,
+                context.originAnchorId,
+            );
+            const arrival = estimateArrival(
+                route.durationSeconds,
+                route.distanceMeters,
+                observations,
+            );
+
+            set({ route, arrival, routeContext: context, computing: false, routeFailures: 0 });
+        } catch (error) {
+            const failures = get().routeFailures + 1;
+            set({
+                computing: false,
+                routeFailures: failures,
+                error:
+                    failures > 1
+                        ? 'The routing service did not answer. Check the routing url in Settings.'
+                        : describeRouteError(error),
+            });
         }
     },
     clearRoute: () => {
-        set({ route: null, destination: null, error: null });
+        set({ route: null, arrival: null, routeContext: null, destination: null, error: null });
     },
     setReplayRoute: (route) => {
         set({ replayRoute: route });

@@ -3,21 +3,21 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { CameraAttribution, CameraAvoidList } from '@components/cameras';
-import { AvoidPointList, MapCanvas, RoutePreviewCard } from '@components/map';
+import { IconButton } from '@components/controls';
+import { MapCanvas, RouteSheet } from '@components/map';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@hooks/useTheme';
+import { useBleStore } from '@stores/bleStore';
 import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
+import { connectionController } from '@ble/connectionController';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { Place, RootStackParamList } from '@typings/types';
 import { distanceAlongPath, decodePolyline, pointAtDistance } from '@utils/polyline';
-import { rgba } from '@utils/hexToRgb';
-import { formatDistance, formatDuration } from '@utils/format';
+import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -30,25 +30,23 @@ export const MapScreen = () => {
     const { settings } = useSettingsStore();
     const now = useNow();
     const insets = useSafeAreaInsets();
-    const tabBarHeight = useBottomTabBarHeight();
     const {
         addAvoidPoint,
+        arrival,
         avoidPoints,
-        clearAvoidPoints,
         clearRoute,
         compute,
         computing,
         destination,
         error,
         loadAvoidPoints,
-        removeAvoidPoint,
         replayRoute,
         setReplayRoute,
         route,
         setDestination,
     } = useMapStore();
 
-    const { nearby: nearbyCameras, routeSplit, publishedAt } = useCameraStore();
+    const { nearby: nearbyCameras, routeSplit } = useCameraStore();
     const cameraMarkers = useMemo(
         () =>
             nearbyCameras.map((camera) => ({
@@ -62,6 +60,8 @@ export const MapScreen = () => {
         [nearbyCameras],
     );
     const [position, setPosition] = useState<[number, number] | null>(null);
+    const [sentToBike, setSentToBike] = useState<boolean | null>(null);
+    const connectionState = useBleStore((state) => state.state);
     const [locationError, setLocationError] = useState<string | null>(null);
     const [followUser, setFollowUser] = useState(true);
     const [replay, setReplay] = useState<{
@@ -119,9 +119,13 @@ export const MapScreen = () => {
         [addAvoidPoint, recompute],
     );
 
-    const onRemoveAvoid = (id: string) => {
-        void removeAvoidPoint(id);
-        recompute();
+    const sendToBike = async () => {
+        if (!destination) {
+            return;
+        }
+        const address = destination.address || destination.name;
+        const sent = await connectionController.sendDestinationToCluster(address);
+        setSentToBike(sent);
     };
 
     const saveRoute = async (result: NonNullable<typeof route>, target: Place) => {
@@ -189,58 +193,31 @@ export const MapScreen = () => {
             />
 
             <View style={[styles.toolbar, { top: insets.top + spacing.sm }]}>
-                <TouchableOpacity
+                <IconButton
                     accessibilityLabel="Search for a place"
-                    accessibilityRole="button"
+                    icon="search"
                     onPress={() => navigation.navigate('PlaceSearch')}
-                    style={[styles.tool, { backgroundColor: colors.card, borderColor: colors.border }]}
-                >
-                    <Text style={[styles.toolLabel, { color: colors.foreground }]}>Search</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                />
+                <IconButton
                     accessibilityLabel="Cameras near you"
-                    accessibilityRole="button"
+                    icon="videocam"
                     onPress={() => navigation.navigate('Cameras')}
-                    style={[
-                        styles.tool,
-                        { backgroundColor: colors.card, borderColor: colors.border },
-                    ]}
-                >
-                    <Text style={[styles.toolLabel, { color: colors.foreground }]}>Cameras</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                />
+                <IconButton
                     accessibilityLabel="Saved routes"
-                    accessibilityRole="button"
+                    icon="route"
                     onPress={() => navigation.navigate('SavedRoutes')}
-                    style={[styles.tool, { backgroundColor: colors.card, borderColor: colors.border }]}
-                >
-                    <Text style={[styles.toolLabel, { color: colors.foreground }]}>Routes</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                />
+                <IconButton
                     accessibilityLabel={followUser ? 'Stop following me' : 'Follow me'}
-                    accessibilityRole="button"
+                    icon="my-location"
                     onPress={() => setFollowUser((value) => !value)}
-                    style={[
-                        styles.tool,
-                        {
-                            backgroundColor: followUser ? colors.primary : colors.card,
-                            borderColor: colors.border,
-                        },
-                    ]}
-                >
-                    <Text
-                        style={[
-                            styles.toolLabel,
-                            { color: followUser ? colors.primaryForeground : colors.foreground },
-                        ]}
-                    >
-                        Me
-                    </Text>
-                </TouchableOpacity>
+                    selected={followUser}
+                />
             </View>
 
             <View
-                style={[styles.bottom, { paddingBottom: insets.bottom + tabBarHeight + spacing.md }]}
+                style={[styles.bottom, { paddingBottom: spacing.md }]}
             >
                 {locationError ? <Banner tone="warning" message={locationError} /> : null}
                 {error ? (
@@ -275,53 +252,36 @@ export const MapScreen = () => {
                         </TouchableOpacity>
                     </View>
                 ) : (
-                    <RoutePreviewCard
+                    <RouteSheet
+                        arrivalLabel={arrival ? formatClockTime(arrival.arrivalAt) : null}
+                        avoidPointCount={avoidPoints.length}
+                        cameraCount={routeSplit.sent}
+                        canSendToBike={connectionState === 'connected'}
+                        destinationName={destination?.name ?? null}
                         distanceLabel={formatDistance(route?.distanceMeters ?? 0, settings.unitSystem)}
-                        distanceMeters={route?.distanceMeters ?? 0}
                         durationLabel={formatDuration(route?.durationSeconds ?? 0)}
-                        error={error}
                         isComputing={computing}
+                        onChooseDestination={() => navigation.navigate('PlaceSearch')}
                         onClear={() => {
                             clearRoute();
                             setDestination(null);
                         }}
-                        onGo={() => navigation.navigate('SavedRoutes')}
+                        onOpenDetails={() => navigation.navigate('RouteDetails')}
                         onSave={() => {
                             if (route && destination) {
                                 void saveRoute(route, destination);
                             }
                         }}
+                        onSendToBike={sendToBike}
                     />
                 )}
 
-                {routeSplit.sent > 0 ? (
-                    <Banner
-                        message={
-                            routeSplit.leftOut > 0
-                                ? `This route avoids ${routeSplit.sent} cameras. ${routeSplit.leftOut} nearby cameras were left out of the request.`
-                                : `This route avoids ${routeSplit.sent} cameras. Every nearby camera was sent with the request.`
-                        }
-                        tone="info"
-                    />
+                {sentToBike === true ? (
+                    <Banner message="Destination sent to the bike." tone="info" />
                 ) : null}
-
-                <CameraAvoidList
-                    cameras={nearbyCameras.filter((camera) => camera.avoidEnabled)}
-                    onStopAvoiding={(cameraId) =>
-                        void useCameraStore.getState().setAvoidEnabled(cameraId, false)
-                    }
-                />
-
-                <AvoidPointList
-                    onClearAll={() => {
-                        void clearAvoidPoints();
-                        recompute();
-                    }}
-                    onDelete={onRemoveAvoid}
-                    points={avoidPoints}
-                />
-
-                <CameraAttribution publishedAt={publishedAt} />
+                {sentToBike === false ? (
+                    <Banner message="Could not write to the bike. Check the connection." tone="error" />
+                ) : null}
             </View>
         </View>
     );
@@ -364,23 +324,6 @@ const styles = StyleSheet.create({
     },
     screen: {
         flex: 1,
-    },
-    tool: {
-        alignItems: 'center',
-        borderRadius: radii.md,
-        borderWidth: 1,
-        elevation: 3,
-        justifyContent: 'center',
-        minHeight: 44,
-        minWidth: 44,
-        paddingHorizontal: spacing.md,
-        shadowColor: rgba('#000000', 0.18),
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 1,
-        shadowRadius: 6,
-    },
-    toolLabel: {
-        ...typography.label,
     },
     toolbar: {
         gap: spacing.sm,
