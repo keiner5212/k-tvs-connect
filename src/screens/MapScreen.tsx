@@ -111,6 +111,7 @@ export const MapScreen = () => {
             longitude: camera.longitude,
             maxSpeedKmh: camera.maxSpeedKmh,
             isAvoided: camera.avoidEnabled,
+            isExpired: camera.operatingState === 'Expired',
             label: camera.address || 'ANSV camera',
         }));
         if (focusedCamera && !markers.some((marker) => marker.id === focusedCamera.cameraId)) {
@@ -120,6 +121,7 @@ export const MapScreen = () => {
                 longitude: focusedCamera.longitude,
                 maxSpeedKmh: focusedCamera.maxSpeedKmh,
                 isAvoided: focusedCamera.avoidEnabled,
+                isExpired: focusedCamera.operatingState === 'Expired',
                 label: focusedCamera.address || 'ANSV camera',
             });
         }
@@ -127,6 +129,7 @@ export const MapScreen = () => {
     }, [focusedCamera, nearbyCameras]);
     const position = useLocationStore((state) => state.position);
     const [sentToBike, setSentToBike] = useState<boolean | null>(null);
+    const [startingNavigation, setStartingNavigation] = useState(false);
     const connectionState = useBleStore((state) => state.state);
     const [locationError, setLocationError] = useState<string | null>(null);
     const mapRef = useRef<MapViewRef>(null);
@@ -154,9 +157,10 @@ export const MapScreen = () => {
                 setLocationError('Location permission needed to plan routes from your position.');
                 return;
             }
-            await useLocationStore.getState().startWatching();
+            await useLocationStore.getState().startWatching('map');
         };
         void load();
+        return () => useLocationStore.getState().stopWatching('map');
     }, []);
 
     useEffect(() => {
@@ -332,8 +336,13 @@ export const MapScreen = () => {
     }, [avoidMenu, pointMenu]);
 
     const startNavigation = async () => {
-        const sent = await startNavigationAction();
-        setSentToBike(sent);
+        setStartingNavigation(true);
+        try {
+            const sent = await startNavigationAction();
+            setSentToBike(sent);
+        } finally {
+            setStartingNavigation(false);
+        }
     };
 
     const stopNavigation = () => {
@@ -463,8 +472,8 @@ export const MapScreen = () => {
                 {focusedCamera ? (
                     <Banner
                         message={`Camera: ${focusedCamera.address || 'ANSV camera'}${focusedCamera.maxSpeedKmh !== null
-                                ? `, ${focusedCamera.maxSpeedKmh} km/h`
-                                : ''
+                            ? `, ${focusedCamera.maxSpeedKmh} km/h`
+                            : ''
                             }`}
                         tone="info"
                     />
@@ -529,6 +538,7 @@ export const MapScreen = () => {
                         avoidPointCount={avoidPoints.length}
                         cameraCount={routeSplit.sent}
                         canStart={connectionState === 'connected'}
+                        isStarting={startingNavigation}
                         destinationName={destination?.name ?? null}
                         distanceLabel={formatDistance(
                             progress.started ? progress.distanceLeftMeters : route?.distanceMeters ?? 0,
@@ -568,7 +578,6 @@ export const MapScreen = () => {
                         tone="warning"
                     />
                 ) : null}
-
                 {sentToBike === true ? (
                     <Banner message="Destination sent to the bike." tone="info" />
                 ) : null}

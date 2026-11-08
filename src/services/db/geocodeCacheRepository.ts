@@ -55,8 +55,3 @@ export const writeCachedPlaces = async (
         now + ttlMs,
     );
 };
-
-export const pruneExpiredPlaces = async (now: number): Promise<void> => {
-    const db = getDatabase();
-    await db.runAsync('DELETE FROM geocode_cache WHERE expires_at <= ?', now);
-};

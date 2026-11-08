@@ -45,6 +45,9 @@
             ],
             "@typings/*": [
                 "./src/types/*"
+            ],
+            "@cluster": [
+                "./modules/ktvs-cluster"
             ]
         },
         "types": [

@@ -16,7 +16,9 @@ export const DATA_ID = {
 } as const;
 
 export const BLE_MTU = 512;
-export const SCAN_WINDOW_MS = 3000;
-export const CONNECT_TIMEOUT_MS = 8000;
+export const SCAN_WINDOW_MS = 5000;
+export const CONNECT_TIMEOUT_MS = 15000;
 export const DATA_TIMEOUT_MS = 5000;
-export const RECONNECT_DELAYS_MS = [500, 1000, 2000, 5000, 10000];
+
+/** the backoff of the reconnection, the last one repeats forever */
+export const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000, 30000];

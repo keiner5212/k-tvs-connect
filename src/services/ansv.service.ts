@@ -1,4 +1,5 @@
 import { CameraOperatingState, CameraTechnology } from '@typings/types';
+import { parseCameraSense } from '@utils/cameraSense';
 import { httpGetJson } from './http.service';
 
 const DATASET_URL = 'https://fotodeteccion.ansv.gov.co/map/data/sast.json';
@@ -6,11 +7,34 @@ const DATASET_URL = 'https://fotodeteccion.ansv.gov.co/map/data/sast.json';
 export const ANSV_SOURCE_NAME = 'Agencia Nacional de Seguridad Vial (ANSV)';
 export const ANSV_SOURCE_URL = 'https://fotodeteccion.ansv.gov.co/map/ubicaciones-aprobadas.html';
 
-export const CAMERA_AVOID_RADIUS_METERS = 100;
+/**
+ * The camera sits on the road, so the route only has to leave the spot itself.
+ * A wide circle excludes the streets around it and sends the rider around the
+ * block for nothing.
+ */
+export const CAMERA_AVOID_RADIUS_METERS = 25;
 
 const MAX_RESULTS = 5000;
 const MAX_LOCATIONS = 50000;
-const OPERATING_STATE = 'Operando';
+
+/**
+ * The equipment that is running and the equipment whose authorisation
+ * expired. An expired camera is usually still on the road, so it is avoided
+ * too, but it is shown in orange.
+ */
+const operatingStateOf = (state: unknown): CameraOperatingState | null => {
+    if (state === 'Operando') {
+        return 'Operating';
+    }
+    if (
+        state === 'Vencida' ||
+        state === 'Renovada - Expirada' ||
+        state === 'Prorrogada - Vencida'
+    ) {
+        return 'Expired';
+    }
+    return null;
+};
 
 const TECHNOLOGIES: CameraTechnology[] = [
     'Radar Doppler',
@@ -68,6 +92,7 @@ export interface AnsvCamera {
     municipality: string;
     department: string;
     operatingState: CameraOperatingState;
+    sense: ReturnType<typeof parseCameraSense>;
     infractions: string[];
 }
 
@@ -154,11 +179,13 @@ export const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
                 continue;
             }
 
-            if (location.estado_operacion !== OPERATING_STATE) {
+            const state = operatingStateOf(location.estado_operacion);
+            if (!state) {
                 continue;
             }
 
             const cameraId = sanitizeText(location.codigo_unico, 60) || `geo-${location.latitud}-${location.longitud}`;
+            const address = sanitizeText(location.direccion, 200);
 
             cameras.push({
                 cameraId,
@@ -167,10 +194,11 @@ export const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
                 maxSpeedKmh: parseSpeed(location.velocidad_maxima_permitida),
                 technology: parseTechnology(location.tipo_tecnologia),
                 roadType: sanitizeText(location.tipo_tramo, 60),
-                address: sanitizeText(location.direccion, 200),
+                address,
                 municipality: sanitizeText(result.municipio, 80),
                 department: sanitizeText(result.departamento, 80),
-                operatingState: 'Operating',
+                operatingState: state,
+                sense: parseCameraSense(address),
                 infractions: parseInfractions(location.lista_infracciones),
             });
         }

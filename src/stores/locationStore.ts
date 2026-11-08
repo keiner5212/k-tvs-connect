@@ -9,11 +9,14 @@ interface LocationState {
     lastFixAt: number | null;
     following: boolean;
     request: () => Promise<void>;
-    startWatching: () => Promise<void>;
-    stopWatching: () => void;
+    startWatching: (owner: string) => Promise<void>;
+    stopWatching: (owner: string) => void;
 }
 
 let watchSubscription: Location.LocationSubscription | null = null;
+
+/** The map and the navigation need the position, the last one to release wins. */
+const watchOwners = new Set<string>();
 
 /**
  * The position is the base of everything that moves: the map, the distances to
@@ -49,7 +52,8 @@ export const useLocationStore = create<LocationState>((set, get) => ({
         }
     },
 
-    startWatching: async () => {
+    startWatching: async (owner: string) => {
+        watchOwners.add(owner);
         if (watchSubscription || get().following) {
             return;
         }
@@ -57,6 +61,7 @@ export const useLocationStore = create<LocationState>((set, get) => ({
         if (get().permission !== 'granted') {
             await get().request();
             if (get().permission !== 'granted') {
+                watchOwners.delete(owner);
                 return;
             }
         }
@@ -64,9 +69,9 @@ export const useLocationStore = create<LocationState>((set, get) => ({
         try {
             watchSubscription = await Location.watchPositionAsync(
                 {
-                    accuracy: Location.Accuracy.Balanced,
-                    distanceInterval: 5,
-                    timeInterval: 2000,
+                    accuracy: Location.Accuracy.High,
+                    distanceInterval: 1,
+                    timeInterval: 1000,
                 },
                 (location) => {
                     set({
@@ -84,7 +89,11 @@ export const useLocationStore = create<LocationState>((set, get) => ({
         }
     },
 
-    stopWatching: () => {
+    stopWatching: (owner: string) => {
+        watchOwners.delete(owner);
+        if (watchOwners.size > 0) {
+            return;
+        }
         watchSubscription?.remove();
         watchSubscription = null;
         set({ following: false });

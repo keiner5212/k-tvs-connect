@@ -49,3 +49,9 @@
 - The infraction codes of the cameras are the national ones (Ley 769 de 2002, the A to I groups of the autoliquidacion table). The wording is in `src/config/infractions.ts`, taken from the table of the Secretaria Distrital de Movilidad.
 - The Map Tiles API key has no application restriction on purpose: the tiles are fetched by the native maplibre loader, which cannot send the `X-Android-Package` headers an android restriction needs. The daily quota of 3225 (100.000 / 31) is what keeps it under the free cap.
 - The route was asked again on every position update, which is every two seconds while riding. It is asked again now when the rider has moved 200 metres.
+- The navigation frame the cluster reads is `5A 4E` and it has to carry the checksum, the same as the original writes it. Without the checksum the cluster drops the frame, and the guidance never reaches the bike.
+- The original sends that frame every 400 milliseconds while the navigation runs, not on every position, so the distance to the turn moves while the phone is in the pocket.
+- For the apache family the original never writes the destination address, the traffic sequence or the road name to the cluster, only the name, the mobile data and the navigation.
+- The pictogram ids of the cluster are a numbering of their own. The original maps the id of the map provider to them in `ApacheUtils.mapPictoIdForApache`, and the semantic name of every cluster id does not exist in the original app, so it needs a real cluster to be confirmed.
+- The app keeps the process alive with its own foreground service, of the `connectedDevice` type, with a wake lock, in the local module `modules/ktvs-cluster`.
+- MIUI answers the battery optimisation intent with its own per app power screen, where the option the rider needs is "No restrictions".

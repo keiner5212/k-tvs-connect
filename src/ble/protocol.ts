@@ -227,7 +227,8 @@ export const buildMobileDataPacket = (
     frame[3] = options.overspeedLimitKmh === null ? 0xff : options.overspeedLimitKmh & 0xff;
     frame[4] = 0x00;
     frame[5] = 0x00;
-    frame[6] = now.getHours() % 12;
+    // the original formats the hour with a 12 hour clock, so midnight is twelve
+    frame[6] = now.getHours() % 12 || 12;
     frame[7] = now.getMinutes();
     frame[8] = now.getSeconds();
     frame[9] = now.getHours() < 12 ? 0 : 1;
@@ -249,21 +250,38 @@ export const NAVIGATION_CONTROL_ID = 78;
 export const NAVIGATION_DATA_ID = 79;
 
 /**
- * The numbers are written the way the original writes them: the smallest number
- * of bytes, so the frame length changes with the values.
+ * The distance to the next manoeuvre. The original never sends a zero, it sends
+ * one metre, and it gives up with two 0xff bytes past 65535.
  */
-const minimalBytes = (value: number): number[] => {
-    if (value <= 0) {
-        return [0, 0];
+const distanceToBytes = (meters: number): number[] => {
+    if (meters <= 0) {
+        return [0, 1];
     }
-    const bytes: number[] = [];
-    let remaining = Math.floor(value);
-    while (remaining > 0) {
-        bytes.unshift(remaining & 0xff);
-        remaining = Math.floor(remaining / 256);
+    if (meters <= 0xff) {
+        return [0, meters];
     }
-    return bytes.length > 0 ? bytes : [0];
+    if (meters <= 0xffff) {
+        return [(meters >> 8) & 0xff, meters & 0xff];
+    }
+    return [0xff, 0xff];
 };
+
+const minutesToBytes = (minutes: number): number[] => {
+    if (minutes <= 0xff) {
+        return [0, minutes];
+    }
+    if (minutes <= 0xffff) {
+        return [(minutes >> 8) & 0xff, minutes & 0xff];
+    }
+    return [0xff, 0xff];
+};
+
+/** The remaining distance travels in three bytes, big endian, the low three. */
+const metersToThreeBytes = (meters: number): number[] => [
+    (meters >> 16) & 0xff,
+    (meters >> 8) & 0xff,
+    meters & 0xff,
+];
 
 export interface NavigationUpdate {
     distanceToNextManeuverMeters: number;
@@ -271,54 +289,81 @@ export interface NavigationUpdate {
     totalDistanceLeftMeters: number;
     pictogramId: number;
     navigationOn: boolean;
+    arrived: boolean;
+    turnDirection: 'left' | 'right' | null;
     instruction: string;
+    gpsEnabled?: boolean;
+    networkAvailable?: boolean;
 }
+
+const NAVIGATION_PREFIX_NEAR = 1;
+const NAVIGATION_PREFIX_LEFT = 3;
+const NAVIGATION_PREFIX_RIGHT = 4;
+const NAVIGATION_PREFIX_FAR = 5;
+const NAVIGATION_PREFIX_NO_GPS = 6;
+
+/**
+ * The byte that tells the cluster how close the turn is: one when it is between
+ * 65 and 1000 metres, three and four for a left and a right turn under 65
+ * metres, five when it is still far, six when the phone has no gps.
+ */
+const navigationPrefix = (update: NavigationUpdate): number => {
+    if (update.gpsEnabled === false) {
+        return NAVIGATION_PREFIX_NO_GPS;
+    }
+    if (!update.navigationOn || update.arrived) {
+        return 0;
+    }
+
+    const distance = update.distanceToNextManeuverMeters;
+    if (distance >= 1000) {
+        return NAVIGATION_PREFIX_FAR;
+    }
+    if (distance >= 65) {
+        return NAVIGATION_PREFIX_NEAR;
+    }
+    if (update.turnDirection === 'left') {
+        return NAVIGATION_PREFIX_LEFT;
+    }
+    if (update.turnDirection === 'right') {
+        return NAVIGATION_PREFIX_RIGHT;
+    }
+    return 0;
+};
 
 /**
  * What the cluster shows while navigating: the distance to the next turn, the
- * time left and the distance left. Header 0x5A 0x4E.
+ * time left, the distance left and the pictogram. Header 0x5A 0x4E. The
+ * original writes this frame with a checksum, so the cluster drops it when the
+ * checksum is wrong.
  */
 export const buildNavigationControlPacket = (
     update: NavigationUpdate,
     key = APACHE_XOR_KEY,
 ): Uint8Array => {
     const frame = new Uint8Array(OUTBOUND_FRAME_LENGTH);
-    const instruction = update.instruction.slice(0, 17);
-    const instructionBytes = utf8Encode(instruction);
+    const distance = distanceToBytes(update.distanceToNextManeuverMeters);
+    const time = minutesToBytes(update.timeLeftMinutes);
+    const remaining = metersToThreeBytes(update.totalDistanceLeftMeters);
 
-    const distance =
-        update.distanceToNextManeuverMeters <= 255
-            ? [0, update.distanceToNextManeuverMeters]
-            : minimalBytes(update.distanceToNextManeuverMeters);
-    const time =
-        update.timeLeftMinutes <= 255
-            ? [0, update.timeLeftMinutes]
-            : minimalBytes(update.timeLeftMinutes);
-    const remaining =
-        update.totalDistanceLeftMeters <= 255
-            ? [0, 0, update.totalDistanceLeftMeters]
-            : minimalBytes(update.totalDistanceLeftMeters);
-
-    const payload = [
-        0x5a,
-        NAVIGATION_CONTROL_ID,
-        ...distance,
-        ...time,
-        ...remaining,
-        update.pictogramId & 0xff,
-        instruction.length > 17 ? 2 : 1,
-        update.navigationOn ? 1 : 0,
-        0,
-        0,
-        0,
-        0,
-        ...instructionBytes,
-    ].slice(0, OUTBOUND_FRAME_LENGTH - 1);
-
-    frame.set(payload, 0);
+    frame[0] = 0x5a;
+    frame[1] = NAVIGATION_CONTROL_ID;
+    frame[2] = distance[0];
+    frame[3] = distance[1];
+    frame[4] = time[0];
+    frame[5] = time[1];
+    frame[6] = remaining[0];
+    frame[7] = remaining[1];
+    frame[8] = remaining[2];
+    frame[9] = update.pictogramId & 0xff;
+    frame[10] = update.instruction.length > 17 ? 2 : 1;
+    frame[11] = update.navigationOn ? 1 : 0;
+    frame[12] = 0;
+    frame[13] = update.gpsEnabled === false || update.networkAvailable === false ? 1 : 0;
+    frame[14] = navigationPrefix(update);
     frame[OUTBOUND_FRAME_LENGTH - 1] = END_BYTE;
 
-    return encryptFrame(frame, key);
+    return encryptFrame(addChecksum(frame), key);
 };
 
 /**

@@ -7,6 +7,7 @@ import {
     buildRiderNamePacket,
     buildTrafficSequencePacket,
     decryptFrame,
+    isValidChecksum,
     sanitizeClusterText,
 } from './protocol';
 
@@ -134,6 +135,8 @@ describe('navigation packets', () => {
         totalDistanceLeftMeters: 4200,
         pictogramId: 0,
         navigationOn: true,
+        arrived: false,
+        turnDirection: 'right' as const,
         instruction: 'Gire a la derecha',
     };
 
@@ -147,13 +150,45 @@ describe('navigation packets', () => {
         expect(packet[3]).toBe(94);
         expect(packet[4]).toBe(0);
         expect(packet[5]).toBe(12);
-        // 4200 metres as well
-        expect(packet[6]).toBe(16);
-        expect(packet[7]).toBe(104);
-        expect(packet[8]).toBe(0);
-        expect(packet[9]).toBe(1);
+        // 4200 metres travels in three bytes, the low three, big endian
+        expect(packet[6]).toBe(0);
+        expect(packet[7]).toBe(16);
+        expect(packet[8]).toBe(104);
+        expect(packet[9]).toBe(0);
         expect(packet[10]).toBe(1);
         expect(packet[19]).toBe(0xff);
+    });
+
+    it('closes the control frame with a checksum, the way the original does', () => {
+        const packet = decrypt(buildNavigationControlPacket(update));
+
+        expect(isValidChecksum(packet)).toBe(true);
+    });
+
+    it('says how close the turn is in the prefix byte', () => {
+        const far = decrypt(
+            buildNavigationControlPacket({ ...update, distanceToNextManeuverMeters: 1500 }),
+        );
+        expect(far[14]).toBe(5);
+
+        const near = decrypt(
+            buildNavigationControlPacket({ ...update, distanceToNextManeuverMeters: 500 }),
+        );
+        expect(near[14]).toBe(1);
+
+        const right = decrypt(
+            buildNavigationControlPacket({ ...update, distanceToNextManeuverMeters: 30 }),
+        );
+        expect(right[14]).toBe(4);
+
+        const left = decrypt(
+            buildNavigationControlPacket({
+                ...update,
+                distanceToNextManeuverMeters: 30,
+                turnDirection: 'left',
+            }),
+        );
+        expect(left[14]).toBe(3);
     });
 
     it('carries the instruction in its own frame', () => {
@@ -172,6 +207,15 @@ describe('navigation packets', () => {
 
         expect(packet[2]).toBe(0);
         expect(packet[3]).toBe(80);
+    });
+
+    it('never sends a distance of zero, the original sends one metre', () => {
+        const packet = decrypt(
+            buildNavigationControlPacket({ ...update, distanceToNextManeuverMeters: 0 }),
+        );
+
+        expect(packet[2]).toBe(0);
+        expect(packet[3]).toBe(1);
     });
 
     it('cuts the instruction at 17 characters', () => {

@@ -108,12 +108,61 @@ The switch status bit field carries the side stand and the turn signals. The
 turn indicator has its own field in the 5A_11 frame, so the port prefers that one
 and falls back to the switch status.
 
+## The navigation frame
+
+The cluster shows the turn while riding. The original sends the frame
+`5A 4E` (`ApacheClusterNavigationData.toByteArray`), **with a checksum**, every
+400 milliseconds while the navigation runs (`MapHostActivity.startTimer`).
+
+| Byte | Value |
+| --- | --- |
+| 0 | `0x5A` |
+| 1 | `0x4E` (78) |
+| 2, 3 | distance to the next manoeuvre in metres. Zero is sent as one metre, over 65535 as `FF FF` |
+| 4, 5 | minutes left. Over 65535 as `FF FF` |
+| 6, 7, 8 | metres left to the destination, the low three bytes, big endian |
+| 9 | pictogram id |
+| 10 | one or two strings |
+| 11 | navigation status: 0 off, 1 running, `FF` rerouting |
+| 12 | unit, always 0 (metric) |
+| 13 | alert: 1 when the gps is off or the phone has no network |
+| 14 | how close the turn is: 1 between 65 and 1000 metres, 3 a left turn under 65 metres, 4 a right turn under 65 metres, 5 over 1000 metres, 6 when the gps is off |
+| 15 to 17 | reserved, zero |
+| 18 | checksum |
+| 19 | `0xFF` |
+
+The checksum is what the original writes and what the cluster expects, so a
+frame without it is dropped by the cluster. That was the bug in this port: the
+frame carried the instruction text where the original has reserved bytes and it
+had no checksum.
+
+The pictogram ids of the cluster are a different numbering than the icons of
+the original app. The original maps the id of the map provider to the id of the
+cluster (`ApacheUtils.mapPictoIdForApache`) and the provider ids of google,
+here and mappls are in `ApacheUtils.java`. The semantic name of every cluster id
+is not in the original app, so this port sends 0 and 34 when there is no
+manoeuvre left. Confirming the ids needs a real cluster.
+
+## What the original sends that this port does not
+
+For the apache family the original never writes the destination address
+(`5B 5C`), the traffic sequence (`5B 4C`) or the road name (`5A 49`). It sends
+the name (`5B 52`) once, the mobile data (`5B 4A`) every two seconds and the
+navigation (`5A 4E`) every 400 milliseconds. This port sends the address and
+the traffic sequence as well, because the other families need them, but the
+bytes are the ones the original builds.
+
+The cellular signal of the `5B 4A` frame needs `READ_PHONE_STATE` in the
+original. This port sends zero instead of asking for that permission.
+
 ## Implementation in this project
 
 | File | Role |
 | --- | --- |
 | `src/ble/constants.ts` | uuids, data ids, start bytes, timeouts |
 | `src/ble/protocol.ts` | the xor envelope and the checksum |
+| `src/services/cluster.service.ts` | the foreground service and the battery settings |
+| `modules/ktvs-cluster` | the native module with the foreground service |
 | `src/ble/serviceUuid.ts` | the imei derivation |
 | `src/ble/frames.ts` | the offset tables |
 | `src/ble/parser.ts` | the parser and the telemetry mapping |

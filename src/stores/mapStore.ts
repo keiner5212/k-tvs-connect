@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { AvoidPoint, Place, RouteResult } from '@typings/types';
+import { NavigationUpdate } from '@ble/protocol';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { computeRoute } from '@services/valhalla.service';
 import { decodePolyline, nearestPointIndex, remainingDistanceMeters } from '@utils/polyline';
@@ -30,6 +31,7 @@ export interface NavigationProgress {
     timeLeftSeconds: number;
     distanceToManeuverMeters: number;
     instruction: string;
+    turnDirection: 'left' | 'right' | null;
     arrived: boolean;
 }
 
@@ -64,8 +66,45 @@ interface MapState {
     setReplayRoute: (route: ReplayRoute | null) => void;
     startNavigation: () => Promise<boolean>;
     stopNavigation: () => void;
+    navigationUpdate: () => NavigationUpdate;
     updateNavigation: (latitude: number, longitude: number) => void;
 }
+
+/**
+ * The pictogram the cluster draws. The original sends the id of the arrow of
+ * the manoeuvre, and 34 when there is no manoeuvre left.
+ */
+const NAVIGATION_PICTO_DEFAULT = 0;
+const NAVIGATION_PICTO_ARRIVED = 34;
+
+/**
+ * The direction of a valhalla manoeuvre, which is what the cluster uses to show
+ * a left or a right arrow when the turn is close.
+ */
+const turnDirectionFromType = (type: number): 'left' | 'right' | null => {
+    if ([2, 13, 14, 15, 16, 24].includes(type)) {
+        return 'right';
+    }
+    if ([3, 9, 10, 11, 12, 25].includes(type)) {
+        return 'left';
+    }
+    return null;
+};
+
+/**
+ * The shape of the route is decoded once and kept, because the navigation reads
+ * it on every position and the decoding is the expensive part.
+ */
+let decodedGeometry: string | null = null;
+let decodedPoints: { lat: number; lon: number }[] = [];
+
+const pointsOfRoute = (geometry: string): { lat: number; lon: number }[] => {
+    if (geometry !== decodedGeometry) {
+        decodedGeometry = geometry;
+        decodedPoints = decodePolyline(geometry, 6);
+    }
+    return decodedPoints;
+};
 
 const describeRouteError = (error: unknown): string => {
     const message = error instanceof Error ? error.message : '';
@@ -97,6 +136,7 @@ export const useMapStore = create<MapState>((set, get) => ({
         timeLeftSeconds: 0,
         distanceToManeuverMeters: 0,
         instruction: '',
+        turnDirection: null,
         arrived: false,
     },
     focus: null,
@@ -143,34 +183,48 @@ export const useMapStore = create<MapState>((set, get) => ({
         }
 
         const { valhallaBaseUrl } = useSettingsStore.getState().settings;
-        const { selectForRoute } = useCameraStore.getState();
-        const cameras = await selectForRoute(
-            originLat,
-            originLon,
-            destination.latitude,
-            destination.longitude,
-        );
-
-        const cameraPoints: AvoidPoint[] = cameras.map((camera) => ({
-            id: `ansv-${camera.cameraId}`,
-            latitude: camera.latitude,
-            longitude: camera.longitude,
-            label: camera.address || 'ANSV camera',
-            radiusMeters: camera.radiusMeters,
-            createdAt: Date.now(),
-            source: 'ansv',
-        }));
+        const manualPoints = get().avoidPoints;
 
         set({ computing: true, error: null });
 
         try {
-            const route = await computeRoute(valhallaBaseUrl, {
+            /**
+             * The first route is the shortest one, without the cameras. It shows
+             * which way the rider goes through every street, and that is what
+             * decides whether a camera watches the back of the bike or the
+             * front of it.
+             */
+            const baseline = await computeRoute(valhallaBaseUrl, {
                 originLat,
                 originLon,
                 destinationLat: destination.latitude,
                 destinationLon: destination.longitude,
-                avoidPoints: [...get().avoidPoints, ...cameraPoints],
+                avoidPoints: manualPoints,
             });
+
+            const { risky } = await useCameraStore.getState().selectForRoute(baseline.geometry);
+
+            const cameraPoints: AvoidPoint[] = risky.map((camera) => ({
+                id: `ansv-${camera.cameraId}`,
+                latitude: camera.latitude,
+                longitude: camera.longitude,
+                label: camera.address || 'ANSV camera',
+                radiusMeters: camera.radiusMeters,
+                createdAt: Date.now(),
+                source: 'ansv',
+            }));
+
+            const route =
+                cameraPoints.length > 0
+                    ? await computeRoute(valhallaBaseUrl, {
+                        originLat,
+                        originLon,
+                        destinationLat: destination.latitude,
+                        destinationLon: destination.longitude,
+                        avoidPoints: [...manualPoints, ...cameraPoints],
+                    })
+                    : baseline;
+
             const context = await recordRouteContext({
                 destinationKey: destinationKey(destination.latitude, destination.longitude),
                 originLat,
@@ -190,17 +244,6 @@ export const useMapStore = create<MapState>((set, get) => ({
                 route.distanceMeters,
                 observations,
             );
-
-            const manualCount = get().avoidPoints.length;
-            const applied = route.avoidOutcome?.applied ?? manualCount + cameraPoints.length;
-            const camerasSent = Math.max(0, applied - manualCount);
-            if (camerasSent < cameraPoints.length) {
-                useCameraStore.getState().setRouteSplit({
-                    sent: camerasSent,
-                    leftOut: cameraPoints.length - camerasSent,
-                });
-                useCameraStore.getState().setRouteCameras(cameras.slice(0, camerasSent));
-            }
 
             set({ route, arrival, routeContext: context, computing: false, routeFailures: 0 });
         } catch (error) {
@@ -230,6 +273,7 @@ export const useMapStore = create<MapState>((set, get) => ({
 
         const { connectionController } = await import('@ble/connectionController');
         const address = destination.address || destination.name;
+        await connectionController.requestNotificationPermission();
         const sent = await connectionController.sendDestinationToCluster(address);
 
         set({
@@ -241,7 +285,15 @@ export const useMapStore = create<MapState>((set, get) => ({
         });
 
         const { useLocationStore } = await import('@stores/locationStore');
-        await useLocationStore.getState().startWatching();
+        await useLocationStore.getState().startWatching('navigation');
+
+        const position = useLocationStore.getState().position;
+        if (position) {
+            get().updateNavigation(position[0], position[1]);
+        }
+
+        await connectionController.refreshEnvironment();
+        await connectionController.startNavigation(get().navigationUpdate());
 
         return sent;
     },
@@ -254,9 +306,31 @@ export const useMapStore = create<MapState>((set, get) => ({
                 timeLeftSeconds: 0,
                 distanceToManeuverMeters: 0,
                 instruction: '',
+                turnDirection: null,
                 arrived: false,
             },
         });
+
+        void import('@ble/connectionController').then(({ connectionController }) => {
+            connectionController.stopNavigation();
+        });
+        void import('@stores/locationStore').then(({ useLocationStore }) => {
+            useLocationStore.getState().stopWatching('navigation');
+        });
+    },
+
+    navigationUpdate: () => {
+        const { navigation } = get();
+        return {
+            distanceToNextManeuverMeters: Math.round(navigation.distanceToManeuverMeters),
+            timeLeftMinutes: Math.round(navigation.timeLeftSeconds / 60),
+            totalDistanceLeftMeters: Math.round(navigation.distanceLeftMeters),
+            pictogramId: navigation.arrived ? NAVIGATION_PICTO_ARRIVED : NAVIGATION_PICTO_DEFAULT,
+            navigationOn: navigation.started && !navigation.arrived,
+            arrived: navigation.arrived,
+            turnDirection: navigation.turnDirection,
+            instruction: navigation.instruction,
+        };
     },
 
     updateNavigation: (latitude, longitude) => {
@@ -265,7 +339,7 @@ export const useMapStore = create<MapState>((set, get) => ({
             return;
         }
 
-        const points = decodePolyline(route.geometry, 6);
+        const points = pointsOfRoute(route.geometry);
         const index = nearestPointIndex(points, { lat: latitude, lon: longitude });
         if (index < 0) {
             return;
@@ -300,8 +374,13 @@ export const useMapStore = create<MapState>((set, get) => ({
                 timeLeftSeconds,
                 distanceToManeuverMeters: distanceToManeuver,
                 instruction: next?.instruction ?? '',
+                turnDirection: turnDirectionFromType(next?.type ?? 0),
                 arrived: distanceLeftMeters < 25,
             },
+        });
+
+        void import('@ble/connectionController').then(({ connectionController }) => {
+            connectionController.updateNavigation(get().navigationUpdate());
         });
     },
 }));

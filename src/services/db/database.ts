@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS cameras (
   municipality TEXT NOT NULL,
   department TEXT NOT NULL,
   operating_state TEXT NOT NULL,
+  sense TEXT,
   infractions TEXT NOT NULL,
   dataset_published_at INTEGER,
   snapshot_id TEXT NOT NULL,
@@ -152,6 +153,25 @@ const getOrCreateKey = async (): Promise<string> => {
 
 let instance: SQLite.SQLiteDatabase | null = null;
 
+/**
+ * The schema is created with IF NOT EXISTS, so a column that arrives later
+ * never reaches the installs that are already on the device. The version of
+ * the schema tells which step each install needs.
+ */
+const migrate = async (db: SQLite.SQLiteDatabase): Promise<void> => {
+    const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+    const current = version?.user_version ?? 0;
+
+    if (current < 1) {
+        const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(cameras);');
+        const names = columns.map((column) => column.name);
+        if (!names.includes('sense')) {
+            await db.execAsync('ALTER TABLE cameras ADD COLUMN sense TEXT;');
+        }
+        await db.execAsync('PRAGMA user_version = 1;');
+    }
+};
+
 export const openDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     if (instance) {
         return instance;
@@ -161,6 +181,7 @@ export const openDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     const db = await SQLite.openDatabaseAsync(DB_NAME);
     await db.execAsync(`PRAGMA key = "x'${key}'";`);
     await db.execAsync(SCHEMA);
+    await migrate(db);
 
     const cipher = await db.getFirstAsync<{ cipher_version: string }>('PRAGMA cipher_version;');
     if (!cipher?.cipher_version) {

@@ -12,6 +12,10 @@ import { useCameraStore } from '@stores/cameraStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { isAllowedBaseUrl } from '@services/http.service';
+import {
+    isIgnoringBatteryOptimizations,
+    openBatteryOptimizationSettings,
+} from '@services/cluster.service';
 import { layout, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -37,10 +41,15 @@ export const SettingsScreen = () => {
     const [styleUrl, setStyleUrl] = useState(settings.mapStyleUrl);
     const [routingError, setRoutingError] = useState<string | null>(null);
     const [styleError, setStyleError] = useState<string | null>(null);
+    const [batteryRestricted, setBatteryRestricted] = useState(false);
 
     useEffect(() => {
         void load();
     }, [load]);
+
+    useEffect(() => {
+        void isIgnoringBatteryOptimizations().then((ignored) => setBatteryRestricted(!ignored));
+    }, []);
 
     useEffect(() => {
         setValhallaUrl(settings.valhallaBaseUrl);
@@ -168,6 +177,21 @@ export const SettingsScreen = () => {
                         step={1000}
                         unit="m"
                         value={cameraRadiusMeters}
+                    />
+                </SettingsSection>
+
+                <SettingsSection
+                    title="Background"
+                    footer="Android can stop the app while the screen is off. Let it run without the battery saver so the guidance keeps reaching the scooter."
+                >
+                    <SettingsRow
+                        description={
+                            batteryRestricted
+                                ? 'The system can stop the app while the screen is off.'
+                                : 'The app runs without restrictions while the screen is off.'
+                        }
+                        label="Battery optimisation"
+                        onPress={() => void openBatteryOptimizationSettings()}
                     />
                 </SettingsSection>
 

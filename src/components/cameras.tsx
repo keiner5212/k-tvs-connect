@@ -1,15 +1,13 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { PrimaryButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { TrafficCamera } from '@typings/types';
 import { formatDistance, UnitSystem } from '@utils/format';
 import { describeInfraction } from '@config/infractions';
+import { rgba } from '@utils/hexToRgb';
 import { layout, radii, spacing, typography } from '@config/theme';
-
-/** how many infractions the card lists before it only counts the rest */
-const INFRACTION_PREVIEW_COUNT = 8;
 
 const TECHNOLOGY_DESCRIPTIONS: Record<string, string> = {
     'Radar Doppler': 'Speed measured with a Doppler radar',
@@ -54,6 +52,7 @@ export const CameraCard = ({
     onOpenDetails,
 }: CameraCardProps) => {
     const { colors } = useTheme();
+    const [showInfractions, setShowInfractions] = useState(false);
 
     const address = camera.address || 'No address reported';
     const place = [camera.municipality, camera.department].filter(Boolean).join(', ');
@@ -61,8 +60,7 @@ export const CameraCard = ({
         code,
         description: describeInfraction(code) ?? code,
     }));
-    const shownInfractions = infractions.slice(0, INFRACTION_PREVIEW_COUNT);
-    const hiddenInfractions = infractions.length - shownInfractions.length;
+    const expired = camera.operatingState === 'Expired';
 
     return (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -114,12 +112,14 @@ export const CameraCard = ({
                                 backgroundColor:
                                     camera.operatingState === 'Operating'
                                         ? colors.success
-                                        : colors.mutedForeground,
+                                        : expired
+                                            ? colors.warning
+                                            : colors.mutedForeground,
                             },
                         ]}
                     />
                     <Text style={[styles.fieldValue, { color: colors.foreground }]}>
-                        {camera.operatingState}
+                        {expired ? 'Expired, still on the road' : camera.operatingState}
                     </Text>
                 </View>
             </View>
@@ -157,37 +157,21 @@ export const CameraCard = ({
                         </Text>
                         <Text style={[styles.fieldValue, { color: colors.foreground }]}>
                             {infractions.length > 0
-                                ? `${infractions.length} published`
+                                ? infractions.map((entry) => entry.code).join(', ')
                                 : 'None published'}
                         </Text>
                     </View>
 
                     {infractions.length > 0 ? (
-                        <View style={styles.infractionList}>
-                            {shownInfractions.map((entry) => (
-                                <View key={entry.code} style={styles.infractionRow}>
-                                    <Text
-                                        style={[styles.infractionCode, { color: colors.primary }]}
-                                    >
-                                        {entry.code}
-                                    </Text>
-                                    <Text
-                                        style={[styles.infractionText, { color: colors.foreground }]}
-                                    >
-                                        {entry.description}
-                                    </Text>
-                                </View>
-                            ))}
-                            {hiddenInfractions > 0 ? (
-                                <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
-                                    {`and ${hiddenInfractions} more that the agency published for this equipment`}
-                                </Text>
-                            ) : null}
-                            <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
-                                The wording is the one of the national traffic code. The app does not
-                                publish any fine amount.
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            onPress={() => setShowInfractions(true)}
+                            style={styles.infractionLink}
+                        >
+                            <Text style={[styles.actionLabel, { color: colors.primary }]}>
+                                What do these codes mean?
                             </Text>
-                        </View>
+                        </TouchableOpacity>
                     ) : null}
 
                     <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
@@ -239,6 +223,43 @@ export const CameraCard = ({
                     </TouchableOpacity>
                 ) : null}
             </View>
+
+            <Modal
+                animationType="slide"
+                onRequestClose={() => setShowInfractions(false)}
+                transparent
+                visible={showInfractions}
+            >
+                <View
+                    style={[
+                        styles.modalBackdrop,
+                        { backgroundColor: rgba(colors.foreground, 0.55) },
+                    ]}
+                >
+                    <View
+                        style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    >
+                        <Text style={[styles.listTitle, { color: colors.foreground }]}>
+                            What the agency published for this camera
+                        </Text>
+                        <Text style={[styles.caveat, { color: colors.mutedForeground }]}>
+                            The wording is the one of the national traffic code. The app does not
+                            publish any fine amount.
+                        </Text>
+                        {infractions.map((entry) => (
+                            <View key={entry.code} style={styles.infractionRow}>
+                                <Text style={[styles.infractionCode, { color: colors.primary }]}>
+                                    {entry.code}
+                                </Text>
+                                <Text style={[styles.infractionText, { color: colors.foreground }]}>
+                                    {entry.description}
+                                </Text>
+                            </View>
+                        ))}
+                        <PrimaryButton label="Close" onPress={() => setShowInfractions(false)} />
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -391,8 +412,10 @@ const styles = StyleSheet.create({
         ...typography.label,
         width: 44,
     },
-    infractionList: {
+    infractionLink: {
+        justifyContent: 'center',
         marginTop: spacing.sm,
+        minHeight: 44,
     },
     infractionRow: {
         alignItems: 'flex-start',
@@ -406,6 +429,18 @@ const styles = StyleSheet.create({
     },
     listTitle: {
         ...typography.label,
+    },
+    modalBackdrop: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    modalCard: {
+        borderTopLeftRadius: radii.xl,
+        borderTopRightRadius: radii.xl,
+        borderWidth: 1,
+        gap: spacing.sm,
+        maxHeight: '80%',
+        padding: layout.cardPadding,
     },
     place: {
         ...typography.caption,

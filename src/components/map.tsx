@@ -157,10 +157,12 @@ export const MapCanvas = ({
 
             {cameras.map((camera) => {
                 const focused = camera.id === focusedCameraId;
+                const accent = camera.isExpired ? colors.warning : colors.primary;
                 const speedLabel =
                     camera.maxSpeedKmh !== null
                         ? `Speed camera, ${camera.maxSpeedKmh} kilometres per hour, ${camera.label}`
                         : `Speed camera, speed not published, ${camera.label}`;
+                const stateLabel = camera.isExpired ? ', expired but still on the road' : '';
 
                 return (
                     <MarkerView
@@ -171,17 +173,17 @@ export const MapCanvas = ({
                         <View style={styles.cameraMarker}>
                             <TouchableOpacity
                                 accessibilityLabel={
-                                    focused ? `Selected camera, ${speedLabel}` : speedLabel
+                                    focused
+                                        ? `Selected camera, ${speedLabel}${stateLabel}`
+                                        : `${speedLabel}${stateLabel}`
                                 }
                                 accessibilityRole="button"
                                 onPress={() => onCameraPress?.(camera.id)}
                                 style={[
                                     styles.cameraBody,
                                     {
-                                        backgroundColor: camera.isAvoided
-                                            ? colors.primary
-                                            : colors.card,
-                                        borderColor: focused ? colors.foreground : colors.primary,
+                                        backgroundColor: camera.isAvoided ? accent : colors.card,
+                                        borderColor: focused ? colors.foreground : accent,
                                         borderWidth: focused ? 3 : 2,
                                     },
                                 ]}
@@ -192,7 +194,7 @@ export const MapCanvas = ({
                                         {
                                             backgroundColor: camera.isAvoided
                                                 ? colors.primaryForeground
-                                                : colors.primary,
+                                                : accent,
                                         },
                                     ]}
                                 />
@@ -202,7 +204,7 @@ export const MapCanvas = ({
                                         {
                                             backgroundColor: camera.isAvoided
                                                 ? colors.primaryForeground
-                                                : colors.primary,
+                                                : accent,
                                         },
                                     ]}
                                 />
@@ -318,6 +320,7 @@ interface RouteSheetProps {
     avoidPointCount: number;
     isComputing: boolean;
     isNavigating: boolean;
+    isStarting?: boolean;
     canStart: boolean;
     instruction: string;
     distanceToManeuverLabel: string | null;
@@ -343,6 +346,7 @@ export const RouteSheet = ({
     avoidPointCount,
     isComputing,
     isNavigating,
+    isStarting,
     canStart,
     instruction,
     distanceToManeuverLabel,
@@ -455,9 +459,9 @@ export const RouteSheet = ({
             <View style={styles.sheetActions}>
                 <IconLabelButton
                     accessibilityLabel={isNavigating ? 'Stop the navigation' : 'Start the navigation'}
-                    disabled={!canStart && !isNavigating}
+                    disabled={isStarting || (!canStart && !isNavigating)}
                     icon={isNavigating ? 'stop' : 'navigation'}
-                    label={isNavigating ? 'Stop' : 'Start'}
+                    label={isStarting ? 'Sending...' : isNavigating ? 'Stop' : 'Start'}
                     onPress={isNavigating ? onStop : onStart}
                     variant="pill"
                 />

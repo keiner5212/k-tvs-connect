@@ -5,7 +5,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { AlertBanner, EmptyState, StaleNotice } from '@components/feedback';
+import { AlertBanner, Banner, EmptyState, StaleNotice } from '@components/feedback';
 import { ConnectionRail, MetricTile, SpeedGauge, WeekBars } from '@components/dashboard';
 import { useNow } from '@hooks/useNow';
 import { useTheme } from '@hooks/useTheme';
@@ -14,6 +14,7 @@ import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList, RideSummary, VehicleAlert } from '@typings/types';
 import { connectionController } from '@ble/connectionController';
+import { isIgnoringBatteryOptimizations, openBatteryOptimizationSettings } from '@services/cluster.service';
 import { listRides } from '@services/db/rideRepository';
 import { formatAge, formatDistance, formatDuration, isStale, speedUnit } from '@utils/format';
 import { layout, spacing, typography } from '@config/theme';
@@ -32,10 +33,15 @@ export const DashboardScreen = () => {
     const { settings } = useSettingsStore();
     const now = useNow();
     const [rides, setRides] = useState<RideSummary[]>([]);
+    const [batteryRestricted, setBatteryRestricted] = useState(false);
 
     useEffect(() => {
         const unbind = useBleStore.getState().bind();
         return unbind;
+    }, []);
+
+    useEffect(() => {
+        void isIgnoringBatteryOptimizations().then((ignored) => setBatteryRestricted(!ignored));
     }, []);
 
     useEffect(() => {
@@ -135,14 +141,14 @@ export const DashboardScreen = () => {
             />
 
             <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          {
-              paddingTop: insets.top + spacing.lg,
-              paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding,
-            },
-        ]}
-      >
+                contentContainerStyle={[
+                    styles.content,
+                    {
+                        paddingTop: insets.top + spacing.lg,
+                        paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding,
+                    },
+                ]}
+            >
                 {stale && lastUpdateAt ? (
                     <StaleNotice
                         ageSeconds={Math.round((now - lastUpdateAt) / 1000)}
@@ -151,6 +157,15 @@ export const DashboardScreen = () => {
                 ) : null}
 
                 <AlertBanner alerts={alerts} />
+
+                {batteryRestricted ? (
+                    <Banner
+                        actionLabel="Fix"
+                        message="Android can stop the app while the screen is off. Let it run without the battery saver so the guidance keeps reaching the scooter."
+                        onAction={() => void openBatteryOptimizationSettings()}
+                        tone="warning"
+                    />
+                ) : null}
 
                 <SpeedGauge
                     isStale={stale}

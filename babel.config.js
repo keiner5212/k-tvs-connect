@@ -21,6 +21,7 @@ module.exports = {
                     "@constants": "./src/constants",
                     "@contexts": "./src/contexts",
                     "@typings": "./src/types",
+                    "@cluster": "./modules/ktvs-cluster",
                 },
             },
         ],

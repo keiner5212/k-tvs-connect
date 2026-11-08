@@ -9,7 +9,6 @@ import { useCameraStore } from '@stores/cameraStore';
 import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { bindRideTracker, rideTracker } from '@services/rideTracker';
-import { connectionController } from '@ble/connectionController';
 import { parseSharedLocation } from '@services/sharedLocation';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
@@ -54,16 +53,6 @@ export default function App() {
             }
 
             map.updateNavigation(state.position[0], state.position[1]);
-            const progress = useMapStore.getState().navigation;
-
-            void connectionController.sendNavigationUpdate({
-                distanceToNextManeuverMeters: Math.round(progress.distanceToManeuverMeters),
-                timeLeftMinutes: Math.round(progress.timeLeftSeconds / 60),
-                totalDistanceLeftMeters: Math.round(progress.distanceLeftMeters),
-                pictogramId: 0,
-                navigationOn: !progress.arrived,
-                instruction: progress.instruction,
-            });
         });
 
         return unsubscribe;

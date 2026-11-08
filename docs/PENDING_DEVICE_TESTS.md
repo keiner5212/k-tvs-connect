@@ -48,7 +48,39 @@ The name the cluster shows comes from the nickname of the bike in the Garage.
   X characters. The cluster only accepts latin letters, digits and spaces, so a
   nickname with accents becomes X.
 
-### 4. The notifications
+### 4. The navigation on the cluster
+
+Start a route from the sheet of the map with the bike on and in range.
+
+- Watch: the display of the cluster while the phone moves.
+- Prove: that the cluster draws the turn, the metres to the turn and the
+  minutes left, and that the numbers move while the phone is in the pocket.
+  The frame is the `5A 4E` of the original, with its checksum, sent every 400
+  milliseconds.
+- Prove too: that the arrow is the right one. The pictogram id of the cluster
+  is a numbering of its own and this port sends zero, so the arrow may be wrong
+  until the ids are confirmed against a real cluster.
+
+### 5. The connection that comes back
+
+Turn the bike off with the app open, wait, then turn it on again without
+touching the phone.
+
+- Prove: that the app finds the bike again on its own. The original gives up
+  after one retry, this one keeps looking with a capped backoff, and the
+  connection screen says how many attempts it made and when the next one is.
+
+### 6. The screen off
+
+Start a route, lock the phone, and ride.
+
+- Prove: that the guidance keeps reaching the cluster. The app runs a
+  foreground service with a wake lock while the bike is connected, and the
+  rider has to let the app run without the battery saver.
+- Watch: `adb shell dumpsys deviceidle whitelist | grep ktvsconnect` has to
+  show the package.
+
+### 7. The notifications
 
 The original app does not send notification text to the cluster. It sends only
 the WhatsApp, Facebook and Instagram counters and the media metadata. If the

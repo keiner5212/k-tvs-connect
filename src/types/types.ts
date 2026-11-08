@@ -1,5 +1,7 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
+import type { CameraSense } from '@utils/cameraSense';
+
 export type CameraTechnology =
     | 'Radar Doppler'
     | 'Video Detección (Con Analítica de Video)'
@@ -9,7 +11,7 @@ export type CameraTechnology =
     | 'Otra Tecnología'
     | 'Not reported';
 
-export type CameraOperatingState = 'Operating' | 'Not operating' | 'Not reported';
+export type CameraOperatingState = 'Operating' | 'Expired' | 'Not operating' | 'Not reported';
 
 export interface TrafficCamera {
     cameraId: string;
@@ -23,6 +25,8 @@ export interface TrafficCamera {
     municipality: string;
     department: string;
     operatingState: CameraOperatingState;
+    /** the direction the camera watches, when the agency published one */
+    sense: CameraSense | null;
     infractions: string[];
     datasetPublishedAt: number | null;
     distanceMeters: number | null;
@@ -35,6 +39,7 @@ export interface CameraMarkerData {
     longitude: number;
     maxSpeedKmh: number | null;
     isAvoided: boolean;
+    isExpired: boolean;
     label: string;
 }
 

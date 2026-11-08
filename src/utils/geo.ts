@@ -59,3 +59,15 @@ export const boundingBox = (
         maxLon: Math.max(start.lon, end.lon) + lonMargin,
     };
 };
+
+/** The direction of a segment, in degrees, zero being the north. */
+export const bearingDegrees = (from: LatLon, to: LatLon): number => {
+    const lat1 = toRadians(from.lat);
+    const lat2 = toRadians(to.lat);
+    const dLon = toRadians(to.lon - from.lon);
+
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
