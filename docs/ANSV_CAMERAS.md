@@ -107,21 +107,22 @@ A camera that watches both directions of its street forbids both of those
 directions and still allows a crossing. A camera with no published sense is
 closed in every direction.
 
-The route is computed, then read. Every stretch within 65 m of a camera is
-compared with the direction that camera looks. The published point can sit
-about 50 m short of the corner, and a 40 m corridor missed a left turn onto
-the watched direction. A stretch within 60 degrees of that direction is the
-rider with the camera behind them. The router is asked
-again with those stretches banned and the opposite direction left open, and
-this repeats until the route has none of those stretches. The ban is a cost
-factor on the exact edges the route rode, drawn in that one direction, so a
-circle is not dropped on the spot and the facing direction stays rideable.
+The route is computed, then read. A stretch counts as the camera behind the
+bike when the rider is on that road, already past the camera, and within 60
+degrees of the way the camera looks. The approach stays open, because the
+camera is still in front. The published point can sit about 50 m short of the
+corner, so the check reaches 160 m along the road and only 45 m off to the
+side. A parallel street one block away is not that road. The router is asked
+again with those leaving stretches banned and the opposite direction left
+open. The ban is a cost factor on the exact edges the route rode, drawn in
+that one direction, so a circle is not dropped on a one-way camera and the
+facing direction stays rideable.
 
-A camera with no published sense, or a banned stretch the router still rides,
-is closed with a ring of 25 to 45 m. Manual avoid points can still be dropped
-when they make the destination unreachable. A camera ban is not dropped. When
-every remaining route would leave a camera behind the bike, the app says so
-and does not offer that route.
+A camera with no published sense is closed with a ring of 25 to 65 m. Manual
+avoid points can still be dropped when they make the destination unreachable.
+A camera ban is not dropped on purpose. When a later ban leaves no path, that
+ban is left out and the best route already found is kept, so the rider can
+still reach the destination.
 
 The map tells how many cameras were avoided and how many nearby ones were left
 alone because the route faces them.

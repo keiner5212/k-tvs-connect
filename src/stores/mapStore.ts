@@ -5,7 +5,7 @@ import { NavigationUpdate } from '@ble/protocol';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { CAMERA_AVOID_RADIUS_METERS } from '@services/ansv.service';
 import { Costing, computeRoute, DirectedAvoid } from '@services/valhalla.service';
-import { CameraPassage, useCameraStore } from '@stores/cameraStore';
+import { CameraPassage, ROUTE_CORRIDOR_METERS, useCameraStore } from '@stores/cameraStore';
 import { decodePolyline, nearestPointIndex, remainingDistanceMeters } from '@utils/polyline';
 import {
     listObservations,
@@ -44,7 +44,6 @@ export interface FocusPoint {
 
 export type RouteVariant = 'short' | 'safe';
 
-const CAMERA_BEHIND = 'No route avoids a camera behind the bike.';
 const REPAIR_PASSES = 4;
 
 export interface RouteVariants {
@@ -124,9 +123,6 @@ const pointsOfRoute = (geometry: string): { lat: number; lon: number }[] => {
 
 const describeRouteError = (error: unknown): string => {
     const message = error instanceof Error ? error.message : '';
-    if (message.includes('camera behind')) {
-        return CAMERA_BEHIND;
-    }
     if (message.includes('too large')) {
         return 'The routing answer was too large. Try a shorter route.';
     }
@@ -167,7 +163,10 @@ const emptyBans = (): CameraBans => ({
 });
 
 const hardRadius = (distanceMeters: number): number =>
-    Math.min(45, Math.max(CAMERA_AVOID_RADIUS_METERS, Math.round(distanceMeters) + 12));
+    Math.min(
+        ROUTE_CORRIDOR_METERS,
+        Math.max(CAMERA_AVOID_RADIUS_METERS, Math.round(distanceMeters) + 12),
+    );
 
 const addHard = (bans: CameraBans, passage: CameraPassage): boolean => {
     const id = `ansv-${passage.camera.cameraId}`;
@@ -216,12 +215,20 @@ const addPassage = (bans: CameraBans, passage: CameraPassage): boolean => {
     if (added) {
         return true;
     }
+    // A ring would close the facing direction too, and that seals the destination.
+    if (!passage.everyDirection) {
+        return false;
+    }
     return addHard(bans, passage);
 };
 
-const planOf = (bans: CameraBans, facing: TrafficCamera[]): CameraPlan => {
-    const facingIds = new Set(facing.map((camera) => camera.cameraId));
-    const avoided = [...bans.cameras.values()].filter((camera) => !facingIds.has(camera.cameraId));
+const planOf = (
+    bans: CameraBans,
+    facing: TrafficCamera[],
+    behind: TrafficCamera[] = [],
+): CameraPlan => {
+    const skip = new Set([...facing, ...behind].map((camera) => camera.cameraId));
+    const avoided = [...bans.cameras.values()].filter((camera) => !skip.has(camera.cameraId));
     return { sent: avoided.length, leftOut: facing.length, cameras: avoided };
 };
 
@@ -232,7 +239,8 @@ const publishPlan = (plan: CameraPlan): void => {
 
 /**
  * Recompute until the route no longer leaves a camera behind the rider.
- * Facing a camera, and crossing it, are left as they are.
+ * Facing a camera, and crossing it, are left as they are. A ban that seals
+ * the destination is dropped and the best route already found is kept.
  */
 const routeAroundCameras = async (
     baseUrl: string,
@@ -257,9 +265,26 @@ const routeAroundCameras = async (
         });
 
     let route = await ask();
+    let best = route;
+    let bestBack = Number.POSITIVE_INFINITY;
+    let bestFacing: TrafficCamera[] = [];
+    let bestBehind: TrafficCamera[] = [];
+
+    const keep = (candidate: RouteResult, back: CameraPassage[], facing: TrafficCamera[]) => {
+        if (
+            back.length < bestBack ||
+            (back.length === bestBack && candidate.distanceMeters < best.distanceMeters)
+        ) {
+            best = candidate;
+            bestBack = back.length;
+            bestFacing = facing;
+            bestBehind = back.map((passage) => passage.camera);
+        }
+    };
 
     for (let pass = 0; pass < REPAIR_PASSES; pass += 1) {
         const { back, facing } = await useCameraStore.getState().classifyRoute(route.geometry);
+        keep(route, back, facing);
         if (back.length === 0) {
             return { route, plan: planOf(bans, facing) };
         }
@@ -270,7 +295,7 @@ const routeAroundCameras = async (
             }
         }
         if (!added) {
-            throw new Error(CAMERA_BEHIND);
+            break;
         }
         try {
             route = await ask();
@@ -283,15 +308,16 @@ const routeAroundCameras = async (
             ) {
                 throw error;
             }
-            throw new Error(CAMERA_BEHIND);
+            break;
         }
     }
 
     const last = await useCameraStore.getState().classifyRoute(route.geometry);
-    if (last.back.length > 0) {
-        throw new Error(CAMERA_BEHIND);
+    keep(route, last.back, last.facing);
+    if (last.back.length === 0) {
+        return { route, plan: planOf(bans, last.facing) };
     }
-    return { route, plan: planOf(bans, last.facing) };
+    return { route: best, plan: planOf(bans, bestFacing, bestBehind) };
 };
 
 export const useMapStore = create<MapState>((set, get) => ({

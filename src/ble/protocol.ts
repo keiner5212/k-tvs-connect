@@ -173,6 +173,43 @@ export const sanitizeClusterText = (value: string): string => {
 };
 
 /**
+ * The letter frames of the N112 family: a prefix byte, the value and the
+ * postfix. The RTR 160 of the rider answers on the service of that family,
+ * and the original app decides between the two families with the service
+ * uuid of the server, so the app sends both until the cluster answers.
+ */
+export const buildLetterNamePacket = (name: string): Uint8Array => {
+    const bytes = utf8Encode(name.slice(0, 16));
+    const packet = new Uint8Array(bytes.length + 2);
+    packet[0] = 0x4d; // M, the name of the rider
+    packet.set(bytes, 1);
+    packet[packet.length - 1] = 0x24; // $
+    return packet;
+};
+
+export const buildLetterVehiclePacket = (name: string): Uint8Array => {
+    const bytes = utf8Encode(name.slice(0, 16));
+    const packet = new Uint8Array(bytes.length + 2);
+    packet[0] = 0x56; // V, the name of the bike
+    packet.set(bytes, 1);
+    packet[packet.length - 1] = 0x24; // $
+    return packet;
+};
+
+export const buildLetterSignalPacket = (
+    signal: number,
+    batteryPercent: number,
+    missedCalls: number,
+    networkType: number,
+): Uint8Array =>
+    new Uint8Array([0x58, signal, batteryPercent, missedCalls, 0, networkType]); // X
+
+export const buildLetterTimePacket = (date: Date): Uint8Array => {
+    const hours = date.getHours() % 12;
+    return new Uint8Array([0x48, hours, date.getMinutes(), date.getHours() >= 12 ? 1 : 0]); // H
+};
+
+/**
  * The name the cluster shows. Header 0x5B 0x52.
  */
 export const buildRiderNamePacket = (

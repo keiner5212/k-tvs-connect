@@ -148,14 +148,14 @@ Three things the public instance does not tell you:
   GeoJSON polygon is refused with a parse error.
 - **An exclusion removes every road that crosses the ring.** The ring is a
   circle of the radius of the point. Manual points use their own radius. A
-  camera with no published sense uses 25 to 45 m, enough to reach the road and
+  camera with no published sense uses 25 to 65 m, enough to reach the road and
   not the next street. The `exclude_locations` form is not sent: it removes the
   closest road entirely, even when the road is far from the point, and that is
   what made the route jump to another street. When a ring makes the destination
   unreachable the router answers "no path could be found". Manual points are
-  then tried again with half of them and finally with none. A camera ban stays
-  in the request. If that leaves no path, the app does not return a route that
-  puts a camera behind the bike.
+  then tried again with half of them and finally with none. A one-way camera
+  is not closed with a ring, because that also blocks the facing direction.
+  If a camera ban leaves no path, the app keeps the best route it already found.
 
 The FOSSGIS demo server `https://valhalla1.openstreetmap.de` is open to the public
 with one request per second and asks published apps to send an `X-Client-Id`

@@ -92,7 +92,11 @@ export class BleService {
 
     private device: Device | null = null;
 
-    private writeCharacteristic: Characteristic | null = null;
+    private writeCharacteristics: Characteristic[] = [];
+
+    private writtenFrames = 0;
+
+    private receivedFrames = 0;
 
     private clusterKind: ClusterKind = 'modern';
 
@@ -162,7 +166,22 @@ export class BleService {
         onBonding?: () => void,
         timeoutMs: number = CONNECT_TIMEOUT_MS,
     ): Promise<Device> {
-        await this.ensureBond(deviceId, onBonding);
+        const bondedNow = await this.ensureBond(deviceId, onBonding);
+        if (bondedNow) {
+            /**
+             * The link that carried the pairing is not the link that carries
+             * the traffic. Android has to bring the encryption up on a fresh
+             * connection, and the cluster refuses a write with response on an
+             * unencrypted link, so the old one is dropped before the new one
+             * is opened.
+             */
+            try {
+                this.manager.cancelDeviceConnection(deviceId);
+            } catch {
+                // the link was never opened, there is nothing to drop
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
         const started = Date.now();
         logger.info('connecting to the cluster', {
             service: 'ble',
@@ -188,6 +207,11 @@ export class BleService {
             event: 'ble_connect_ok',
             durationMs: Date.now() - started,
         });
+        logger.info('the link to the cluster is open', {
+            service: 'ble',
+            event: 'ble_mtu',
+            count: this.device.mtu,
+        });
         return this.device;
     }
 
@@ -196,9 +220,9 @@ export class BleService {
      * cluster that is not paired never answers the gatt connect. Android owns
      * the pairing, so the app asks for it and waits for the rider to accept.
      */
-    private async ensureBond(deviceId: string, onBonding?: () => void): Promise<void> {
+    private async ensureBond(deviceId: string, onBonding?: () => void): Promise<boolean> {
         if (await isBonded(deviceId)) {
-            return;
+            return false;
         }
         logger.info('the cluster is not paired yet, android is asking for the pairing', {
             service: 'ble',
@@ -217,6 +241,7 @@ export class BleService {
             service: 'ble',
             event: 'ble_bond_ok',
         });
+        return true;
     }
 
     async discover(
@@ -226,9 +251,10 @@ export class BleService {
         await device.discoverAllServicesAndCharacteristics();
         const services = await device.services();
 
-        let read: Characteristic | null = null;
-        let write: Characteristic | null = null;
+        const readCharacteristics: Characteristic[] = [];
+        const writeCharacteristics: Characteristic[] = [];
         const found: string[] = [];
+
         for (const service of services) {
             const characteristics = await device.characteristicsForService(service.uuid);
             found.push(
@@ -239,45 +265,34 @@ export class BleService {
 
             for (const characteristic of characteristics) {
                 const uuid = characteristic.uuid.toUpperCase();
-                if (uuid === READ_CHARACTERISTIC_UUID) {
-                    read = characteristic;
+                if (uuid === READ_CHARACTERISTIC_UUID || uuid === WRITE_CHARACTERISTIC_UUID) {
+                    if (canNotify(characteristic) && !readCharacteristics.includes(characteristic)) {
+                        readCharacteristics.push(characteristic);
+                    }
+                    if (canWrite(characteristic) && !writeCharacteristics.includes(characteristic)) {
+                        writeCharacteristics.push(characteristic);
+                    }
+                    continue;
                 }
-                if (uuid === WRITE_CHARACTERISTIC_UUID) {
-                    write = characteristic;
+                /**
+                 * The cluster of the RTR 160 IoT V2 answers on its own
+                 * service with its own characteristic uuids, so the app takes
+                 * the endpoints it can talk to from the discovery.
+                 */
+                if (service.uuid.toUpperCase().includes(CLUSTER_SERVICE_MARK)) {
+                    if (canNotify(characteristic) && !readCharacteristics.includes(characteristic)) {
+                        readCharacteristics.push(characteristic);
+                    }
+                    if (canWrite(characteristic) && !writeCharacteristics.includes(characteristic)) {
+                        writeCharacteristics.push(characteristic);
+                    }
                 }
             }
         }
 
-        /**
-         * The cluster of the older generation has its own service uuid and its
-         * own characteristic uuids, so the app takes them from the discovery:
-         * the characteristic that notifies is the one that reads, and the one
-         * that writes is the one that writes.
-         */
-        let kind: ClusterKind = 'modern';
-        if (!read || !write) {
-            kind = 'rtr160';
-            const cluster = services.find((service) =>
-                service.uuid.toUpperCase().includes(CLUSTER_SERVICE_MARK),
-            );
-            if (cluster) {
-                const characteristics = await device.characteristicsForService(cluster.uuid);
-                read =
-                    read ??
-                    characteristics.find((item) => canNotify(item)) ??
-                    null;
-                write =
-                    write ??
-                    /**
-                     * The original app writes this family with the write
-                     * type "with response", so the endpoint that takes it is
-                     * the one to use.
-                     */
-                    characteristics.find((item) => item.isWritableWithResponse) ??
-                    characteristics.find((item) => canWrite(item)) ??
-                    null;
-            }
-        }
+        const kind: ClusterKind = readCharacteristics.length > 0 && writeCharacteristics.length > 0
+            ? 'modern'
+            : 'rtr160';
 
         logger.info('the characteristics are ready', {
             service: 'ble',
@@ -288,22 +303,41 @@ export class BleService {
 
         this.clusterKind = kind;
 
-        if (read) {
-            await read.monitor((error: BleError | null, value: Characteristic | null) => {
+        /**
+         * The cluster notifies on more than one endpoint, so the app listens
+         * to all of them and takes the frames from whichever answers.
+         */
+        for (const characteristic of readCharacteristics) {
+            await characteristic.monitor((error: BleError | null, value: Characteristic | null) => {
                 if (error || !value?.value) {
                     if (error) {
-                        logger.warn('the telemetry stream reported an error', {
-                            service: 'ble',
-                            event: 'ble_monitor_error',
-                            errorName: String(error.errorCode),
-                        });
+                        logger.warn(
+                            `the telemetry stream reported an error: ${describeError(error)}`,
+                            {
+                                service: 'ble',
+                                event: 'ble_monitor_error',
+                                errorName: String(error.errorCode),
+                            },
+                        );
                     }
                     return;
                 }
-                onTelemetry(base64ToBytes(value.value));
+                const raw = base64ToBytes(value.value);
+                this.receivedFrames += 1;
+                if (this.receivedFrames <= 3) {
+                    logger.info('a frame came from the cluster', {
+                        service: 'ble',
+                        event: 'ble_frame',
+                        count: this.receivedFrames,
+                        pathTemplate: Array.from(raw)
+                            .map((byte) => byte.toString(16).padStart(2, '0'))
+                            .join(''),
+                    });
+                }
+                onTelemetry(raw);
             });
         }
-        this.writeCharacteristic = write;
+        this.writeCharacteristics = writeCharacteristics;
 
         /**
          * The original app checks the service of the cluster after the
@@ -311,7 +345,7 @@ export class BleService {
          * answers the gatt connect but has no bike service is not a bike,
          * and the app has to say so instead of pretending it is connected.
          */
-        if (!read || !write) {
+        if (readCharacteristics.length === 0 || writeCharacteristics.length === 0) {
             logger.warn('the device does not have the bike service', {
                 service: 'ble',
                 event: 'ble_discover',
@@ -327,20 +361,43 @@ export class BleService {
     }
 
     async write(bytes: Uint8Array): Promise<void> {
-        const characteristic = this.writeCharacteristic;
-        if (!characteristic) {
+        const characteristics = this.writeCharacteristics;
+        if (characteristics.length === 0) {
             throw new Error('write characteristic is not available');
         }
         /**
-         * The write has to use the method the characteristic supports. The
-         * original app writes this family without a response, and a write
-         * with a response to a characteristic that does not take it is
-         * dropped by the stack, so the cluster never answers.
+         * The write has to use the method the endpoint supports: a write with
+         * a response to an endpoint that only takes a write without one is
+         * dropped by the stack, and the cluster never answers. The cluster of
+         * the RTR 160 has two endpoints that take commands, so the app writes
+         * to both.
          */
-        if (characteristic.isWritableWithResponse) {
-            await characteristic.writeWithResponse(bytesToBase64(bytes));
-        } else {
-            await characteristic.writeWithoutResponse(bytesToBase64(bytes));
+        const payload = bytesToBase64(bytes);
+        this.writtenFrames += 1;
+        if (this.writtenFrames <= 3) {
+            logger.info('a frame was written to the cluster', {
+                service: 'ble',
+                event: 'ble_write',
+                count: this.writtenFrames,
+                pathTemplate: Array.from(bytes)
+                    .map((byte) => byte.toString(16).padStart(2, '0'))
+                    .join(''),
+            });
+        }
+        for (const characteristic of characteristics) {
+            try {
+                if (characteristic.isWritableWithResponse) {
+                    await characteristic.writeWithResponse(payload);
+                } else {
+                    await characteristic.writeWithoutResponse(payload);
+                }
+            } catch (error) {
+                logger.warn(`could not write to ${characteristic.uuid}: ${describeError(error)}`, {
+                    service: 'ble',
+                    event: 'ble_write_error',
+                    errorName: error instanceof Error ? error.name : 'UnknownError',
+                });
+            }
         }
     }
 
@@ -349,7 +406,7 @@ export class BleService {
     }
 
     async disconnect(): Promise<void> {
-        this.writeCharacteristic = null;
+        this.writeCharacteristics = [];
         if (this.device) {
             await this.manager.cancelDeviceConnection(this.device.id);
             this.device = null;

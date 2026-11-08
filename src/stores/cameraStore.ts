@@ -11,14 +11,18 @@ import {
     setCameraAvoidEnabled,
 } from '@services/db/cameraRepository';
 import { getSettings, setSetting } from '@services/db/settingsRepository';
-import { bearingDegrees, distanceMeters, distanceToSegmentMeters } from '@utils/geo';
+import { bearingDegrees, distanceMeters, segmentOffsetMeters } from '@utils/geo';
 import { isRiskyDirection } from '@utils/cameraSense';
 import { decodePolyline, encodePolyline } from '@utils/polyline';
 import { logger } from '@utils/logger';
 const REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const NEARBY_RADIUS_METERS = 5000;
 // Published point sits ~50 m short of the corner. 40 m missed the left turn there.
-const ROUTE_CORRIDOR_METERS = 65;
+export const ROUTE_CORRIDOR_METERS = 65;
+// Leaving side only. The approach still faces the camera, and 45 m off the line is the next block.
+const ROAD_OFFSET_METERS = 45;
+const BEHIND_AHEAD_METERS = 20;
+const BEHIND_RANGE_METERS = 160;
 
 /** The list of cameras only changes when the rider moves this far. */
 const CAMERA_RELOAD_METERS = 50;
@@ -253,17 +257,26 @@ export const useCameraStore = create<CameraState>((set, get) => ({
              * rider even when the approach itself faces the camera.
              */
             for (let index = 1; index < points.length; index += 1) {
-                const toSegment = distanceToSegmentMeters(point, points[index - 1], points[index]);
-                if (toSegment > ROUTE_CORRIDOR_METERS) {
+                const start = points[index - 1];
+                const end = points[index];
+                const offset = segmentOffsetMeters(point, start, end);
+                const onRoad = everyDirection
+                    ? offset.distanceMeters <= ROUTE_CORRIDOR_METERS
+                    : offset.distanceMeters <= BEHIND_RANGE_METERS &&
+                      Math.abs(offset.crossMeters) <= ROAD_OFFSET_METERS;
+                if (!onRoad) {
                     if (runStart >= 0) {
                         runs.push({ start: runStart, end: index - 1 });
                         runStart = -1;
                     }
                     continue;
                 }
-                distance = Math.min(distance, toSegment);
-                const travel = bearingDegrees(points[index - 1], points[index]);
-                if (!isRiskyDirection(sense, travel)) {
+                distance = Math.min(distance, offset.distanceMeters);
+                const travel = bearingDegrees(start, end);
+                const behind =
+                    everyDirection ||
+                    (isRiskyDirection(sense, travel) && offset.aheadMeters < BEHIND_AHEAD_METERS);
+                if (!behind) {
                     if (runStart >= 0) {
                         runs.push({ start: runStart, end: index - 1 });
                         runStart = -1;
@@ -281,21 +294,21 @@ export const useCameraStore = create<CameraState>((set, get) => ({
                 continue;
             }
 
-            if (runs.length === 0) {
-                facing.push(camera);
-                continue;
-            }
-
             const shapes = runs
                 .map((run) => points.slice(run.start, run.end + 1))
                 .filter((slice) => slice.length >= 2 && distanceMeters(slice[0], slice[slice.length - 1]) >= 1)
                 .map((slice) => encodePolyline(slice, 6));
 
+            if (runs.length === 0 || (shapes.length === 0 && !everyDirection)) {
+                facing.push(camera);
+                continue;
+            }
+
             back.push({
                 camera,
                 shapes,
                 distanceMeters: distance,
-                everyDirection: everyDirection || shapes.length === 0,
+                everyDirection,
             });
         }
 

@@ -19,6 +19,10 @@ import {
     NavigationUpdate,
     TRAFFIC_SEQUENCE,
     RTR160_XOR_KEY,
+    buildLetterNamePacket,
+    buildLetterSignalPacket,
+    buildLetterTimePacket,
+    buildLetterVehiclePacket,
     buildLocationAddressPacket,
     buildMobileDataPacket,
     buildNavigationControlPacket,
@@ -660,6 +664,9 @@ export class ConnectionController {
             /**
              * The original app sends the name five times with a pause between
              * them, because the cluster needs it before it shows the greeting.
+             * The cluster of the rider answers on the service of the N112
+             * family, so the app sends the name in both families until the
+             * cluster answers.
              */
             for (let attempt = 0; attempt < RIDER_NAME_REPEATS; attempt += 1) {
                 await this.ble
@@ -671,10 +678,14 @@ export class ConnectionController {
                         ),
                     )
                     .catch(() => undefined);
+                await this.ble.write(buildLetterNamePacket(name)).catch(() => undefined);
                 if (attempt < RIDER_NAME_REPEATS - 1) {
                     await delay(RIDER_NAME_PAUSE_MS);
                 }
             }
+            await this.ble
+                .write(buildLetterVehiclePacket(this.bike?.nickname ?? name))
+                .catch(() => undefined);
             logger.info('the rider name was sent to the bike', {
                 service: 'ble',
                 event: 'ble_rider_name',
@@ -750,6 +761,10 @@ export class ConnectionController {
                 ),
             )
             .catch(() => undefined);
+        await this.ble
+            .write(buildLetterSignalPacket(0, battery, 0, networkType))
+            .catch(() => undefined);
+        await this.ble.write(buildLetterTimePacket(new Date())).catch(() => undefined);
     }
 
     /** The gps and the network state travel in the navigation frame of the cluster. */

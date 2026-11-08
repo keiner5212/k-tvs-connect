@@ -44,6 +44,37 @@ export const distanceToSegmentMeters = (point: LatLon, start: LatLon, end: LatLo
     return Math.sqrt(dx * dx + dy * dy);
 };
 
+export interface SegmentOffset {
+    distanceMeters: number;
+    /** Positive when the point is still in front of the rider. */
+    aheadMeters: number;
+    crossMeters: number;
+}
+
+/** Where a point sits relative to the rider on this segment. */
+export const segmentOffsetMeters = (point: LatLon, start: LatLon, end: LatLon): SegmentOffset => {
+    const latScale = 111320;
+    const lonScale = 111320 * Math.cos(toRadians(start.lat));
+    const px = (point.lon - start.lon) * lonScale;
+    const py = (point.lat - start.lat) * latScale;
+    const ex = (end.lon - start.lon) * lonScale;
+    const ey = (end.lat - start.lat) * latScale;
+    const lengthSquared = ex * ex + ey * ey;
+    const length = Math.sqrt(lengthSquared);
+    const t =
+        lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, (px * ex + py * ey) / lengthSquared));
+    const cx = px - t * ex;
+    const cy = py - t * ey;
+    const alongEast = length === 0 ? 0 : ex / length;
+    const alongNorth = length === 0 ? 0 : ey / length;
+
+    return {
+        distanceMeters: Math.sqrt(cx * cx + cy * cy),
+        aheadMeters: cx * alongEast + cy * alongNorth,
+        crossMeters: -cx * alongNorth + cy * alongEast,
+    };
+};
+
 export const boundingBox = (
     start: LatLon,
     end: LatLon,
