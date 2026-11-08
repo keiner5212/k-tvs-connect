@@ -385,6 +385,7 @@ export class BleService {
             });
         }
         for (const characteristic of characteristics) {
+            const method = characteristic.isWritableWithResponse ? 'with response' : 'without response';
             try {
                 if (characteristic.isWritableWithResponse) {
                     await characteristic.writeWithResponse(payload);
@@ -392,13 +393,37 @@ export class BleService {
                     await characteristic.writeWithoutResponse(payload);
                 }
             } catch (error) {
-                logger.warn(`could not write to ${characteristic.uuid}: ${describeError(error)}`, {
-                    service: 'ble',
-                    event: 'ble_write_error',
-                    errorName: error instanceof Error ? error.name : 'UnknownError',
-                });
+                const failures = (this.writeFailures.get(characteristic.uuid) ?? 0) + 1;
+                this.writeFailures.set(characteristic.uuid, failures);
+                if (failures > 3) {
+                    continue;
+                }
+                logger.warn(
+                    `could not write to ${characteristic.uuid} (${method}): ${this.describeBleError(error)}`,
+                    {
+                        service: 'ble',
+                        event: 'ble_write_error',
+                        errorName: error instanceof Error ? error.name : 'UnknownError',
+                    },
+                );
             }
         }
+    }
+
+    private writeFailures = new Map<string, number>();
+
+    /**
+     * The library keeps the android gatt status and the att error in fields
+     * that the logger drops, so they go in the message of the log line.
+     */
+    private describeBleError(error: unknown): string {
+        if (error instanceof Error) {
+            const ble = error as BleError;
+            const android = ble.androidErrorCode ?? 'none';
+            const att = ble.attErrorCode ?? 'none';
+            return `${describeError(error)} android=${android} att=${att}`;
+        }
+        return describeError(error);
     }
 
     get kind(): ClusterKind {

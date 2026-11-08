@@ -196,10 +196,12 @@ and twenty bytes. Three things are different.
 - The payload is xored with **0xEB**, not 0xEA. The original encrypts and
   decrypts it with `U368EncryptDecryptDataUtils`, whose key is -21, and the
   receiver rejects any frame that is not twenty bytes long.
-- The original writes it with the write type "with response"
-  (`U399HelperService.getCharacteristicsWriteType()` returns 2 and
-  `U507SendDataToCluster` writes with the literal 2), so the endpoint to write
-  to is `5503`, the one that takes a write with response.
+- The original writes it with a write with response. The data frames go with
+  the literal 2 (`U507SendDataToCluster.writeCharacteristic(..., 2)`) and the
+  navigation frames with `U324HelperService.getCharacteristicsWriteType()`,
+  which returns 1. Android only accepts the write types 2, 3 and 4, so the 1
+  is dropped and the write stays a write with response. The endpoint to write
+  to is therefore `5503`, the one that takes a write with response.
 - The rider name goes five times with a pause of 400 ms between them, then the
   mobile data frame with the clock, the battery, the signal and the missed
   calls. The name is not sanitised: `BluetoothUtil.createRiderNameArray` sends
@@ -207,6 +209,30 @@ and twenty bytes. Three things are different.
 
 The N112 family, the one before the V2, is a different one: it speaks letter
 frames, a prefix byte and the value. It is not the family of this bike.
+
+Which of the two the original picks is decided by
+`U324HelperService.initDataReceiverBeforeBleData`, which keeps the **last**
+discovered service and compares it with the server value of
+`SERVICE_UUID_RTR_160_IOT_V2`. A match gives the 0x5B frames of
+`U507SendDataToCluster`, anything else gives the letter frames of
+`N112SendDataToCluster`. The cluster of the rider ends its service list with
+the otau service `f000ffd0-0451-4000-b000-000000000000`, so the branch the
+original takes on this bike is still open.
+
+## What the phone saw on this cluster
+
+The link comes up, the four services and their characteristics are discovered
+with the right properties, the bond succeeds when the rider types the pass
+key the cluster shows, and then **every write is refused by the gatt stack**
+with `CharacteristicWriteFailed`. The write to `5502` is accepted by android
+but the cluster never answers. So the frame bytes have never reached the
+cluster, and the protocol has not been tested yet.
+
+The app now logs the android gatt status and the att error of every write, so
+the next attempt says why the stack refused it. The link is opened again
+after the pairing, because the link that carried the pairing is not the link
+that carries the traffic and android has to bring the encryption up on a
+fresh connection.
 
 ## Still to confirm
 

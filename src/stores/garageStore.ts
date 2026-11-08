@@ -8,6 +8,7 @@ import {
     setActiveBike,
     updateBike,
 } from '@services/db/bikeRepository';
+import { describeError, logger } from '@utils/logger';
 
 interface GarageState {
     bikes: Bike[];
@@ -28,7 +29,12 @@ export const useGarageStore = create<GarageState>((set, get) => ({
         try {
             const bikes = await listBikes();
             set({ bikes, loading: false });
-        } catch {
+        } catch (error) {
+            logger.warn(`the garage could not be read: ${describeError(error)}`, {
+                service: 'db',
+                event: 'garage_load_failed',
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
             set({ loading: false });
         }
     },
