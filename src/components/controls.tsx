@@ -361,6 +361,11 @@ export const showConfirm = (
     ]);
 };
 
+/** A message with a single button, for the things that need no answer. */
+export const showMessage = (title: string, message: string, label = 'OK') => {
+    Alert.alert(title, message, [{ text: label, style: 'default' }]);
+};
+
 const styles = StyleSheet.create({
     button: {
         alignItems: 'center',

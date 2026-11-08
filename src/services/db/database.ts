@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS bikes (
   id TEXT PRIMARY KEY NOT NULL,
   nickname TEXT NOT NULL,
   model TEXT NOT NULL,
-  frame_number TEXT NOT NULL,
   mac_address TEXT NOT NULL UNIQUE,
   is_active INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
@@ -133,6 +132,38 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `;
 
+/**
+ * The schema of the app has a version, so a table that changes shape can be
+ * rebuilt on the phones that already have the old one.
+ */
+const SCHEMA_VERSION = 3;
+
+const MIGRATIONS: { version: number; statements: string[] }[] = [
+    {
+        version: 3,
+        statements: [
+            `CREATE TABLE bikes_v2 (
+  id TEXT PRIMARY KEY NOT NULL,
+  nickname TEXT NOT NULL,
+  model TEXT NOT NULL,
+  mac_address TEXT NOT NULL UNIQUE,
+  is_active INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);`,
+            `INSERT INTO bikes_v2 (id, nickname, model, mac_address, is_active, created_at, updated_at)
+  SELECT id, nickname, model, mac_address, is_active, created_at, updated_at FROM bikes;`,
+            'DROP TABLE bikes;',
+            'ALTER TABLE bikes_v2 RENAME TO bikes;',
+        ],
+    },
+];
+
+const countRows = async (db: SQLite.SQLiteDatabase, table: string): Promise<number> => {
+    const row = await db.getFirstAsync<{ total: number }>(`SELECT COUNT(*) AS total FROM ${table};`);
+    return row?.total ?? 0;
+};
+
 const hexFromBytes = (bytes: Uint8Array): string =>
     Array.from(bytes)
         .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -161,6 +192,40 @@ export const openDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
     const db = await SQLite.openDatabaseAsync(DB_NAME);
     await db.execAsync(`PRAGMA key = "x'${key}'";`);
     await db.execAsync(SCHEMA);
+
+    const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+    const current = version?.user_version ?? 0;
+    const bikesBefore = current < SCHEMA_VERSION ? await countRows(db, 'bikes') : null;
+
+    if (current < SCHEMA_VERSION) {
+        /**
+         * The whole migration goes in one transaction, so a phone that is
+         * closed in the middle of it keeps the table it had.
+         */
+        await db.withExclusiveTransactionAsync(async () => {
+            for (const migration of MIGRATIONS) {
+                if (current < migration.version) {
+                    await db.execAsync(migration.statements.join('\n'));
+                }
+            }
+            await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+        });
+    }
+
+    if (bikesBefore !== null) {
+        const bikesAfter = await countRows(db, 'bikes');
+        logger.info('the database was migrated', {
+            event: 'migrate',
+            count: bikesAfter,
+            durationMs: bikesBefore - bikesAfter,
+        });
+        if (bikesAfter < bikesBefore) {
+            logger.warn('the migration lost bikes', {
+                event: 'migrate',
+                count: bikesBefore - bikesAfter,
+            });
+        }
+    }
 
     const cipher = await db.getFirstAsync<{ cipher_version: string }>('PRAGMA cipher_version;');
     if (!cipher?.cipher_version) {

@@ -74,49 +74,48 @@ export const telemetryFromFrame = (
                         : 'none';
 
     return {
-        speedKmh: values.speed ?? previous?.speedKmh ?? 0,
-        engineRpm: values.engineRpm ?? previous?.engineRpm ?? 0,
-        fuelLevelPercent: values.fuelLevel ?? previous?.fuelLevelPercent ?? 0,
-        batteryVoltage: values.batteryVoltage ?? previous?.batteryVoltage ?? 0,
-        odometerKm: values.odometer ?? previous?.odometerKm ?? 0,
-        tripDistanceKm: values.tripDistance ?? previous?.tripDistanceKm ?? 0,
+        speedKmh: values.speed ?? previous?.speedKmh ?? null,
+        engineRpm: values.engineRpm ?? previous?.engineRpm ?? null,
+        fuelLevelPercent: values.fuelLevel ?? previous?.fuelLevelPercent ?? null,
+        batteryVoltage: values.batteryVoltage ?? previous?.batteryVoltage ?? null,
+        odometerKm: values.odometer ?? previous?.odometerKm ?? null,
+        tripDistanceKm: values.tripDistance ?? previous?.tripDistanceKm ?? null,
         tripTimeSeconds:
             values.tripTimeHour !== undefined
                 ? values.tripTimeHour * 3600 + (values.tripTimeMinute ?? 0) * 60
-                : (previous?.tripTimeSeconds ?? 0),
-        averageSpeedKmh: values.averageSpeed ?? previous?.averageSpeedKmh ?? 0,
-        topSpeedKmh: values.topSpeed ?? previous?.topSpeedKmh ?? 0,
-        throttlePercent: values.throttle ?? previous?.throttlePercent ?? 0,
-        leanAngleDegree: values.leanAngle ?? previous?.leanAngleDegree ?? 0,
-        gearPosition: values.gearPosition ?? previous?.gearPosition ?? 0,
+                : (previous?.tripTimeSeconds ?? null),
+        averageSpeedKmh: values.averageSpeed ?? previous?.averageSpeedKmh ?? null,
+        topSpeedKmh: values.topSpeed ?? previous?.topSpeedKmh ?? null,
+        throttlePercent: values.throttle ?? previous?.throttlePercent ?? null,
+        leanAngleDegree: values.leanAngle ?? previous?.leanAngleDegree ?? null,
+        gearPosition: values.gearPosition ?? previous?.gearPosition ?? null,
         sideStandDown: (switchStatus & SIDE_STAND_BIT) !== 0,
         turnSignal,
         turnSignalStatus,
         vehicleState: values.vehicleState1 ?? previous?.vehicleState ?? 0,
         switchStatus,
-        tripMileage: values.tripMileage ?? previous?.tripMileage ?? 0,
-        tripFuel: values.tripFuel ?? previous?.tripFuel ?? 0,
+        tripMileage: values.tripMileage ?? previous?.tripMileage ?? null,
+        tripFuel: values.tripFuel ?? previous?.tripFuel ?? null,
         overspeedThreshold: values.overspeedThreshold ?? previous?.overspeedThreshold ?? 0,
-        engineTemperature: values.engineTemperature ?? previous?.engineTemperature ?? 0,
-        intakeAirTemperature: values.intakeAirTemperature ?? previous?.intakeAirTemperature ?? 0,
-        cruisingRange: values.cruisingRange ?? previous?.cruisingRange ?? 0,
-        lapNumber: values.lapNumber ?? previous?.lapNumber ?? 0,
+        engineTemperature: values.engineTemperature ?? previous?.engineTemperature ?? null,
+        intakeAirTemperature: values.intakeAirTemperature ?? previous?.intakeAirTemperature ?? null,
+        cruisingRange: values.cruisingRange ?? previous?.cruisingRange ?? null,
+        lapNumber: values.lapNumber ?? previous?.lapNumber ?? null,
         lapTimeMs:
             values.lapTimeMinute !== undefined
                 ? values.lapTimeMinute * 60000 +
-                  values.lapTimeSecond * 1000 +
-                  values.lapTimeMilliSecond
-                : (previous?.lapTimeMs ?? 0),
-        bestLapNumber: values.bestLapNumber ?? previous?.bestLapNumber ?? 0,
+                values.lapTimeSecond * 1000 +
+                values.lapTimeMilliSecond
+                : (previous?.lapTimeMs ?? null),
+        bestLapNumber: values.bestLapNumber ?? previous?.bestLapNumber ?? null,
         bestLapMs:
             values.bestLapMinute !== undefined
                 ? values.bestLapMinute * 60000 +
-                  values.bestLapSecond * 1000 +
-                  values.bestLapMilliSecond
-                : (previous?.bestLapMs ?? 0),
+                values.bestLapSecond * 1000 +
+                values.bestLapMilliSecond
+                : (previous?.bestLapMs ?? null),
         latitude: previous?.latitude ?? null,
         longitude: previous?.longitude ?? null,
-        frameNumber: previous?.frameNumber ?? null,
         receivedAt: Date.now(),
     };
 };

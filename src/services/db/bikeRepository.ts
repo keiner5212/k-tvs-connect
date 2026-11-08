@@ -5,7 +5,6 @@ interface BikeRow {
     id: string;
     nickname: string;
     model: string;
-    frame_number: string;
     mac_address: string;
     is_active: number;
     created_at: number;
@@ -16,7 +15,6 @@ const toBike = (row: BikeRow): Bike => ({
     id: row.id,
     nickname: row.nickname,
     model: row.model as Bike['model'],
-    frameNumber: row.frame_number,
     macAddress: row.mac_address,
     isActive: row.is_active === 1,
     createdAt: row.created_at,
@@ -57,7 +55,6 @@ export const insertBike = async (input: BikeInput): Promise<Bike> => {
         id: newId(),
         nickname: input.nickname.trim(),
         model: input.model,
-        frameNumber: input.frameNumber.trim(),
         macAddress: normalizeMac(input.macAddress),
         isActive: false,
         createdAt: now,
@@ -65,12 +62,11 @@ export const insertBike = async (input: BikeInput): Promise<Bike> => {
     };
 
     await db.runAsync(
-        `INSERT INTO bikes (id, nickname, model, frame_number, mac_address, is_active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+        `INSERT INTO bikes (id, nickname, model, mac_address, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 0, ?, ?)`,
         bike.id,
         bike.nickname,
         bike.model,
-        bike.frameNumber,
         bike.macAddress,
         bike.createdAt,
         bike.updatedAt,
@@ -82,11 +78,10 @@ export const insertBike = async (input: BikeInput): Promise<Bike> => {
 export const updateBike = async (id: string, input: BikeInput): Promise<void> => {
     const db = getDatabase();
     await db.runAsync(
-        `UPDATE bikes SET nickname = ?, model = ?, frame_number = ?, mac_address = ?, updated_at = ?
+        `UPDATE bikes SET nickname = ?, model = ?, mac_address = ?, updated_at = ?
      WHERE id = ?`,
         input.nickname.trim(),
         input.model,
-        input.frameNumber.trim(),
         normalizeMac(input.macAddress),
         Date.now(),
         id,

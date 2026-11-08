@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -20,9 +19,9 @@ export const GarageScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const tabBarHeight = useBottomTabBarHeight();
     const { bikes, load } = useGarageStore();
     const connectionState = useBleStore((state) => state.state);
+    const connectionInfo = useBleStore((state) => state.info);
     const lastUpdateAt = useBleStore((state) => state.lastUpdateAt);
 
     useEffect(() => {
@@ -38,9 +37,10 @@ export const GarageScreen = () => {
                 linkState={item.isActive ? connectionState : 'off'}
                 onPress={() => navigation.navigate('BikeDetails', { bikeId: item.id })}
                 onSetActive={() => void useGarageStore.getState().activate(item.id)}
+                reason={item.isActive ? connectionInfo.reason : null}
             />
         ),
-        [connectionState, lastUpdateAt, navigation],
+        [connectionInfo.reason, connectionState, lastUpdateAt, navigation],
     );
 
     return (
@@ -55,10 +55,7 @@ export const GarageScreen = () => {
             </View>
 
             <FlatList
-                contentContainerStyle={[
-                    styles.list,
-                    { paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding },
-                ]}
+                contentContainerStyle={styles.list}
                 data={bikes}
                 keyExtractor={(item) => item.id}
                 ListEmptyComponent={

@@ -1,7 +1,11 @@
 package com.ktvsconnect.cluster
 
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -9,6 +13,8 @@ import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class ClusterModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -34,11 +40,13 @@ class ClusterModule : Module() {
       } else {
         context.startService(intent)
       }
+      true
     }
 
     AsyncFunction("stopService") {
       val context = appContext.reactContext ?: throw IllegalStateException("no react context")
       context.stopService(Intent(context, ClusterService::class.java))
+      true
     }
 
     AsyncFunction("isIgnoringBatteryOptimizations") {
@@ -60,6 +68,58 @@ class ClusterModule : Module() {
         context.startActivity(fallback)
       }
       true
+    }
+
+    /**
+     * True when the phone already shares a key with the cluster. The original
+     * app bonds the cluster before it writes to it, and a cluster that is not
+     * bonded never answers the gatt connect.
+     */
+    AsyncFunction("isBonded") { macAddress: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("no react context")
+      remoteDevice(context, macAddress).bondState == BluetoothDevice.BOND_BONDED
+    }
+
+    /**
+     * Asks android for the pairing with the cluster and waits for the answer.
+     * The system shows the pairing dialog, so the rider has to accept it.
+     */
+    AsyncFunction("bondDevice") { macAddress: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("no react context")
+      val device = remoteDevice(context, macAddress)
+      if (device.bondState == BluetoothDevice.BOND_BONDED) {
+        return@AsyncFunction true
+      }
+
+      val latch = CountDownLatch(1)
+      var bonded = false
+      val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+          if (intent?.action != BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
+            return
+          }
+          val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
+          if (state == BluetoothDevice.BOND_BONDED) {
+            bonded = true
+            latch.countDown()
+          } else if (state == BluetoothDevice.BOND_NONE) {
+            latch.countDown()
+          }
+        }
+      }
+      context.registerReceiver(
+        receiver,
+        IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+      )
+      try {
+        if (!device.createBond()) {
+          return@AsyncFunction false
+        }
+        latch.await(BOND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        bonded
+      } finally {
+        context.unregisterReceiver(receiver)
+      }
     }
 
     /**
@@ -115,10 +175,18 @@ class ClusterModule : Module() {
     return java.io.File(folder, LOG_FILE_NAME)
   }
 
+  private fun remoteDevice(context: Context, macAddress: String): BluetoothDevice {
+    val manager = context.getSystemService(BluetoothManager::class.java)
+      ?: throw IllegalStateException("no bluetooth manager")
+    val adapter = manager.adapter ?: throw IllegalStateException("no bluetooth adapter")
+    return adapter.getRemoteDevice(macAddress)
+  }
+
   companion object {
     private const val LOG_FILE_NAME = "ktvs-connect.log"
     private const val MAX_LOG_BYTES = 1024L * 1024L
     private const val MAX_LOG_LINES = 4000
+    private const val BOND_TIMEOUT_SECONDS = 45L
 
     private var notificationListener: ((Map<String, Any>) -> Unit)? = null
 

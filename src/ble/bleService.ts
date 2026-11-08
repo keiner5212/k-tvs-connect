@@ -1,13 +1,30 @@
 import { BleError, BleManager, Characteristic, Device, State } from 'react-native-ble-plx';
 
-import { logger } from '@utils/logger';
+import { describeError, logger } from '@utils/logger';
+import { bondDevice, isBonded } from '@services/cluster.service';
 import { ensureBlePermissions } from './permissions';
 import {
     BLE_MTU,
+    CLUSTER_SERVICE_MARK,
     CONNECT_TIMEOUT_MS,
     READ_CHARACTERISTIC_UUID,
+    READ_PROPERTIES,
     WRITE_CHARACTERISTIC_UUID,
+    WRITE_PROPERTIES,
 } from './constants';
+
+/** why the link with the cluster is not up */
+export type LinkFailure = 'not-a-bike' | 'bond-refused' | 'connect-failed';
+
+export class ClusterLinkError extends Error {
+    readonly failure: LinkFailure;
+
+    constructor(failure: LinkFailure, message: string) {
+        super(message);
+        this.name = 'ClusterLinkError';
+        this.failure = failure;
+    }
+}
 
 /** the address of a device never goes to the log, only its last bytes */
 export const maskAddress = (id: string): string => {
@@ -20,6 +37,8 @@ export const maskAddress = (id: string): string => {
 export type DiscoveredDevice = {
     id: string;
     name: string | null;
+    localName: string | null;
+    serviceUUIDs: string[];
     rssi: number;
 };
 
@@ -99,6 +118,8 @@ export class BleService {
                 onDevice({
                     id: device.id,
                     name: device.name ?? null,
+                    localName: device.localName ?? null,
+                    serviceUUIDs: device.serviceUUIDs ?? [],
                     rssi: device.rssi ?? -100,
                 });
             },
@@ -110,6 +131,7 @@ export class BleService {
     }
 
     async connect(deviceId: string): Promise<Device> {
+        await this.ensureBond(deviceId);
         const started = Date.now();
         logger.info('connecting to the cluster', {
             service: 'ble',
@@ -122,7 +144,7 @@ export class BleService {
                 timeout: CONNECT_TIMEOUT_MS,
             });
         } catch (error) {
-            logger.error('the connection failed', {
+            logger.error(`the connection failed: ${describeError(error)}`, {
                 service: 'ble',
                 event: 'ble_connect_failed',
                 durationMs: Date.now() - started,
@@ -138,37 +160,83 @@ export class BleService {
         return this.device;
     }
 
+    /**
+     * The original app pairs with the cluster before it writes to it, and a
+     * cluster that is not paired never answers the gatt connect. Android owns
+     * the pairing, so the app asks for it and waits for the rider to accept.
+     */
+    private async ensureBond(deviceId: string): Promise<void> {
+        if (await isBonded(deviceId)) {
+            return;
+        }
+        logger.info('the cluster is not paired yet, android is asking for the pairing', {
+            service: 'ble',
+            event: 'ble_bond_start',
+        });
+        const bonded = await bondDevice(deviceId);
+        if (!bonded) {
+            logger.warn('the pairing with the cluster did not happen', {
+                service: 'ble',
+                event: 'ble_bond_failed',
+            });
+            throw new ClusterLinkError('bond-refused', 'the pairing with the cluster was refused');
+        }
+        logger.info('the cluster is paired', {
+            service: 'ble',
+            event: 'ble_bond_ok',
+        });
+    }
+
     async discover(device: Device, onTelemetry: TelemetryListener): Promise<void> {
         await device.discoverAllServicesAndCharacteristics();
         const services = await device.services();
 
-        let read = false;
-        let write = false;
+        let read: Characteristic | null = null;
+        let write: Characteristic | null = null;
+        const found: string[] = [];
         for (const service of services) {
             const characteristics = await device.characteristicsForService(service.uuid);
+            found.push(
+                `${service.uuid} ${characteristics
+                    .map((item) => `${item.uuid}[${item.properties.join('|')}]`)
+                    .join(' ')}`,
+            );
 
             for (const characteristic of characteristics) {
                 const uuid = characteristic.uuid.toUpperCase();
                 if (uuid === READ_CHARACTERISTIC_UUID) {
-                    read = true;
-                    characteristic.monitor((error: BleError | null, value: Characteristic | null) => {
-                        if (error || !value?.value) {
-                            if (error) {
-                                logger.warn('the telemetry stream reported an error', {
-                                    service: 'ble',
-                                    event: 'ble_monitor_error',
-                                    errorName: String(error.errorCode),
-                                });
-                            }
-                            return;
-                        }
-                        onTelemetry(base64ToBytes(value.value));
-                    });
+                    read = characteristic;
                 }
                 if (uuid === WRITE_CHARACTERISTIC_UUID) {
-                    write = true;
-                    this.writeCharacteristic = characteristic;
+                    write = characteristic;
                 }
+            }
+        }
+
+        /**
+         * The cluster of the older generation has its own service uuid and its
+         * own characteristic uuids, so the app takes them from the discovery:
+         * the characteristic that notifies is the one that reads, and the one
+         * that writes is the one that writes.
+         */
+        if (!read || !write) {
+            const cluster = services.find((service) =>
+                service.uuid.toUpperCase().includes(CLUSTER_SERVICE_MARK),
+            );
+            if (cluster) {
+                const characteristics = await device.characteristicsForService(cluster.uuid);
+                read =
+                    read ??
+                    characteristics.find((item) =>
+                        item.properties.some((property) => READ_PROPERTIES.includes(property)),
+                    ) ??
+                    null;
+                write =
+                    write ??
+                    characteristics.find((item) =>
+                        item.properties.some((property) => WRITE_PROPERTIES.includes(property)),
+                    ) ??
+                    null;
             }
         }
 
@@ -176,18 +244,42 @@ export class BleService {
             service: 'ble',
             event: 'ble_discover',
             count: services.length,
+            pathTemplate: found.join(' | '),
         });
-        if (!read) {
-            logger.warn('the read characteristic was not found', {
-                service: 'ble',
-                event: 'ble_discover',
+
+        if (read) {
+            await read.monitor((error: BleError | null, value: Characteristic | null) => {
+                if (error || !value?.value) {
+                    if (error) {
+                        logger.warn('the telemetry stream reported an error', {
+                            service: 'ble',
+                            event: 'ble_monitor_error',
+                            errorName: String(error.errorCode),
+                        });
+                    }
+                    return;
+                }
+                onTelemetry(base64ToBytes(value.value));
             });
         }
-        if (!write) {
-            logger.warn('the write characteristic was not found', {
+        this.writeCharacteristic = write;
+
+        /**
+         * The original app checks the service of the cluster after the
+         * discovery and disconnects when it is not there. A device that
+         * answers the gatt connect but has no bike service is not a bike,
+         * and the app has to say so instead of pretending it is connected.
+         */
+        if (!read || !write) {
+            logger.warn('the device does not have the bike service', {
                 service: 'ble',
                 event: 'ble_discover',
+                count: services.length,
             });
+            throw new ClusterLinkError(
+                'not-a-bike',
+                'the device does not have the bike service',
+            );
         }
     }
 

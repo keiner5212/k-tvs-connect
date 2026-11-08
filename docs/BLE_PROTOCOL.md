@@ -155,6 +155,12 @@ bytes are the ones the original builds.
 The cellular signal of the `5B 4A` frame needs `READ_PHONE_STATE` in the
 original. This port sends zero instead of asking for that permission.
 
+The original never writes the text of a notification to the cluster. Its
+notification listener only produces the social counters (`5B 9C`) and the media
+metadata (`5B 61`, `5B 62`, `5B 63` with the play state `5B 60`). This port
+also sends the caller info (`5B 43`), so the cluster can show an incoming call,
+which is more than the original does.
+
 ## Implementation in this project
 
 | File | Role |

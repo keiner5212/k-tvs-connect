@@ -39,7 +39,9 @@ class RideTracker {
         }
 
         const now = telemetry.receivedAt;
-        const moving = telemetry.speedKmh > MOVING_SPEED_KMH;
+        const speed = telemetry.speedKmh ?? 0;
+        const odometer = telemetry.odometerKm ?? 0;
+        const moving = speed > MOVING_SPEED_KMH;
 
         if (!this.active) {
             if (!moving) {
@@ -49,10 +51,10 @@ class RideTracker {
                 id: '',
                 contextId: useMapStore.getState().routeContext?.id ?? null,
                 startedAt: now,
-                startOdometerKm: telemetry.odometerKm,
-                lastOdometerKm: telemetry.odometerKm,
-                maxSpeedKmh: telemetry.speedKmh,
-                speedSum: telemetry.speedKmh,
+                startOdometerKm: odometer,
+                lastOdometerKm: odometer,
+                maxSpeedKmh: speed,
+                speedSum: speed,
                 samples: 1,
                 lastMovingAt: now,
             };
@@ -64,9 +66,9 @@ class RideTracker {
             return;
         }
 
-        this.active.lastOdometerKm = telemetry.odometerKm;
-        this.active.maxSpeedKmh = Math.max(this.active.maxSpeedKmh, telemetry.speedKmh);
-        this.active.speedSum += telemetry.speedKmh;
+        this.active.lastOdometerKm = odometer;
+        this.active.maxSpeedKmh = Math.max(this.active.maxSpeedKmh, speed);
+        this.active.speedSum += speed;
         this.active.samples += 1;
 
         if (moving) {

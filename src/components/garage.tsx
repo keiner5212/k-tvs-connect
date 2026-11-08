@@ -13,6 +13,7 @@ interface BikeCardProps {
     isActive: boolean;
     linkState: ConnectionState;
     lastSeenAt: number | null;
+    reason?: string | null;
     onPress: () => void;
     onSetActive: () => void;
 }
@@ -22,6 +23,7 @@ export const BikeCard = ({
     isActive,
     linkState,
     lastSeenAt,
+    reason,
     onPress,
     onSetActive,
 }: BikeCardProps) => {
@@ -51,7 +53,7 @@ export const BikeCard = ({
             </View>
 
             <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                {`${catalogLabel(bike.model)} · ${bike.frameNumber}`}
+                {catalogLabel(bike.model)}
             </Text>
 
             <View style={styles.statusRow}>
@@ -71,6 +73,10 @@ export const BikeCard = ({
                     </Text>
                 ) : null}
             </View>
+
+            {reason ? (
+                <Text style={[styles.reason, { color: colors.error }]}>{reason}</Text>
+            ) : null}
 
             {!isActive ? (
                 <TouchableOpacity
@@ -112,6 +118,10 @@ const styles = StyleSheet.create({
     },
     nickname: {
         ...typography.subheading,
+    },
+    reason: {
+        ...typography.caption,
+        marginTop: spacing.xs,
     },
     setActive: {
         justifyContent: 'center',

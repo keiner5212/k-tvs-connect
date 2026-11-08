@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -30,7 +29,6 @@ export const SettingsScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const tabBarHeight = useBottomTabBarHeight();
     const { settings, load, update } = useSettingsStore();
     const cameraAvoidEnabled = useCameraStore((state) => state.avoidEnabled);
     const cameraRadiusMeters = useCameraStore((state) => state.radiusMeters);
@@ -89,28 +87,25 @@ export const SettingsScreen = () => {
             <ScrollView
                 contentContainerStyle={[
                     styles.content,
-                    {
-                        paddingTop: insets.top + spacing.lg,
-                        paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding,
-                    },
+                    { paddingTop: insets.top + spacing.lg },
                 ]}
             >
                 <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
 
                 <SettingsSection
                     title="Profile"
-                    footer="The scooter greets you with this name when it says hello. It travels to the cluster in the rider name packet."
+                    footer="The bike greets you with this name when it says hello. It travels to the cluster in the rider name packet."
                 >
-                    <View style={styles.padded}>
+                    <SettingsBody>
                         <TextField
                             autoCapitalize="words"
                             helperText="Up to seventeen letters. The cluster replaces the symbols with an at sign."
                             label="Your name"
                             onChangeText={setRiderName}
-                            placeholder="How the scooter should call you"
+                            placeholder="How the bike should call you"
                             value={riderName}
                         />
-                    </View>
+                    </SettingsBody>
                     <SettingsRow label="Save your name" onPress={saveRiderName} />
                 </SettingsSection>
 
@@ -204,7 +199,7 @@ export const SettingsScreen = () => {
 
                 <SettingsSection
                     title="Background"
-                    footer="Android can stop the app while the screen is off. Let it run without the battery saver so the guidance keeps reaching the scooter."
+                    footer="Android can stop the app while the screen is off. Let it run without the battery saver so the guidance keeps reaching the bike."
                 >
                     <SettingsRow
                         description={
@@ -221,7 +216,7 @@ export const SettingsScreen = () => {
                     title="Routing"
                     footer="Valhalla answers the route. Point this to your own instance to leave the public service completely."
                 >
-                    <View style={styles.padded}>
+                    <SettingsBody>
                         <TextField
                             errorText={routingError ?? undefined}
                             helperText="The base url of the routing service."
@@ -229,7 +224,7 @@ export const SettingsScreen = () => {
                             onChangeText={setValhallaUrl}
                             value={valhallaUrl}
                         />
-                    </View>
+                    </SettingsBody>
                     <SettingsRow label="Save routing url" onPress={saveRoutingUrl} />
                 </SettingsSection>
 
@@ -278,9 +273,6 @@ export const SettingsScreen = () => {
 const styles = StyleSheet.create({
     content: {
         padding: layout.screenPadding,
-    },
-    padded: {
-        paddingTop: spacing.md,
     },
     screen: {
         flex: 1,

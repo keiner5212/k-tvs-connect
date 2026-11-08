@@ -81,65 +81,65 @@ export const PinScreen = () => {
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <ScreenContainer edges={['bottom']} scroll keyboardShouldPersistTaps="handled">
 
-            <Text style={[styles.title, { color: colors.foreground }]}>
-                {route.params.mode === 'remove' ? 'Remove pin' : 'Set a pin'}
-            </Text>
-            <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                The pin protects the garage on this device. It cannot be recovered if you forget it.
-            </Text>
+                <Text style={[styles.title, { color: colors.foreground }]}>
+                    {route.params.mode === 'remove' ? 'Remove pin' : 'Set a pin'}
+                </Text>
+                <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                    The pin protects the garage on this device. It cannot be recovered if you forget it.
+                </Text>
 
-            {route.params.mode === 'change' ? (
-                <TextField
-                    keyboardType="number-pad"
-                    label="Current pin"
-                    onChangeText={setCurrentPin}
-                    secureTextEntry
-                    value={currentPin}
-                />
-            ) : null}
-
-            {route.params.mode !== 'remove' ? (
-                <>
+                {route.params.mode === 'change' ? (
                     <TextField
-                        keyboardType="number-pad"
-                        label="New pin"
-                        onChangeText={setPinValue}
-                        secureTextEntry
-                        value={pin}
-                    />
-                    <TextField
-                        errorText={error ?? undefined}
-                        keyboardType="number-pad"
-                        label="Repeat pin"
-                        onChangeText={setConfirmation}
-                        secureTextEntry
-                        value={confirmation}
-                    />
-                    <PinDots error={Boolean(error)} filled={pin.length} length={6} />
-                    <PrimaryButton label="Save pin" onPress={() => void save()} />
-                </>
-            ) : (
-                <>
-                    <TextField
-                        errorText={error ?? undefined}
                         keyboardType="number-pad"
                         label="Current pin"
                         onChangeText={setCurrentPin}
                         secureTextEntry
                         value={currentPin}
                     />
-                    <PrimaryButton
-                        label="Remove pin"
-                        onPress={() =>
-                            showConfirm('Remove pin?', 'The garage will be open without a pin.', 'Remove', () =>
-                                void remove(),
-                            )
-                        }
-                        variant="danger"
-                    />
-                </>
-            )}
-        
+                ) : null}
+
+                {route.params.mode !== 'remove' ? (
+                    <>
+                        <TextField
+                            keyboardType="number-pad"
+                            label="New pin"
+                            onChangeText={setPinValue}
+                            secureTextEntry
+                            value={pin}
+                        />
+                        <TextField
+                            errorText={error ?? undefined}
+                            keyboardType="number-pad"
+                            label="Repeat pin"
+                            onChangeText={setConfirmation}
+                            secureTextEntry
+                            value={confirmation}
+                        />
+                        <PinDots error={Boolean(error)} filled={pin.length} length={6} />
+                        <PrimaryButton label="Save pin" onPress={() => void save()} />
+                    </>
+                ) : (
+                    <>
+                        <TextField
+                            errorText={error ?? undefined}
+                            keyboardType="number-pad"
+                            label="Current pin"
+                            onChangeText={setCurrentPin}
+                            secureTextEntry
+                            value={currentPin}
+                        />
+                        <PrimaryButton
+                            label="Remove pin"
+                            onPress={() =>
+                                showConfirm('Remove pin?', 'The garage will be open without a pin.', 'Remove', () =>
+                                    void remove(),
+                                )
+                            }
+                            variant="danger"
+                        />
+                    </>
+                )}
+
             </ScreenContainer>
         </View>
     );
@@ -169,13 +169,13 @@ export const ExportDataScreen = () => {
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <ScreenContainer edges={['bottom']} scroll>
 
-            <Text style={[styles.title, { color: colors.foreground }]}>Export data</Text>
-            <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                Shares a copy of the bikes, routes and rides stored on this device.
-            </Text>
-            <PrimaryButton label="Export" onPress={() => void exportData()} />
-            {summary ? <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text> : null}
-        
+                <Text style={[styles.title, { color: colors.foreground }]}>Export data</Text>
+                <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                    Shares a copy of the bikes, routes and rides stored on this device.
+                </Text>
+                <PrimaryButton label="Export" onPress={() => void exportData()} />
+                {summary ? <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text> : null}
+
             </ScreenContainer>
         </View>
     );
@@ -204,19 +204,19 @@ export const DeleteDataScreen = () => {
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <ScreenContainer edges={['bottom']} scroll keyboardShouldPersistTaps="handled">
 
-            <Text style={[styles.title, { color: colors.foreground }]}>Delete all data</Text>
-            <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                This permanently removes every bike, ride, route and setting on this device.
-            </Text>
-            <TextField
-                autoCapitalize="none"
-                errorText={error ?? undefined}
-                label="Type DELETE to confirm"
-                onChangeText={setConfirmation}
-                value={confirmation}
-            />
-            <PrimaryButton label="Delete everything" onPress={() => void deleteAll()} variant="danger" />
-        
+                <Text style={[styles.title, { color: colors.foreground }]}>Delete all data</Text>
+                <Text style={[styles.help, { color: colors.mutedForeground }]}>
+                    This permanently removes every bike, ride, route and setting on this device.
+                </Text>
+                <TextField
+                    autoCapitalize="none"
+                    errorText={error ?? undefined}
+                    label="Type DELETE to confirm"
+                    onChangeText={setConfirmation}
+                    value={confirmation}
+                />
+                <PrimaryButton label="Delete everything" onPress={() => void deleteAll()} variant="danger" />
+
             </ScreenContainer>
         </View>
     );
@@ -274,14 +274,16 @@ export const PermissionsScreen = () => {
                     {notificationStatus}
                 </Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    With the access to the notifications the scooter shows the name of the caller
+                    With the access to the notifications the bike shows the name of the caller
                     and the title of the song, the same way the original app does.
                 </Text>
-                <PrimaryButton
-                    label="Open the notification access"
-                    onPress={() => void openNotificationSettings()}
-                />
-                <PrimaryButton label="Check again" onPress={() => void checkNotifications()} />
+                <View style={styles.buttons}>
+                    <PrimaryButton
+                        label="Open the notification access"
+                        onPress={() => void openNotificationSettings()}
+                    />
+                    <PrimaryButton label="Check again" onPress={() => void checkNotifications()} />
+                </View>
 
             </ScreenContainer>
         </View>
@@ -340,12 +342,14 @@ export const DiagnosticsScreen = () => {
             <ScreenContainer edges={['bottom']} scroll>
                 <Text style={[styles.title, { color: colors.foreground }]}>Diagnostics</Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    The log of the connection with the scooter. The last four hundred lines are
+                    The log of the connection with the bike. The last four hundred lines are
                     kept on this device.
                 </Text>
-                <PrimaryButton label="Reload" onPress={() => void load()} />
-                <PrimaryButton label="Share the log" onPress={() => void share()} />
-                <PrimaryButton label="Clear the log" onPress={() => void clear()} />
+                <View style={styles.buttons}>
+                    <PrimaryButton label="Reload" onPress={() => void load()} />
+                    <PrimaryButton label="Share the log" onPress={() => void share()} />
+                    <PrimaryButton label="Clear the log" onPress={() => void clear()} />
+                </View>
                 {summary ? (
                     <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text>
                 ) : null}
@@ -363,6 +367,9 @@ export const DiagnosticsScreen = () => {
 };
 
 const styles = StyleSheet.create({
+    buttons: {
+        gap: spacing.md,
+    },
     help: {
         ...typography.body,
         marginBottom: spacing.lg,

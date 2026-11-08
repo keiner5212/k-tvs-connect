@@ -14,6 +14,8 @@ export interface KtvsClusterModule {
     stopService(): Promise<void>;
     isIgnoringBatteryOptimizations(): Promise<boolean>;
     openBatteryOptimizationSettings(): Promise<boolean>;
+    isBonded(macAddress: string): Promise<boolean>;
+    bondDevice(macAddress: string): Promise<boolean>;
     appendLog(line: string): Promise<boolean>;
     readLog(maxLines: number): Promise<string>;
     clearLog(): Promise<boolean>;

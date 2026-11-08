@@ -74,6 +74,7 @@ export const ConnectionScreen = () => {
             <ConnectionRail
                 bikeNickname={bike.nickname}
                 lastSeenAt={lastUpdateAt}
+                reason={info.reason}
                 state={state}
             />
 
@@ -81,7 +82,7 @@ export const ConnectionScreen = () => {
 
                 <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                    {`${catalogLabel(bike.model)} · ${bike.frameNumber}`}
+                    {catalogLabel(bike.model)}
                 </Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>{bike.macAddress}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
@@ -96,7 +97,7 @@ export const ConnectionScreen = () => {
 
                 {state !== 'connected' && info.attempt > 0 ? (
                     <Text style={[styles.warning, { color: colors.mutedForeground }]}>
-                        {`Looking for the scooter. Attempt ${info.attempt}${retryInSeconds !== null ? `, next try in ${retryInSeconds} s` : ''
+                        {`Looking for the bike. Attempt ${info.attempt}${retryInSeconds !== null ? `, next try in ${retryInSeconds} s` : ''
                             }.`}
                     </Text>
                 ) : null}
@@ -105,7 +106,7 @@ export const ConnectionScreen = () => {
                     <View style={styles.battery}>
                         <Text style={[styles.warning, { color: colors.foreground }]}>
                             Android can stop the app while the screen is off. Let the app run
-                            without the battery saver so the guidance keeps reaching the scooter.
+                            without the battery saver so the guidance keeps reaching the bike.
                         </Text>
                         <PrimaryButton
                             label="Open the battery settings"
@@ -174,7 +175,7 @@ export const BikeDetailsScreen = () => {
 
                 <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                    {`${catalogLabel(bike.model)} · ${bike.frameNumber}`}
+                    {catalogLabel(bike.model)}
                 </Text>
 
                 <View style={styles.actions}>

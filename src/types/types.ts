@@ -60,7 +60,6 @@ export interface Bike {
     id: string;
     nickname: string;
     model: BikeModel;
-    frameNumber: string;
     macAddress: string;
     isActive: boolean;
     createdAt: number;
@@ -70,7 +69,6 @@ export interface Bike {
 export interface BikeInput {
     nickname: string;
     model: BikeModel;
-    frameNumber: string;
     macAddress: string;
 }
 
@@ -119,37 +117,40 @@ export interface VehicleAlert {
     raisedAt: number;
 }
 
+/**
+ * The values the cluster sends. A value is null until the bike sends it, so
+ * the app never shows a zero that the bike did not say.
+ */
 export interface BikeTelemetry {
-    speedKmh: number;
-    engineRpm: number;
-    fuelLevelPercent: number;
-    batteryVoltage: number;
-    odometerKm: number;
-    tripDistanceKm: number;
-    tripTimeSeconds: number;
-    tripMileage: number;
-    tripFuel: number;
-    averageSpeedKmh: number;
-    topSpeedKmh: number;
-    throttlePercent: number;
-    leanAngleDegree: number;
-    gearPosition: number;
+    speedKmh: number | null;
+    engineRpm: number | null;
+    fuelLevelPercent: number | null;
+    batteryVoltage: number | null;
+    odometerKm: number | null;
+    tripDistanceKm: number | null;
+    tripTimeSeconds: number | null;
+    tripMileage: number | null;
+    tripFuel: number | null;
+    averageSpeedKmh: number | null;
+    topSpeedKmh: number | null;
+    throttlePercent: number | null;
+    leanAngleDegree: number | null;
+    gearPosition: number | null;
     sideStandDown: boolean;
     turnSignal: 'none' | 'left' | 'right';
     turnSignalStatus: number;
     vehicleState: number;
     switchStatus: number;
     overspeedThreshold: number;
-    engineTemperature: number;
-    intakeAirTemperature: number;
-    cruisingRange: number;
-    lapNumber: number;
-    lapTimeMs: number;
-    bestLapNumber: number;
-    bestLapMs: number;
+    engineTemperature: number | null;
+    intakeAirTemperature: number | null;
+    cruisingRange: number | null;
+    lapNumber: number | null;
+    lapTimeMs: number | null;
+    bestLapNumber: number | null;
+    bestLapMs: number | null;
     latitude: number | null;
     longitude: number | null;
-    frameNumber: string | null;
     receivedAt: number;
 }
 
@@ -188,7 +189,7 @@ export interface RouteResult {
 
 export interface AppSettings {
     unitSystem: 'metric' | 'imperial';
-    /** the name the scooter greets the rider with */
+    /** the name the bike greets the rider with */
     riderName: string;
     cameraAvoidEnabled: boolean;
     cameraRadiusMeters: number;

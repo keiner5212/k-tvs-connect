@@ -93,7 +93,7 @@ export const RootNavigator = () => {
                     options={{ presentation: 'modal', title: 'Add bike' }}
                 />
                 <Stack.Screen component={EditBikeScreen} name="EditBike" options={{ title: 'Edit bike' }} />
-                <Stack.Screen component={BikeDetailsScreen} name="BikeDetails" options={{ title: 'Scooter' }} />
+                <Stack.Screen component={BikeDetailsScreen} name="BikeDetails" options={{ title: 'Bike' }} />
                 <Stack.Screen component={ConnectionScreen} name="Connection" options={{ title: 'Connection' }} />
                 <Stack.Screen
                     component={PlaceSearchScreen}

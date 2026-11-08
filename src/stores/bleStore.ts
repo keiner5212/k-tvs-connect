@@ -13,7 +13,7 @@ interface BleState {
 
 export const useBleStore = create<BleState>((set) => ({
     state: 'off',
-    info: { state: 'off', attempt: 0, nextRetryAt: null },
+    info: { state: 'off', attempt: 0, nextRetryAt: null, reason: null },
     telemetry: null,
     lastUpdateAt: null,
     bind: () => {

@@ -11,6 +11,8 @@ import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { bindRideTracker, rideTracker } from '@services/rideTracker';
 import { parseSharedLocation } from '@services/sharedLocation';
+import { hasBlePermissions } from '@ble/permissions';
+import { connectionController } from '@ble/connectionController';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
 import '@/config/i18n';
@@ -112,6 +114,16 @@ export default function App() {
             setReady(true);
             void useCameraStore.getState().refresh();
             void notificationBridge.start();
+
+            /**
+             * The link with the scooter belongs to the app, not to a screen.
+             * The original app starts looking for the cluster when the
+             * foreground service starts, so the app does the same.
+             */
+            const active = useGarageStore.getState().bikes.find((bike) => bike.isActive);
+            if (active && (await hasBlePermissions())) {
+                void connectionController.start(active);
+            }
         };
         void bootstrap();
 

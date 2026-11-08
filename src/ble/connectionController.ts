@@ -3,10 +3,10 @@ import { State } from 'react-native-ble-plx';
 
 import { Bike, BikeTelemetry, ConnectionState } from '@typings/types';
 import { startClusterService, stopClusterService } from '@services/cluster.service';
-import { logger } from '@utils/logger';
-import { bleService, DiscoveredDevice } from './bleService';
+import { logger, describeError } from '@utils/logger';
+import { bleService, DiscoveredDevice, LinkFailure } from './bleService';
 import { ensureBlePermissions } from './permissions';
-import { DATA_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
+import { DATA_TIMEOUT_MS, FIRST_FRAME_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
 import { parseFrame, telemetryFromFrame } from './parser';
 import {
     NavigationUpdate,
@@ -25,7 +25,17 @@ export interface ConnectionInfo {
     state: ConnectionState;
     attempt: number;
     nextRetryAt: number | null;
+    /** why the link is not up, in words the rider can read */
+    reason: string | null;
 }
+
+/** what the rider is told when the link does not come up */
+const FAILURE_REASONS: Record<LinkFailure, string> = {
+    'not-a-bike': 'This device is not a bike. It does not have the bike service.',
+    'bond-refused':
+        'The phone could not pair with this device. If it asks for a PIN, use 222333.',
+    'connect-failed': 'The bike did not answer the connection.',
+};
 
 const CLUSTER_UPDATE_INTERVAL_MS = 2000;
 
@@ -80,6 +90,13 @@ export class ConnectionController {
     private telemetry: BikeTelemetry | null = null;
 
     private lastDataAt: number | null = null;
+
+    /** the gatt link is up, the cluster still has to send data to be connected */
+    private linkUp = false;
+
+    private linkUpAt: number | null = null;
+
+    private failureReason: string | null = null;
 
     private invalidFrames = 0;
 
@@ -162,6 +179,7 @@ export class ConnectionController {
             state: this.state,
             attempt: this.reconnectAttempt,
             nextRetryAt: this.nextRetryAt,
+            reason: this.failureReason,
         };
     }
 
@@ -188,12 +206,24 @@ export class ConnectionController {
     }
 
     async start(bike: Bike): Promise<void> {
+        /**
+         * The link is owned by the app, not by a screen. A screen that comes
+         * back only asks for the connection, it never tears it down.
+         */
+        if (this.running && this.bike?.id === bike.id) {
+            return;
+        }
+        if (this.running) {
+            await this.stop();
+        }
+
         this.bike = bike;
         this.running = true;
         this.reconnectAttempt = 0;
         this.nextRetryAt = null;
         this.receivedFrames = 0;
-        logger.info(`looking for the scooter ${bike.nickname}`, {
+        this.failureReason = null;
+        logger.info(`looking for the bike ${bike.nickname}`, {
             service: 'ble',
             event: 'ble_start',
         });
@@ -216,6 +246,10 @@ export class ConnectionController {
             this.watchdog = null;
         }
         this.scanning = false;
+        this.linkUp = false;
+        this.linkUpAt = null;
+        this.lastDataAt = null;
+        this.failureReason = null;
         await this.ble.disconnect().catch(() => undefined);
         void stopClusterService();
         this.setState('off');
@@ -223,7 +257,7 @@ export class ConnectionController {
 
     /** Sends a packet to the cluster, if the link is up. */
     async sendPacket(packet: Uint8Array): Promise<void> {
-        if (this.state !== 'connected') {
+        if (!this.linkUp) {
             return;
         }
         try {
@@ -242,6 +276,9 @@ export class ConnectionController {
         this.cancelRetry();
         this.reconnectAttempt = 0;
         this.nextRetryAt = null;
+        this.linkUp = false;
+        this.linkUpAt = null;
+        this.lastDataAt = null;
         this.setState('scanning');
         void this.runConnectionLoop();
     }
@@ -281,7 +318,7 @@ export class ConnectionController {
      * address text goes over.
      */
     async sendDestinationToCluster(address: string): Promise<boolean> {
-        if (this.state !== 'connected') {
+        if (!this.linkUp) {
             return false;
         }
 
@@ -322,9 +359,14 @@ export class ConnectionController {
          * service is not stopped when the link drops, because android does not
          * let an app in the background start a foreground service again.
          */
-        if (state === 'connected' || state === 'scanning' || state === 'reconnecting') {
+        if (
+            state === 'connected' ||
+            state === 'connecting' ||
+            state === 'scanning' ||
+            state === 'reconnecting'
+        ) {
             void startClusterService(
-                state === 'connected' ? 'Connected to your scooter' : 'Looking for your scooter',
+                state === 'connected' ? 'Connected to your bike' : 'Looking for your bike',
                 this.bike?.nickname ?? '',
             );
         }
@@ -335,6 +377,12 @@ export class ConnectionController {
         for (const listener of this.infoListeners) {
             listener(info);
         }
+    }
+
+    /** the reason the link is not up, in words the rider can read */
+    private reasonFor(error: unknown): string {
+        const failure = (error as { failure?: LinkFailure } | null)?.failure;
+        return FAILURE_REASONS[failure ?? 'connect-failed'];
     }
 
     /**
@@ -406,13 +454,22 @@ export class ConnectionController {
                 await this.ble.discover(device, (bytes) => this.handleData(bytes));
                 this.reconnectAttempt = 0;
                 this.nextRetryAt = null;
-                this.setState('connected');
+                this.failureReason = null;
+                this.linkUp = true;
+                this.linkUpAt = Date.now();
                 const { useSettingsStore } = await import('@stores/settingsStore');
                 this.overspeedLimitKmh = useSettingsStore.getState().settings.overspeedLimitKmh;
                 await this.startClusterUpdates();
+                /**
+                 * The link is up, but the app is only connected when the
+                 * cluster sends data. A device that answers the connect and
+                 * then stays silent is not a bike.
+                 */
                 return true;
             } catch (error) {
-                logger.warn('connect failed', {
+                this.linkUp = false;
+                this.failureReason = this.reasonFor(error);
+                logger.warn(`the link with the cluster did not come up: ${describeError(error)}`, {
                     event: 'connect',
                     errorName: error instanceof Error ? error.name : 'UnknownError',
                 });
@@ -469,6 +526,17 @@ export class ConnectionController {
         this.telemetry = telemetryFromFrame(frame, this.telemetry);
         this.lastDataAt = Date.now();
         this.receivedFrames += 1;
+
+        /**
+         * The app is connected when the cluster talks, not when the gatt link
+         * comes up. A device that answers the connect and stays silent is not
+         * a bike.
+         */
+        if (this.state !== 'connected') {
+            this.failureReason = null;
+            this.setState('connected');
+        }
+
         if (this.receivedFrames % 10 === 0) {
             logger.info('the cluster is sending data', {
                 service: 'ble',
@@ -491,7 +559,7 @@ export class ConnectionController {
         this.stopClusterUpdates();
 
         /**
-         * The scooter greets the rider with this name. The original app sends
+         * The bike greets the rider with this name. The original app sends
          * the name of the account, and this app has no account, so the name the
          * rider wrote in the settings goes, and the nickname of the bike is the
          * fallback.
@@ -501,7 +569,7 @@ export class ConnectionController {
         const name = riderName || this.bike?.nickname || '';
         if (name) {
             await this.ble.write(buildRiderNamePacket(name)).catch(() => undefined);
-            logger.info('the rider name was sent to the scooter', {
+            logger.info('the rider name was sent to the bike', {
                 service: 'ble',
                 event: 'ble_rider_name',
                 count: name.length,
@@ -531,7 +599,7 @@ export class ConnectionController {
 
     private async writeNavigation(): Promise<boolean> {
         const update = this.navigationUpdate;
-        if (!update || this.state !== 'connected') {
+        if (!update || !this.linkUp) {
             return false;
         }
 
@@ -552,7 +620,7 @@ export class ConnectionController {
     }
 
     private async writeMobileData(): Promise<void> {
-        if (this.state !== 'connected') {
+        if (!this.linkUp) {
             return;
         }
 
@@ -586,17 +654,30 @@ export class ConnectionController {
     }
 
     private checkLiveness(): void {
-        if (!this.running || this.state !== 'connected') {
+        if (!this.running || !this.linkUp) {
             return;
         }
+        const now = Date.now();
+
         if (this.lastDataAt === null) {
+            if (this.linkUpAt !== null && now - this.linkUpAt > FIRST_FRAME_TIMEOUT_MS) {
+                logger.warn('the cluster did not send any data', {
+                    service: 'ble',
+                    event: 'ble_timeout',
+                    durationMs: now - this.linkUpAt,
+                    count: this.receivedFrames,
+                });
+                this.failureReason = 'The bike is connected but it is not sending data.';
+                void this.reconnectNow();
+            }
             return;
         }
-        if (Date.now() - this.lastDataAt > DATA_TIMEOUT_MS) {
+
+        if (now - this.lastDataAt > DATA_TIMEOUT_MS) {
             logger.warn('the cluster stopped sending data', {
                 service: 'ble',
                 event: 'ble_timeout',
-                durationMs: Date.now() - this.lastDataAt,
+                durationMs: now - this.lastDataAt,
                 count: this.receivedFrames,
             });
             void this.reconnectNow();

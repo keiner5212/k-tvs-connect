@@ -88,6 +88,14 @@ const write = (level: LogLevel, message: string, fields: LogFields) => {
     target(`[${level}] ${message}`, safeFields);
 };
 
+/** the text of an error, short enough for the log */
+export const describeError = (error: unknown): string => {
+    if (error instanceof Error) {
+        return `${error.name}: ${error.message}`.slice(0, 160);
+    }
+    return String(error).slice(0, 160);
+};
+
 export const logger = {
     debug: (message: string, fields: LogFields = {}) => write('debug', message, fields),
     info: (message: string, fields: LogFields = {}) => write('info', message, fields),

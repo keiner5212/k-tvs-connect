@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -21,13 +20,20 @@ import { layout, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
+interface MetricTileValue {
+    label: string;
+    value: string;
+    unit?: string;
+    hint?: string;
+}
+
 export const DashboardScreen = () => {
     const navigation = useNavigation<Navigation>();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const tabBarHeight = useBottomTabBarHeight();
     const activeBike = useGarageStore((state) => state.bikes.find((bike) => bike.isActive) ?? null);
     const connectionState = useBleStore((state) => state.state);
+    const connectionInfo = useBleStore((state) => state.info);
     const telemetry = useBleStore((state) => state.telemetry);
     const lastUpdateAt = useBleStore((state) => state.lastUpdateAt);
     const { settings } = useSettingsStore();
@@ -67,7 +73,11 @@ export const DashboardScreen = () => {
         }
         const raised: VehicleAlert[] = [];
 
-        if (telemetry.fuelLevelPercent > 0 && telemetry.fuelLevelPercent <= 10) {
+        if (
+            telemetry.fuelLevelPercent !== null &&
+            telemetry.fuelLevelPercent > 0 &&
+            telemetry.fuelLevelPercent <= 10
+        ) {
             raised.push({
                 id: 'low_fuel',
                 kind: 'low_fuel',
@@ -103,7 +113,7 @@ export const DashboardScreen = () => {
                 raisedAt: telemetry.receivedAt,
             });
         }
-        if (telemetry.speedKmh > settings.overspeedLimitKmh) {
+        if (telemetry.speedKmh !== null && telemetry.speedKmh > settings.overspeedLimitKmh) {
             raised.push({
                 id: 'overspeed',
                 kind: 'overspeed',
@@ -115,6 +125,62 @@ export const DashboardScreen = () => {
 
         return raised;
     }, [telemetry, settings.overspeedLimitKmh]);
+
+    /**
+     * The dashboard shows only what the bike really sends. A value that the
+     * cluster has not sent yet is null, and it does not get a tile.
+     */
+    const speed = telemetry?.speedKmh ?? null;
+
+    const groups = useMemo<{ title: string | null; tiles: MetricTileValue[] }[]>(() => {
+        if (!telemetry) {
+            return [];
+        }
+        const unit = speedUnit(settings.unitSystem);
+        const live: MetricTileValue[] = [];
+        const trip: MetricTileValue[] = [];
+        const add = (
+            list: MetricTileValue[],
+            label: string,
+            value: number | null,
+            format: (raw: number) => string,
+            tileUnit?: string,
+            hint?: string,
+        ) => {
+            if (value === null) {
+                return;
+            }
+            list.push({ label, value: format(value), unit: tileUnit, hint });
+        };
+
+        add(live, 'Engine', telemetry.engineRpm, (v) => Math.round(v).toString(), 'rpm');
+        add(live, 'Fuel', telemetry.fuelLevelPercent, (v) => Math.round(v).toString(), '%');
+        add(live, 'Odometer', telemetry.odometerKm, (v) => v.toFixed(1), 'km');
+        add(live, 'Average speed', telemetry.averageSpeedKmh, (v) => Math.round(v).toString(), unit);
+        add(live, 'Top speed', telemetry.topSpeedKmh, (v) => Math.round(v).toString(), unit);
+        add(live, 'Throttle', telemetry.throttlePercent, (v) => Math.round(v).toString(), '%');
+
+        add(trip, 'Trip distance', telemetry.tripDistanceKm, (v) => v.toFixed(2), 'km');
+        add(trip, 'Trip time', telemetry.tripTimeSeconds, (v) => Math.round(v / 60).toString(), 'min');
+        add(trip, 'Trip mileage', telemetry.tripMileage, (v) => v.toFixed(1), 'km/l');
+        add(trip, 'Range', telemetry.cruisingRange, (v) => Math.round(v).toString(), 'km');
+        add(trip, 'Gear', telemetry.gearPosition, (v) => v.toString());
+        add(trip, 'Engine temp', telemetry.engineTemperature, (v) => Math.round(v).toString(), 'C');
+        add(
+            trip,
+            'Lap',
+            telemetry.lapNumber,
+            (v) => v.toString(),
+            undefined,
+            telemetry.bestLapMs ? `best ${(telemetry.bestLapMs / 1000).toFixed(1)} s` : undefined,
+        );
+        add(trip, 'Lean angle', telemetry.leanAngleDegree, (v) => Math.round(v).toString(), 'deg');
+
+        return [
+            { title: null, tiles: live },
+            { title: 'TRIP', tiles: trip },
+        ].filter((group) => group.tiles.length > 0);
+    }, [telemetry, settings.unitSystem]);
 
     if (!activeBike) {
         return (
@@ -133,22 +199,17 @@ export const DashboardScreen = () => {
 
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ConnectionRail
-                bikeNickname={activeBike.nickname}
-                lastSeenAt={lastUpdateAt}
-                onPress={() => navigation.navigate('Connection', { bikeId: activeBike.id })}
-                state={connectionState}
-            />
+            <View style={{ paddingTop: insets.top }}>
+                <ConnectionRail
+                    bikeNickname={activeBike.nickname}
+                    lastSeenAt={lastUpdateAt}
+                    onPress={() => navigation.navigate('Connection', { bikeId: activeBike.id })}
+                    reason={connectionInfo.reason}
+                    state={connectionState}
+                />
+            </View>
 
-            <ScrollView
-                contentContainerStyle={[
-                    styles.content,
-                    {
-                        paddingTop: insets.top + spacing.lg,
-                        paddingBottom: insets.bottom + tabBarHeight + layout.screenPadding,
-                    },
-                ]}
-            >
+            <ScrollView contentContainerStyle={styles.content}>
                 {stale && lastUpdateAt ? (
                     <StaleNotice
                         ageSeconds={Math.round((now - lastUpdateAt) / 1000)}
@@ -161,108 +222,48 @@ export const DashboardScreen = () => {
                 {batteryRestricted ? (
                     <Banner
                         actionLabel="Fix"
-                        message="Android can stop the app while the screen is off. Let it run without the battery saver so the guidance keeps reaching the scooter."
+                        message="Android can stop the app while the screen is off. Let it run without the battery saver so the guidance keeps reaching the bike."
                         onAction={() => void openBatteryOptimizationSettings()}
                         tone="warning"
                     />
                 ) : null}
 
-                <SpeedGauge
-                    isStale={stale}
-                    overspeedLimitKmh={settings.overspeedLimitKmh}
-                    unit={settings.unitSystem}
-                    value={telemetry?.speedKmh ?? 0}
-                />
+                {speed !== null ? (
+                    <SpeedGauge
+                        isStale={stale}
+                        overspeedLimitKmh={settings.overspeedLimitKmh}
+                        unit={settings.unitSystem}
+                        value={speed}
+                    />
+                ) : null}
 
-                <View style={styles.grid}>
-                    <MetricTile
-                        isStale={stale}
-                        label="Engine"
-                        unit="rpm"
-                        value={Math.round(telemetry?.engineRpm ?? 0).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Fuel"
-                        unit="%"
-                        value={Math.round(telemetry?.fuelLevelPercent ?? 0).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Odometer"
-                        unit="km"
-                        value={(telemetry?.odometerKm ?? 0).toFixed(1)}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Average speed"
-                        unit={speedUnit(settings.unitSystem)}
-                        value={Math.round(telemetry?.averageSpeedKmh ?? 0).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Top speed"
-                        unit={speedUnit(settings.unitSystem)}
-                        value={Math.round(telemetry?.topSpeedKmh ?? 0).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Throttle"
-                        unit="%"
-                        value={Math.round(telemetry?.throttlePercent ?? 0).toString()}
-                    />
-                </View>
+                {!telemetry ? (
+                    <Text style={[styles.waiting, { color: colors.mutedForeground }]}>
+                        Waiting for the bike. It sends its values when it is switched on.
+                    </Text>
+                ) : null}
 
-                <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>TRIP</Text>
-                <View style={styles.grid}>
-                    <MetricTile
-                        isStale={stale}
-                        label="Trip distance"
-                        unit="km"
-                        value={(telemetry?.tripDistanceKm ?? 0).toFixed(2)}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Trip time"
-                        unit="min"
-                        value={Math.round((telemetry?.tripTimeSeconds ?? 0) / 60).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Trip mileage"
-                        unit="km/l"
-                        value={(telemetry?.tripMileage ?? 0).toFixed(1)}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Range"
-                        unit="km"
-                        value={Math.round(telemetry?.cruisingRange ?? 0).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Gear"
-                        value={(telemetry?.gearPosition ?? 0).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Engine temp"
-                        unit="C"
-                        value={Math.round(telemetry?.engineTemperature ?? 0).toString()}
-                    />
-                    <MetricTile
-                        hint={telemetry?.bestLapMs ? `best ${(telemetry.bestLapMs / 1000).toFixed(1)} s` : undefined}
-                        isStale={stale}
-                        label="Lap"
-                        value={(telemetry?.lapNumber ?? 0).toString()}
-                    />
-                    <MetricTile
-                        isStale={stale}
-                        label="Lean angle"
-                        unit="deg"
-                        value={Math.round(telemetry?.leanAngleDegree ?? 0).toString()}
-                    />
-                </View>
+                {groups.map((group) => (
+                    <View key={group.title ?? 'live'}>
+                        {group.title ? (
+                            <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>
+                                {group.title}
+                            </Text>
+                        ) : null}
+                        <View style={styles.grid}>
+                            {group.tiles.map((tile) => (
+                                <MetricTile
+                                    hint={tile.hint}
+                                    isStale={stale}
+                                    key={tile.label}
+                                    label={tile.label}
+                                    unit={tile.unit}
+                                    value={tile.value}
+                                />
+                            ))}
+                        </View>
+                    </View>
+                ))}
 
                 {rides.length > 0 ? (
                     <>
@@ -337,6 +338,10 @@ const styles = StyleSheet.create({
         marginBottom: spacing.md,
         marginTop: spacing.lg,
         textTransform: 'uppercase',
+    },
+    waiting: {
+        ...typography.body,
+        marginBottom: spacing.lg,
     },
 });
 

@@ -11,6 +11,7 @@ interface ConnectionRailProps {
     state: ConnectionState;
     lastSeenAt: number | null;
     bikeNickname?: string;
+    reason?: string | null;
     onPress?: () => void;
 }
 
@@ -35,6 +36,7 @@ export const ConnectionRail = ({
     state,
     lastSeenAt,
     bikeNickname,
+    reason,
     onPress,
 }: ConnectionRailProps) => {
     const { colors } = useTheme();
@@ -53,15 +55,11 @@ export const ConnectionRail = ({
                 <Text style={[styles.railTitle, { color: colors.foreground }]}>
                     {stateTitle(state, bikeNickname)}
                 </Text>
-                {state === 'off' ? (
-                    <Text style={[styles.railCaption, { color: colors.mutedForeground }]}>
-                        Turn the bike on. It connects automatically when the bike is switched on.
-                    </Text>
-                ) : (
-                    <Text style={[styles.railCaption, { color: colors.mutedForeground }]}>
-                        {`Last update ${formatAge(lastSeenAt)}`}
-                    </Text>
-                )}
+                <Text style={[styles.railCaption, { color: colors.mutedForeground }]}>
+                    {reason ?? (state === 'off'
+                        ? 'Turn the bike on. It connects automatically when the bike is switched on.'
+                        : `Last update ${formatAge(lastSeenAt)}`)}
+                </Text>
             </View>
         </TouchableOpacity>
     );

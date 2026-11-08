@@ -1,5 +1,5 @@
 import { getClusterModule } from '@cluster';
-import { logger } from '@utils/logger';
+import { describeError, logger } from '@utils/logger';
 
 /**
  * The foreground service keeps the app alive with the screen off, so the
@@ -14,7 +14,7 @@ export const startClusterService = async (title: string, text: string): Promise<
     try {
         await native.startService(title, text);
     } catch (error) {
-        logger.warn('the foreground service did not start', {
+        logger.warn(`the foreground service did not start: ${describeError(error)}`, {
             event: 'cluster_service',
             errorName: error instanceof Error ? error.name : 'UnknownError',
         });
@@ -62,6 +62,39 @@ export const openBatteryOptimizationSettings = async (): Promise<void> => {
             event: 'cluster_service',
             errorName: error instanceof Error ? error.name : 'UnknownError',
         });
+    }
+};
+
+/** True when the phone already shares a key with the cluster. */
+export const isBonded = async (macAddress: string): Promise<boolean> => {
+    const native = getClusterModule();
+    if (!native) {
+        return false;
+    }
+    try {
+        return await native.isBonded(macAddress);
+    } catch {
+        return false;
+    }
+};
+
+/**
+ * Asks android for the pairing with the cluster. The system shows the pairing
+ * dialog, so the rider has to accept it before the link can come up.
+ */
+export const bondDevice = async (macAddress: string): Promise<boolean> => {
+    const native = getClusterModule();
+    if (!native) {
+        return false;
+    }
+    try {
+        return await native.bondDevice(macAddress);
+    } catch (error) {
+        logger.warn(`the pairing with the cluster failed: ${describeError(error)}`, {
+            event: 'ble_bond',
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+        return false;
     }
 };
 
