@@ -12,7 +12,7 @@ import { useTheme } from '@hooks/useTheme';
 import { useGarageStore } from '@stores/garageStore';
 import { BikeModel, RootStackParamList } from '@typings/types';
 import { bleService, DiscoveredDevice } from '@ble/bleService';
-import { BIKE_SERVICE_UUID, bikeServiceKey } from '@ble/constants';
+import { BIKE_SERVICE_UUID, CLUSTER_SERVICE_MARK, bikeServiceKey } from '@ble/constants';
 import { findBikeByMac, isValidMac, normalizeMac } from '@services/db/bikeRepository';
 import { BIKE_CATALOG, catalogFamily } from '@config/bikeCatalog';
 import type { BikeFamily } from '@config/bikeCatalog';
@@ -22,11 +22,22 @@ type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 const FAMILIES = ['Apache', 'Ntorq', 'Jupiter', 'IQUBE', 'Other'] as const;
 
-/** a device that announces the service of the cluster is worth a try */
-const looksLikeABike = (device: DiscoveredDevice): boolean =>
-    device.serviceUUIDs.some(
-        (uuid) => bikeServiceKey(uuid) === bikeServiceKey(BIKE_SERVICE_UUID),
+/**
+ * A device that looks like a bike. The original app picks the cluster of the
+ * apache family by a name with TVS in it, and the older generation answers on
+ * its own service.
+ */
+const looksLikeABike = (device: DiscoveredDevice): boolean => {
+    const name = `${device.name ?? ''} ${device.localName ?? ''}`.toUpperCase();
+    if (name.includes('TVS')) {
+        return true;
+    }
+    return device.serviceUUIDs.some(
+        (uuid) =>
+            bikeServiceKey(uuid) === bikeServiceKey(BIKE_SERVICE_UUID) ||
+            uuid.toUpperCase().includes(CLUSTER_SERVICE_MARK),
     );
+};
 
 const deviceName = (device: DiscoveredDevice): string =>
     device.name ?? device.localName ?? 'Device without name';

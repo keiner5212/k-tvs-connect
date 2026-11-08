@@ -21,6 +21,8 @@ const stateTitle = (state: ConnectionState, nickname?: string): string => {
             return 'Scanning for bikes...';
         case 'connecting':
             return `Connecting to ${nickname ?? 'bike'}...`;
+        case 'pairing':
+            return 'Pairing with the bike...';
         case 'connected':
             return 'Connected';
         case 'reconnecting':

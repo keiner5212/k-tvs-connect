@@ -13,12 +13,6 @@ export const BIKE_SERVICE_UUID = '5456534D-5647-5341-5342-454E544F5251';
  */
 export const CLUSTER_SERVICE_MARK = '5500';
 
-/** the properties of a characteristic that carries the telemetry */
-export const READ_PROPERTIES = ['Notify', 'Indicate'];
-
-/** the properties of a characteristic the cluster accepts the commands in */
-export const WRITE_PROPERTIES = ['Write', 'WriteWithoutResponse'];
-
 /** the same uuid without the dashes, to compare it with any spelling */
 export const bikeServiceKey = (uuid: string): string => uuid.replace(/-/g, '').toUpperCase();
 

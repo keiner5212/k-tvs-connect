@@ -8,9 +8,7 @@ import {
     CLUSTER_SERVICE_MARK,
     CONNECT_TIMEOUT_MS,
     READ_CHARACTERISTIC_UUID,
-    READ_PROPERTIES,
     WRITE_CHARACTERISTIC_UUID,
-    WRITE_PROPERTIES,
 } from './constants';
 
 /** why the link with the cluster is not up */
@@ -44,6 +42,26 @@ export type DiscoveredDevice = {
 
 export type TelemetryListener = (bytes: Uint8Array) => void;
 export type StateListener = (state: State) => void;
+
+/** what a characteristic can do, for the log */
+const propertiesOf = (characteristic: Characteristic): string =>
+    [
+        characteristic.isReadable ? 'Read' : null,
+        characteristic.isWritableWithResponse ? 'Write' : null,
+        characteristic.isWritableWithoutResponse ? 'WriteNoResponse' : null,
+        characteristic.isNotifiable ? 'Notify' : null,
+        characteristic.isIndicatable ? 'Indicate' : null,
+    ]
+        .filter((value) => value !== null)
+        .join('|');
+
+/** the characteristic that carries the telemetry of the cluster */
+const canNotify = (characteristic: Characteristic): boolean =>
+    characteristic.isNotifiable || characteristic.isIndicatable;
+
+/** the characteristic the cluster accepts the commands in */
+const canWrite = (characteristic: Characteristic): boolean =>
+    characteristic.isWritableWithResponse || characteristic.isWritableWithoutResponse;
 
 export const bytesToBase64 = (bytes: Uint8Array): string => {
     let binary = '';
@@ -130,8 +148,8 @@ export class BleService {
         logger.info('the scan finished', { service: 'ble', event: 'ble_scan_end', count: found });
     }
 
-    async connect(deviceId: string): Promise<Device> {
-        await this.ensureBond(deviceId);
+    async connect(deviceId: string, onBonding?: () => void): Promise<Device> {
+        await this.ensureBond(deviceId, onBonding);
         const started = Date.now();
         logger.info('connecting to the cluster', {
             service: 'ble',
@@ -165,7 +183,7 @@ export class BleService {
      * cluster that is not paired never answers the gatt connect. Android owns
      * the pairing, so the app asks for it and waits for the rider to accept.
      */
-    private async ensureBond(deviceId: string): Promise<void> {
+    private async ensureBond(deviceId: string, onBonding?: () => void): Promise<void> {
         if (await isBonded(deviceId)) {
             return;
         }
@@ -173,6 +191,7 @@ export class BleService {
             service: 'ble',
             event: 'ble_bond_start',
         });
+        onBonding?.();
         const bonded = await bondDevice(deviceId);
         if (!bonded) {
             logger.warn('the pairing with the cluster did not happen', {
@@ -198,7 +217,7 @@ export class BleService {
             const characteristics = await device.characteristicsForService(service.uuid);
             found.push(
                 `${service.uuid} ${characteristics
-                    .map((item) => `${item.uuid}[${item.properties.join('|')}]`)
+                    .map((item) => `${item.uuid}[${propertiesOf(item)}]`)
                     .join(' ')}`,
             );
 
@@ -227,15 +246,11 @@ export class BleService {
                 const characteristics = await device.characteristicsForService(cluster.uuid);
                 read =
                     read ??
-                    characteristics.find((item) =>
-                        item.properties.some((property) => READ_PROPERTIES.includes(property)),
-                    ) ??
+                    characteristics.find((item) => canNotify(item)) ??
                     null;
                 write =
                     write ??
-                    characteristics.find((item) =>
-                        item.properties.some((property) => WRITE_PROPERTIES.includes(property)),
-                    ) ??
+                    characteristics.find((item) => canWrite(item)) ??
                     null;
             }
         }

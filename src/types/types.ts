@@ -49,6 +49,7 @@ export type ConnectionState =
     | 'off'
     | 'scanning'
     | 'connecting'
+    | 'pairing'
     | 'connected'
     | 'reconnecting'
     | 'failed';

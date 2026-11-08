@@ -16,6 +16,7 @@ const stateColor = (state: ConnectionState, colors: ReturnType<typeof useTheme>[
             return colors.success;
         case 'scanning':
         case 'connecting':
+        case 'pairing':
         case 'reconnecting':
             return colors.info;
         case 'failed':

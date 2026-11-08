@@ -14,6 +14,7 @@ import { catalogLabel } from '@config/bikeCatalog';
 import { useNow } from '@hooks/useNow';
 import { useBleStore } from '@stores/bleStore';
 import { useGarageStore } from '@stores/garageStore';
+import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { connectionController } from '@ble/connectionController';
 import { isIgnoringBatteryOptimizations, openBatteryOptimizationSettings } from '@services/cluster.service';
@@ -30,6 +31,7 @@ export const ConnectionScreen = () => {
     const state = useBleStore((store) => store.state);
     const info = useBleStore((store) => store.info);
     const lastUpdateAt = useBleStore((store) => store.lastUpdateAt);
+    const riderName = useSettingsStore((store) => store.settings.riderName);
     const [permissionGranted, setPermissionGranted] = useState(true);
     const [connecting, setConnecting] = useState(false);
     const [batteryRestricted, setBatteryRestricted] = useState(false);
@@ -88,6 +90,12 @@ export const ConnectionScreen = () => {
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
                     {`Last update ${formatAge(lastUpdateAt)}`}
                 </Text>
+
+                {riderName ? null : (
+                    <Text style={[styles.warning, { color: colors.mutedForeground }]}>
+                        {`The bike will greet you as "${bike.nickname}". Set your name in Settings to greet you by your own name.`}
+                    </Text>
+                )}
 
                 {!permissionGranted ? (
                     <Text style={[styles.warning, { color: colors.error }]}>
@@ -157,7 +165,7 @@ export const ConnectionScreen = () => {
 
 export const BikeDetailsScreen = () => {
     const navigation = useNavigation<Navigation>();
-    const route = useRoute<RouteProp<RootStackParamList, 'Connection'>>();
+    const route = useRoute<RouteProp<RootStackParamList, 'BikeDetails'>>();
     const { colors } = useTheme();
     const bike = useGarageStore((state) => state.bikes.find((item) => item.id === route.params.bikeId));
 
@@ -193,6 +201,22 @@ export const BikeDetailsScreen = () => {
                         disabled={bike.isActive}
                         onPress={() => void useGarageStore.getState().activate(bike.id)}
                         variant="ghost"
+                    />
+                    <PrimaryButton
+                        label="Delete bike"
+                        onPress={() =>
+                            showConfirm(
+                                `Delete ${bike.nickname}?`,
+                                'This removes the bike, its ride history and its saved routes from this device. This cannot be undone.',
+                                'Delete',
+                                () => {
+                                    void useGarageStore.getState().remove(bike.id);
+                                    navigation.goBack();
+                                },
+                                true,
+                            )
+                        }
+                        variant="danger"
                     />
                 </View>
 

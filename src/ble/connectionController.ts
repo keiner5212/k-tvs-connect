@@ -37,6 +37,9 @@ const FAILURE_REASONS: Record<LinkFailure, string> = {
     'connect-failed': 'The bike did not answer the connection.',
 };
 
+/** the cluster shows a code on its screen and the phone has to answer it */
+const PAIRING_HINT = 'Answer the code the bike shows. The pin of the cluster is 222333.';
+
 const CLUSTER_UPDATE_INTERVAL_MS = 2000;
 
 /** the original refreshes the navigation of the cluster every 400 milliseconds */
@@ -99,6 +102,8 @@ export class ConnectionController {
     private failureReason: string | null = null;
 
     private invalidFrames = 0;
+
+    private unknownFrames = 0;
 
     private reconnectAttempt = 0;
 
@@ -450,7 +455,14 @@ export class ConnectionController {
             this.setState(this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
 
             try {
-                const device = await this.ble.connect(match.id);
+                const device = await this.ble.connect(match.id, () => {
+                    /**
+                     * The cluster shows a code on its screen and the phone has
+                     * to answer it. The rider needs to know the code.
+                     */
+                    this.failureReason = PAIRING_HINT;
+                    this.setState('pairing');
+                });
                 await this.ble.discover(device, (bytes) => this.handleData(bytes));
                 this.reconnectAttempt = 0;
                 this.nextRetryAt = null;
@@ -465,6 +477,7 @@ export class ConnectionController {
                  * cluster sends data. A device that answers the connect and
                  * then stays silent is not a bike.
                  */
+                this.setState('connecting');
                 return true;
             } catch (error) {
                 this.linkUp = false;
@@ -512,6 +525,20 @@ export class ConnectionController {
     private handleData(bytes: Uint8Array): void {
         const frame = parseFrame(bytes);
         if (!frame) {
+            /**
+             * The start byte and the data id are not encrypted, so the log
+             * says what kind of frame came in. A cluster of another
+             * generation sends frames this port does not know.
+             */
+            this.unknownFrames += 1;
+            if (this.unknownFrames <= 5) {
+                logger.warn('a frame the app does not know came in', {
+                    service: 'ble',
+                    event: 'ble_frame_unknown',
+                    count: this.unknownFrames,
+                    pathTemplate: `${bytes[0]}-${bytes[1]}`,
+                });
+            }
             return;
         }
 
