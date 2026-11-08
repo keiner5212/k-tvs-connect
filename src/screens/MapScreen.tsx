@@ -460,6 +460,15 @@ export const MapScreen = () => {
                 onLayout={(event) => setBottomStackTop(event.nativeEvent.layout.y)}
                 style={[styles.bottom, { paddingBottom: spacing.md }]}
             >
+                {focusedCamera ? (
+                    <Banner
+                        message={`Camera: ${focusedCamera.address || 'ANSV camera'}${focusedCamera.maxSpeedKmh !== null
+                                ? `, ${focusedCamera.maxSpeedKmh} km/h`
+                                : ''
+                            }`}
+                        tone="info"
+                    />
+                ) : null}
                 {tilesUnavailable ? (
                     <Banner message="Google map unavailable, using OpenFreeMap instead." tone="info" />
                 ) : null}

@@ -25,6 +25,8 @@ import { layout, radii, spacing, typography } from '@config/theme';
 /** the toolbar column of the map screen, the compass goes under it */
 export const TOOLBAR_HEIGHT = 3 * 44 + 2 * spacing.sm;
 
+/** the name of the focused camera goes in a band, not on the marker */
+
 export interface MapCanvasProps {
     style: string | object;
     center: [number, number];
@@ -166,83 +168,46 @@ export const MapCanvas = ({
                         coordinate={[camera.longitude, camera.latitude]}
                         key={camera.id}
                     >
-                        <TouchableOpacity
-                            accessibilityLabel={
-                                focused ? `Selected camera, ${speedLabel}` : speedLabel
-                            }
-                            accessibilityRole="button"
-                            onPress={() => onCameraPress?.(camera.id)}
-                            style={styles.cameraPin}
-                        >
-                            <View style={styles.cameraMarker}>
-                                {focused ? (
-                                    <View
-                                        style={[styles.cameraRing, { borderColor: colors.primary }]}
-                                    />
-                                ) : null}
+                        <View style={styles.cameraMarker}>
+                            <TouchableOpacity
+                                accessibilityLabel={
+                                    focused ? `Selected camera, ${speedLabel}` : speedLabel
+                                }
+                                accessibilityRole="button"
+                                onPress={() => onCameraPress?.(camera.id)}
+                                style={[
+                                    styles.cameraBody,
+                                    {
+                                        backgroundColor: camera.isAvoided
+                                            ? colors.primary
+                                            : colors.card,
+                                        borderColor: focused ? colors.foreground : colors.primary,
+                                        borderWidth: focused ? 3 : 2,
+                                    },
+                                ]}
+                            >
                                 <View
                                     style={[
-                                        styles.cameraBody,
+                                        styles.cameraLens,
                                         {
                                             backgroundColor: camera.isAvoided
-                                                ? colors.primary
-                                                : colors.card,
-                                            borderColor: colors.primary,
+                                                ? colors.primaryForeground
+                                                : colors.primary,
                                         },
                                     ]}
-                                >
-                                    <View
-                                        style={[
-                                            styles.cameraLens,
-                                            {
-                                                backgroundColor: camera.isAvoided
-                                                    ? colors.primaryForeground
-                                                    : colors.primary,
-                                            },
-                                        ]}
-                                    />
-                                    <View
-                                        style={[
-                                            styles.cameraFoot,
-                                            {
-                                                backgroundColor: camera.isAvoided
-                                                    ? colors.primaryForeground
-                                                    : colors.primary,
-                                            },
-                                        ]}
-                                    />
-                                </View>
-                            </View>
-                            {camera.maxSpeedKmh !== null ? (
+                                />
                                 <View
                                     style={[
-                                        styles.cameraSpeed,
-                                        { backgroundColor: colors.card, borderColor: colors.border },
+                                        styles.cameraFoot,
+                                        {
+                                            backgroundColor: camera.isAvoided
+                                                ? colors.primaryForeground
+                                                : colors.primary,
+                                        },
                                     ]}
-                                >
-                                    <Text
-                                        style={[styles.cameraSpeedLabel, { color: colors.foreground }]}
-                                    >
-                                        {camera.maxSpeedKmh.toString()}
-                                    </Text>
-                                </View>
-                            ) : null}
-                            {focused ? (
-                                <View
-                                    style={[
-                                        styles.cameraAddress,
-                                        { backgroundColor: colors.card, borderColor: colors.border },
-                                    ]}
-                                >
-                                    <Text
-                                        numberOfLines={1}
-                                        style={[styles.cameraAddressLabel, { color: colors.foreground }]}
-                                    >
-                                        {camera.label}
-                                    </Text>
-                                </View>
-                            ) : null}
-                        </TouchableOpacity>
+                                />
+                            </TouchableOpacity>
+                        </View>
                     </MarkerView>
                 );
             })}
@@ -253,26 +218,20 @@ export const MapCanvas = ({
                     coordinate={[point.longitude, point.latitude]}
                     key={point.id}
                 >
-                    <TouchableOpacity
-                        accessibilityHint="Opens the menu to remove this point"
-                        accessibilityLabel={`Avoid point ${index + 1}`}
-                        accessibilityRole="button"
-                        onPress={() => onAvoidPointPress?.(point)}
-                        style={styles.avoidTarget}
-                    >
-                        <View style={styles.avoidPinWrap}>
-                            <View style={[styles.avoidPin, { backgroundColor: colors.warning }]}>
-                                <Text
-                                    style={[styles.avoidPinLabel, { color: colors.warningForeground }]}
-                                >
-                                    {(index + 1).toString()}
-                                </Text>
-                            </View>
-                            <View
-                                style={[styles.avoidTip, { borderTopColor: colors.warning }]}
-                            />
-                        </View>
-                    </TouchableOpacity>
+                    <View style={styles.avoidPinWrap}>
+                        <TouchableOpacity
+                            accessibilityHint="Opens the menu to remove this point"
+                            accessibilityLabel={`Avoid point ${index + 1}`}
+                            accessibilityRole="button"
+                            onPress={() => onAvoidPointPress?.(point)}
+                            style={[styles.avoidPin, { backgroundColor: colors.warning }]}
+                        >
+                            <Text style={[styles.avoidPinLabel, { color: colors.warningForeground }]}>
+                                {(index + 1).toString()}
+                            </Text>
+                        </TouchableOpacity>
+                        <View style={[styles.avoidTip, { borderTopColor: colors.warning }]} />
+                    </View>
                 </MarkerView>
             ))}
         </MapView>
@@ -677,12 +636,6 @@ const styles = StyleSheet.create({
         gap: spacing.md,
         minHeight: layout.buttonHeight,
     },
-    avoidTarget: {
-        alignItems: 'center',
-        height: 44,
-        justifyContent: 'center',
-        width: 44,
-    },
     avoidTip: {
         borderLeftWidth: 5,
         borderRightWidth: 5,
@@ -692,17 +645,6 @@ const styles = StyleSheet.create({
     },
     avoidTitle: {
         ...typography.label,
-    },
-    cameraAddress: {
-        borderRadius: radii.full,
-        borderWidth: 1,
-        marginLeft: 2,
-        maxWidth: 180,
-        paddingHorizontal: spacing.sm,
-        paddingVertical: spacing.xs,
-    },
-    cameraAddressLabel: {
-        ...typography.caption,
     },
     cameraBody: {
         alignItems: 'center',
@@ -727,33 +669,9 @@ const styles = StyleSheet.create({
     },
     cameraMarker: {
         alignItems: 'center',
-        height: 30,
+        height: 34,
         justifyContent: 'center',
-        width: 30,
-    },
-    cameraPin: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        height: 26,
-        justifyContent: 'center',
-    },
-    cameraRing: {
-        borderRadius: radii.lg,
-        borderWidth: 2,
-        height: 30,
-        position: 'absolute',
-        width: 30,
-    },
-    cameraSpeed: {
-        borderRadius: radii.full,
-        borderWidth: 1,
-        marginLeft: 2,
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-    },
-    cameraSpeedLabel: {
-        ...typography.caption,
-        fontWeight: '700',
+        width: 34,
     },
     card: {
         borderRadius: radii.lg,

@@ -6,7 +6,7 @@ const DATASET_URL = 'https://fotodeteccion.ansv.gov.co/map/data/sast.json';
 export const ANSV_SOURCE_NAME = 'Agencia Nacional de Seguridad Vial (ANSV)';
 export const ANSV_SOURCE_URL = 'https://fotodeteccion.ansv.gov.co/map/ubicaciones-aprobadas.html';
 
-export const CAMERA_AVOID_RADIUS_METERS = 150;
+export const CAMERA_AVOID_RADIUS_METERS = 100;
 
 const MAX_RESULTS = 5000;
 const MAX_LOCATIONS = 50000;
