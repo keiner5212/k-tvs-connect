@@ -183,6 +183,83 @@ export const buildRiderNamePacket = (name: string, key = APACHE_XOR_KEY): Uint8A
     return encryptFrame(frame, key);
 };
 
+/**
+ * The name or the number of the caller. Header 0x5B 0x43, with the kind of
+ * text in the third byte: 1 is a national number, 2 is the name of the
+ * contact and 3 is the country code.
+ */
+export const buildCallerInfoPacket = (
+    text: string,
+    category: 1 | 2 | 3,
+    key = APACHE_XOR_KEY,
+): Uint8Array => {
+    const frame = new Uint8Array(OUTBOUND_FRAME_LENGTH);
+    frame[0] = 0x5b;
+    frame[1] = 0x43;
+    frame[2] = category;
+
+    const bytes = utf8Encode(text.slice(0, 17));
+    frame.set(bytes.subarray(0, 17), 3);
+    frame[OUTBOUND_FRAME_LENGTH - 1] = END_BYTE;
+
+    return encryptFrame(frame, key);
+};
+
+export const MUSIC_PACKET_IDS = {
+    album: 97,
+    song: 98,
+    artist: 99,
+} as const;
+
+export type MusicPacketKind = keyof typeof MUSIC_PACKET_IDS;
+
+/**
+ * The title of the song, the album or the artist. Header 0x5B and the kind in
+ * the second byte.
+ */
+export const buildMusicPacket = (
+    kind: MusicPacketKind,
+    text: string,
+    key = APACHE_XOR_KEY,
+): Uint8Array => {
+    const frame = new Uint8Array(OUTBOUND_FRAME_LENGTH);
+    frame[0] = 0x5b;
+    frame[1] = MUSIC_PACKET_IDS[kind];
+
+    const bytes = utf8Encode(text.slice(0, 15));
+    frame.set(bytes.subarray(0, 15), 2);
+    frame[OUTBOUND_FRAME_LENGTH - 1] = END_BYTE;
+
+    return encryptFrame(frame, key);
+};
+
+/**
+ * What the music player is doing. Header 0x5B 0x60: the state, the position
+ * and the volume of the phone.
+ */
+export const buildMusicStatePacket = (
+    state: 0 | 1 | 254,
+    positionSeconds: number,
+    durationSeconds: number,
+    volumePercent: number,
+    key = APACHE_XOR_KEY,
+): Uint8Array => {
+    const frame = new Uint8Array(OUTBOUND_FRAME_LENGTH);
+    frame[0] = 0x5b;
+    frame[1] = 0x60;
+    frame[2] = 0x00;
+    frame[3] = state;
+    frame[4] = 0x01;
+    frame[5] = Math.floor(positionSeconds / 60) & 0xff;
+    frame[6] = positionSeconds % 60;
+    frame[7] = Math.max(0, Math.min(100, Math.round(volumePercent)));
+    frame[12] = Math.floor(durationSeconds / 60) & 0xff;
+    frame[13] = durationSeconds % 60;
+    frame[OUTBOUND_FRAME_LENGTH - 1] = END_BYTE;
+
+    return encryptFrame(frame, key);
+};
+
 export interface MobileDataOptions {
     batteryPercent: number;
     signalStrength: number;

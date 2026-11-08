@@ -17,6 +17,7 @@ import { BikeDetailsScreen, ConnectionScreen } from '@screens/ConnectionScreen';
 import { PlaceSearchScreen, RoutePreviewScreen, SavedRoutesScreen } from '@screens/RouteScreens';
 import {
     DeleteDataScreen,
+    DiagnosticsScreen,
     ExportDataScreen,
     PermissionsScreen,
     PinScreen,
@@ -100,16 +101,17 @@ export const RootNavigator = () => {
                     options={{ presentation: 'modal', title: 'Where to' }}
                 />
                 <Stack.Screen component={CamerasScreen} name="Cameras" options={{ title: 'Cameras' }} />
-            <Stack.Screen
-                component={RouteDetailsScreen}
-                name="RouteDetails"
-                options={{ title: 'Route details' }}
-            />
+                <Stack.Screen
+                    component={RouteDetailsScreen}
+                    name="RouteDetails"
+                    options={{ title: 'Route details' }}
+                />
                 <Stack.Screen component={CameraDetailScreen} name="CameraDetail" options={{ title: 'Camera' }} />
                 <Stack.Screen component={SavedRoutesScreen} name="SavedRoutes" options={{ title: 'Saved routes' }} />
                 <Stack.Screen component={RoutePreviewScreen} name="RoutePreview" options={{ title: 'Route' }} />
                 <Stack.Screen component={PinScreen} name="Pin" options={{ title: 'Pin' }} />
                 <Stack.Screen component={ExportDataScreen} name="ExportData" options={{ title: 'Export data' }} />
+                <Stack.Screen component={DiagnosticsScreen} name="Diagnostics" options={{ title: 'Diagnostics' }} />
                 <Stack.Screen component={DeleteDataScreen} name="DeleteData" options={{ title: 'Delete data' }} />
                 <Stack.Screen component={PermissionsScreen} name="Permissions" options={{ title: 'Permissions' }} />
             </Stack.Navigator>

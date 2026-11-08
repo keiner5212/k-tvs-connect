@@ -6,6 +6,7 @@ import ErrorBoundary from '@components/ErrorBoundary';
 import { RootNavigator, navigationRef } from '@/navigation/RootNavigator';
 import { openDatabase } from '@services/db/database';
 import { useCameraStore } from '@stores/cameraStore';
+import { notificationBridge } from '@services/notifications.service';
 import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { bindRideTracker, rideTracker } from '@services/rideTracker';
@@ -110,6 +111,7 @@ export default function App() {
             await useSettingsStore.getState().load();
             setReady(true);
             void useCameraStore.getState().refresh();
+            void notificationBridge.start();
         };
         void bootstrap();
 

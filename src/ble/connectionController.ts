@@ -4,7 +4,8 @@ import { State } from 'react-native-ble-plx';
 import { Bike, BikeTelemetry, ConnectionState } from '@typings/types';
 import { startClusterService, stopClusterService } from '@services/cluster.service';
 import { logger } from '@utils/logger';
-import { BleService, DiscoveredDevice } from './bleService';
+import { bleService, DiscoveredDevice } from './bleService';
+import { ensureBlePermissions } from './permissions';
 import { DATA_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
 import { parseFrame, telemetryFromFrame } from './parser';
 import {
@@ -70,7 +71,7 @@ const hasGps = async (): Promise<boolean> => {
 };
 
 export class ConnectionController {
-    private readonly ble = new BleService();
+    private readonly ble = bleService;
 
     private state: ConnectionState = 'off';
 
@@ -97,6 +98,8 @@ export class ConnectionController {
     private retryResolve: (() => void) | null = null;
 
     private watchdog: ReturnType<typeof setInterval> | null = null;
+
+    private receivedFrames = 0;
 
     private clusterTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -181,20 +184,7 @@ export class ConnectionController {
     }
 
     async requestPermissions(): Promise<boolean> {
-        if (Platform.OS !== 'android') {
-            return true;
-        }
-
-        const permissions =
-            Platform.Version >= 31
-                ? [
-                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-                ]
-                : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
-
-        const result = await PermissionsAndroid.requestMultiple(permissions);
-        return Object.values(result).every((value) => value === PermissionsAndroid.RESULTS.GRANTED);
+        return ensureBlePermissions();
     }
 
     async start(bike: Bike): Promise<void> {
@@ -202,6 +192,11 @@ export class ConnectionController {
         this.running = true;
         this.reconnectAttempt = 0;
         this.nextRetryAt = null;
+        this.receivedFrames = 0;
+        logger.info(`looking for the scooter ${bike.nickname}`, {
+            service: 'ble',
+            event: 'ble_start',
+        });
         this.setState('scanning');
 
         if (!this.watchdog) {
@@ -224,6 +219,22 @@ export class ConnectionController {
         await this.ble.disconnect().catch(() => undefined);
         void stopClusterService();
         this.setState('off');
+    }
+
+    /** Sends a packet to the cluster, if the link is up. */
+    async sendPacket(packet: Uint8Array): Promise<void> {
+        if (this.state !== 'connected') {
+            return;
+        }
+        try {
+            await this.ble.write(packet);
+        } catch (error) {
+            logger.warn('could not write to the cluster', {
+                service: 'ble',
+                event: 'ble_write',
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+        }
     }
 
     async reconnectNow(): Promise<void> {
@@ -292,7 +303,14 @@ export class ConnectionController {
         if (this.state === state) {
             return;
         }
+        const previous = this.state;
         this.state = state;
+        logger.info('the connection state changed', {
+            service: 'ble',
+            event: 'ble_state',
+            count: this.reconnectAttempt,
+            pathTemplate: `${previous}->${state}`,
+        });
         for (const listener of this.stateListeners) {
             listener(state);
         }
@@ -372,6 +390,11 @@ export class ConnectionController {
 
             const match = found.device;
             if (!match) {
+                logger.info('the cluster was not in the scan', {
+                    service: 'ble',
+                    event: 'ble_scan_miss',
+                    count: this.reconnectAttempt,
+                });
                 this.setState(this.reconnectAttempt > 0 ? 'reconnecting' : 'scanning');
                 return false;
             }
@@ -406,6 +429,12 @@ export class ConnectionController {
             RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
         this.reconnectAttempt += 1;
         this.nextRetryAt = Date.now() + delay;
+        logger.info('waiting before the next attempt', {
+            service: 'ble',
+            event: 'ble_retry',
+            durationMs: delay,
+            count: this.reconnectAttempt,
+        });
         this.notifyInfo();
 
         return new Promise((resolve) => {
@@ -439,6 +468,14 @@ export class ConnectionController {
 
         this.telemetry = telemetryFromFrame(frame, this.telemetry);
         this.lastDataAt = Date.now();
+        this.receivedFrames += 1;
+        if (this.receivedFrames % 10 === 0) {
+            logger.info('the cluster is sending data', {
+                service: 'ble',
+                event: 'ble_frame',
+                count: this.receivedFrames,
+            });
+        }
 
         for (const listener of this.telemetryListeners) {
             listener(this.telemetry);
@@ -453,9 +490,22 @@ export class ConnectionController {
     private async startClusterUpdates(): Promise<void> {
         this.stopClusterUpdates();
 
-        const name = this.bike?.nickname ?? '';
+        /**
+         * The scooter greets the rider with this name. The original app sends
+         * the name of the account, and this app has no account, so the name the
+         * rider wrote in the settings goes, and the nickname of the bike is the
+         * fallback.
+         */
+        const { useSettingsStore } = await import('@stores/settingsStore');
+        const riderName = useSettingsStore.getState().settings.riderName.trim();
+        const name = riderName || this.bike?.nickname || '';
         if (name) {
             await this.ble.write(buildRiderNamePacket(name)).catch(() => undefined);
+            logger.info('the rider name was sent to the scooter', {
+                service: 'ble',
+                event: 'ble_rider_name',
+                count: name.length,
+            });
         }
 
         await this.writeMobileData();
@@ -543,6 +593,12 @@ export class ConnectionController {
             return;
         }
         if (Date.now() - this.lastDataAt > DATA_TIMEOUT_MS) {
+            logger.warn('the cluster stopped sending data', {
+                service: 'ble',
+                event: 'ble_timeout',
+                durationMs: Date.now() - this.lastDataAt,
+                count: this.receivedFrames,
+            });
             void this.reconnectNow();
         }
     }

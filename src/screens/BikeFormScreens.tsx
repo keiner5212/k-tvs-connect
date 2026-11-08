@@ -10,20 +10,15 @@ import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
 import { useGarageStore } from '@stores/garageStore';
 import { BikeModel, RootStackParamList } from '@typings/types';
-import { BleService, DiscoveredDevice } from '@ble/bleService';
+import { bleService, DiscoveredDevice } from '@ble/bleService';
 import { findBikeByMac, isValidMac, normalizeMac } from '@services/db/bikeRepository';
+import { BIKE_CATALOG, catalogFamily } from '@config/bikeCatalog';
+import type { BikeFamily } from '@config/bikeCatalog';
 import { spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
-const MODELS: { value: BikeModel; label: string }[] = [
-    { value: 'apache', label: 'Apache' },
-    { value: 'ntorq', label: 'Ntorq' },
-    { value: 'jupiter', label: 'Jupiter' },
-    { value: 'iqube', label: 'IQUBE' },
-    { value: 'u388', label: 'U388' },
-    { value: 'other', label: 'Other' },
-];
+const FAMILIES = ['Apache', 'Ntorq', 'Jupiter', 'IQUBE', 'Other'] as const;
 
 export const BikeForm = ({
     initialNickname,
@@ -47,7 +42,10 @@ export const BikeForm = ({
 }) => {
     const { colors } = useTheme();
     const [nickname, setNickname] = useState(initialNickname ?? '');
-    const [model, setModel] = useState<BikeModel>(initialModel ?? 'apache');
+    const [model, setModel] = useState<BikeModel>(initialModel ?? 'apache-rtr-160-4v-xc-fi');
+    const [family, setFamily] = useState<BikeFamily>(
+        catalogFamily(initialModel ?? 'apache-rtr-160-4v-xc-fi'),
+    );
     const [frameNumber, setFrameNumber] = useState(initialFrameNumber ?? '');
     const [mac, setMac] = useState(initialMac ?? '');
     const [error, setError] = useState<string | null>(null);
@@ -60,15 +58,19 @@ export const BikeForm = ({
         setFound([]);
         setError(null);
 
-        const service = new BleService();
         try {
-            await service.scan((device) => {
-                setFound((current) =>
-                    current.some((entry) => entry.id === device.id) ? current : [...current, device],
-                );
+            await bleService.scan((device) => {
+                setFound((current) => {
+                    if (current.some((entry) => entry.id === device.id)) {
+                        return current;
+                    }
+                    return [...current, device].sort((a, b) => b.rssi - a.rssi);
+                });
             }, 5000);
         } catch {
-            setError('Bluetooth permission is needed to scan for your bike.');
+            setError(
+                'The app needs the bluetooth permission to find your bike. Enable it in the app settings.',
+            );
         } finally {
             setScanning(false);
         }
@@ -79,13 +81,9 @@ export const BikeForm = ({
             setError('Enter a name for your bike.');
             return;
         }
-        if (!frameNumber.trim()) {
-            setError('Enter the frame number.');
-            return;
-        }
         const normalizedMac = normalizeMac(mac);
         if (!isValidMac(normalizedMac)) {
-            setError('Enter a MAC address as AA:BB:CC:DD:EE:FF.');
+            setError('Scan for your bike and pick it from the list.');
             return;
         }
 
@@ -120,30 +118,47 @@ export const BikeForm = ({
             value={nickname}
         />
 
+        <Text style={[styles.label, { color: colors.foreground }]}>Family</Text>
+        <View style={styles.modelWrap}>
+            <ChipGroup
+                onChange={(value) => {
+                    const next = value as BikeFamily;
+                    setFamily(next);
+                    const first = BIKE_CATALOG.find((entry) => entry.family === next);
+                    if (first) {
+                        setModel(first.value);
+                    }
+                }}
+                options={FAMILIES.map((entry) => ({ value: entry, label: entry }))}
+                value={family}
+            />
+        </View>
+
         <Text style={[styles.label, { color: colors.foreground }]}>Model</Text>
         <View style={styles.modelWrap}>
             <ChipGroup
-                onChange={(value) => setModel(value as BikeModel)}
-                options={MODELS}
+                onChange={(value) => setModel(value)}
+                options={BIKE_CATALOG.filter((entry) => entry.family === family).map((entry) => ({
+                    value: entry.value,
+                    label: entry.label,
+                }))}
                 value={model}
             />
         </View>
 
         <TextField
-            autoCapitalize="none"
-            label="Frame number"
+            autoCapitalize="sentences"
+            helperText="The number stamped on the frame of the bike, seventeen characters. It is not your ID number."
+            label="Chassis number"
             onChangeText={setFrameNumber}
+            placeholder="MD6AB25XX5J000000"
             value={frameNumber}
         />
 
-        <TextField
-            autoCapitalize="none"
-            errorText={error ?? undefined}
-            label="Bluetooth address"
-            onChangeText={setMac}
-            placeholder="AA:BB:CC:DD:EE:FF"
-            value={mac}
-        />
+        <Text style={[styles.label, { color: colors.foreground }]}>Bluetooth address</Text>
+        <Text style={[styles.help, { color: colors.mutedForeground }]}>
+            The app finds the bike by itself. Switch the bike on and pick it from the list below.
+        </Text>
 
         <PrimaryButton
             disabled={scanning}
@@ -162,12 +177,18 @@ export const BikeForm = ({
                         style={[styles.foundRow, { borderColor: colors.border }]}
                     >
                         <Text style={[styles.foundName, { color: colors.foreground }]}>
-                            {device.name ?? 'Scooter'}
+                            {device.name ?? 'Device without name'}
                         </Text>
-                        <Text style={[styles.foundMac, { color: colors.mutedForeground }]}>{device.id}</Text>
+                        <Text style={[styles.foundMac, { color: colors.mutedForeground }]}>
+                            {device.id} · signal {device.rssi}
+                        </Text>
                     </TouchableOpacity>
                 ))}
             </View>
+        ) : null}
+
+        {error ? (
+            <Text style={[styles.help, { color: colors.error }]}>{error}</Text>
         ) : null}
 
         {scanning && found.length === 0 ? (
@@ -249,6 +270,11 @@ const styles = StyleSheet.create({
     foundRow: {
         borderBottomWidth: StyleSheet.hairlineWidth,
         paddingVertical: spacing.md,
+    },
+    help: {
+        ...typography.body,
+        marginBottom: spacing.sm,
+        marginTop: spacing.xs,
     },
     label: {
         ...typography.label,

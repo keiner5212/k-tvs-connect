@@ -53,13 +53,8 @@ export type ConnectionState =
     | 'reconnecting'
     | 'failed';
 
-export type BikeModel =
-    | 'apache'
-    | 'ntorq'
-    | 'jupiter'
-    | 'iqube'
-    | 'u388'
-    | 'other';
+/** the value of the model comes from the catalog of bikes */
+export type BikeModel = string;
 
 export interface Bike {
     id: string;
@@ -193,6 +188,8 @@ export interface RouteResult {
 
 export interface AppSettings {
     unitSystem: 'metric' | 'imperial';
+    /** the name the scooter greets the rider with */
+    riderName: string;
     cameraAvoidEnabled: boolean;
     cameraRadiusMeters: number;
     ansvFetchedAt: number | null;
@@ -219,6 +216,7 @@ export type RootStackParamList = {
     RoutePreview: { routeId: string };
     Pin: { mode: 'create' | 'change' | 'remove' };
     ExportData: undefined;
+    Diagnostics: undefined;
     DeleteData: undefined;
     Permissions: undefined;
 };

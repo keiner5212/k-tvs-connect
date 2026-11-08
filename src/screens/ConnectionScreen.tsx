@@ -10,6 +10,7 @@ import { EmptyState } from '@components/feedback';
 import { ConnectionRail } from '@components/dashboard';
 import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
+import { catalogLabel } from '@config/bikeCatalog';
 import { useNow } from '@hooks/useNow';
 import { useBleStore } from '@stores/bleStore';
 import { useGarageStore } from '@stores/garageStore';
@@ -80,7 +81,7 @@ export const ConnectionScreen = () => {
 
                 <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                    {`${bike.model} · ${bike.frameNumber}`}
+                    {`${catalogLabel(bike.model)} · ${bike.frameNumber}`}
                 </Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>{bike.macAddress}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
@@ -173,7 +174,7 @@ export const BikeDetailsScreen = () => {
 
                 <Text style={[styles.title, { color: colors.foreground }]}>{bike.nickname}</Text>
                 <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                    {`${bike.model} · ${bike.frameNumber}`}
+                    {`${catalogLabel(bike.model)} · ${bike.frameNumber}`}
                 </Text>
 
                 <View style={styles.actions}>

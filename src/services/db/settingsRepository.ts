@@ -3,6 +3,7 @@ import { getDatabase } from './database';
 
 const DEFAULTS: AppSettings = {
     unitSystem: 'metric',
+    riderName: '',
     cameraAvoidEnabled: true,
     cameraRadiusMeters: 5000,
     ansvFetchedAt: null,
@@ -31,6 +32,7 @@ export const getSettings = async (): Promise<AppSettings> => {
 
     return {
         unitSystem: (stored.unitSystem as AppSettings['unitSystem']) ?? DEFAULTS.unitSystem,
+        riderName: stored.riderName ?? DEFAULTS.riderName,
         cameraAvoidEnabled: stored.cameraAvoidEnabled
             ? stored.cameraAvoidEnabled === 'true'
             : DEFAULTS.cameraAvoidEnabled,

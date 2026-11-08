@@ -37,6 +37,7 @@ export const SettingsScreen = () => {
     const setAvoidEnabledGlobally = useCameraStore((state) => state.setAvoidEnabledGlobally);
     const setRadiusMeters = useCameraStore((state) => state.setRadiusMeters);
 
+    const [riderName, setRiderName] = useState(settings.riderName);
     const [valhallaUrl, setValhallaUrl] = useState(settings.valhallaBaseUrl);
     const [styleUrl, setStyleUrl] = useState(settings.mapStyleUrl);
     const [routingError, setRoutingError] = useState<string | null>(null);
@@ -55,6 +56,10 @@ export const SettingsScreen = () => {
         setValhallaUrl(settings.valhallaBaseUrl);
         setStyleUrl(settings.mapStyleUrl);
     }, [settings]);
+
+    const saveRiderName = () => {
+        void update({ riderName: riderName.trim() });
+    };
 
     const normalizeUrl = (value: string): string => value.trim().replace(/\/+$/, '');
 
@@ -91,6 +96,23 @@ export const SettingsScreen = () => {
                 ]}
             >
                 <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
+
+                <SettingsSection
+                    title="Profile"
+                    footer="The scooter greets you with this name when it says hello. It travels to the cluster in the rider name packet."
+                >
+                    <View style={styles.padded}>
+                        <TextField
+                            autoCapitalize="words"
+                            helperText="Up to seventeen letters. The cluster replaces the symbols with an at sign."
+                            label="Your name"
+                            onChangeText={setRiderName}
+                            placeholder="How the scooter should call you"
+                            value={riderName}
+                        />
+                    </View>
+                    <SettingsRow label="Save your name" onPress={saveRiderName} />
+                </SettingsSection>
 
                 <SettingsSection title="Units">
                     <SettingsBody>
@@ -229,6 +251,11 @@ export const SettingsScreen = () => {
                 <SettingsSection title="Data">
                     <SettingsRow label="Permissions" onPress={() => navigation.navigate('Permissions')} />
                     <SettingsRow label="Export data" onPress={() => navigation.navigate('ExportData')} />
+                    <SettingsRow
+                        description="The log of the last ride, with the connection events."
+                        label="Diagnostics"
+                        onPress={() => navigation.navigate('Diagnostics')}
+                    />
                     <SettingsRow
                         destructive
                         label="Delete all data"

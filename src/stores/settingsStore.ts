@@ -13,6 +13,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     settings: {
         unitSystem: 'metric',
+        riderName: '',
         cameraAvoidEnabled: true,
         cameraRadiusMeters: 5000,
         ansvFetchedAt: null,

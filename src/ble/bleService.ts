@@ -1,11 +1,21 @@
 import { BleError, BleManager, Characteristic, Device, State } from 'react-native-ble-plx';
 
+import { logger } from '@utils/logger';
+import { ensureBlePermissions } from './permissions';
 import {
     BLE_MTU,
     CONNECT_TIMEOUT_MS,
     READ_CHARACTERISTIC_UUID,
     WRITE_CHARACTERISTIC_UUID,
 } from './constants';
+
+/** the address of a device never goes to the log, only its last bytes */
+export const maskAddress = (id: string): string => {
+    if (id.length <= 5) {
+        return '****';
+    }
+    return `****:${id.slice(-5)}`;
+};
 
 export type DiscoveredDevice = {
     id: string;
@@ -56,15 +66,36 @@ export class BleService {
         onDevice: (device: DiscoveredDevice) => void,
         timeoutMs: number,
     ): Promise<void> {
+        const granted = await ensureBlePermissions();
+        if (!granted) {
+            throw new Error('the bluetooth permission is missing');
+        }
+
         this.manager.stopDeviceScan();
+        let found = 0;
 
         this.manager.startDeviceScan(
             null,
             { allowDuplicates: false },
             (error, device) => {
                 if (error || !device) {
+                    if (error) {
+                        logger.warn('the scan reported an error', {
+                            event: 'ble_scan',
+                            errorName: error ? String(error.errorCode) : 'UnknownError',
+                        });
+                    }
                     return;
                 }
+                found += 1;
+                logger.info(
+                    `a device was found: ${device.name ?? 'no name'} ${maskAddress(device.id)} signal ${device.rssi ?? -100}`,
+                    {
+                        service: 'ble',
+                        event: 'ble_scan_device',
+                        count: found,
+                    },
+                );
                 onDevice({
                     id: device.id,
                     name: device.name ?? null,
@@ -75,13 +106,34 @@ export class BleService {
 
         await new Promise((resolve) => setTimeout(resolve, timeoutMs));
         this.manager.stopDeviceScan();
+        logger.info('the scan finished', { service: 'ble', event: 'ble_scan_end', count: found });
     }
 
     async connect(deviceId: string): Promise<Device> {
-        this.device = await this.manager.connectToDevice(deviceId, {
-            autoConnect: false,
-            requestMTU: BLE_MTU,
-            timeout: CONNECT_TIMEOUT_MS,
+        const started = Date.now();
+        logger.info('connecting to the cluster', {
+            service: 'ble',
+            event: 'ble_connect_start',
+        });
+        try {
+            this.device = await this.manager.connectToDevice(deviceId, {
+                autoConnect: false,
+                requestMTU: BLE_MTU,
+                timeout: CONNECT_TIMEOUT_MS,
+            });
+        } catch (error) {
+            logger.error('the connection failed', {
+                service: 'ble',
+                event: 'ble_connect_failed',
+                durationMs: Date.now() - started,
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+            throw error;
+        }
+        logger.info('the cluster is connected', {
+            service: 'ble',
+            event: 'ble_connect_ok',
+            durationMs: Date.now() - started,
         });
         return this.device;
     }
@@ -90,23 +142,52 @@ export class BleService {
         await device.discoverAllServicesAndCharacteristics();
         const services = await device.services();
 
+        let read = false;
+        let write = false;
         for (const service of services) {
             const characteristics = await device.characteristicsForService(service.uuid);
 
             for (const characteristic of characteristics) {
                 const uuid = characteristic.uuid.toUpperCase();
                 if (uuid === READ_CHARACTERISTIC_UUID) {
+                    read = true;
                     characteristic.monitor((error: BleError | null, value: Characteristic | null) => {
                         if (error || !value?.value) {
+                            if (error) {
+                                logger.warn('the telemetry stream reported an error', {
+                                    service: 'ble',
+                                    event: 'ble_monitor_error',
+                                    errorName: String(error.errorCode),
+                                });
+                            }
                             return;
                         }
                         onTelemetry(base64ToBytes(value.value));
                     });
                 }
                 if (uuid === WRITE_CHARACTERISTIC_UUID) {
+                    write = true;
                     this.writeCharacteristic = characteristic;
                 }
             }
+        }
+
+        logger.info('the characteristics are ready', {
+            service: 'ble',
+            event: 'ble_discover',
+            count: services.length,
+        });
+        if (!read) {
+            logger.warn('the read characteristic was not found', {
+                service: 'ble',
+                event: 'ble_discover',
+            });
+        }
+        if (!write) {
+            logger.warn('the write characteristic was not found', {
+                service: 'ble',
+                event: 'ble_discover',
+            });
         }
     }
 
@@ -129,3 +210,6 @@ export class BleService {
         return this.device?.id ?? null;
     }
 }
+
+/** the manager has to be one for the whole app, the library says so */
+export const bleService = new BleService();

@@ -17,7 +17,11 @@ export const DATA_ID = {
 
 export const BLE_MTU = 512;
 export const SCAN_WINDOW_MS = 5000;
-export const CONNECT_TIMEOUT_MS = 15000;
+/**
+ * The original app waits 35 seconds for the cluster before it gives the link
+ * up. A scooter that is just switched on needs that time to answer.
+ */
+export const CONNECT_TIMEOUT_MS = 35000;
 export const DATA_TIMEOUT_MS = 5000;
 
 /** the backoff of the reconnection, the last one repeats forever */

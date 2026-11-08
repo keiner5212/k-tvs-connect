@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { StatusDot } from '@components/feedback';
 import { useTheme } from '@hooks/useTheme';
+import { catalogLabel } from '@config/bikeCatalog';
 import { Bike, ConnectionState } from '@typings/types';
 import { formatAge } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
@@ -50,7 +51,7 @@ export const BikeCard = ({
             </View>
 
             <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                {`${bike.model} · ${bike.frameNumber}`}
+                {`${catalogLabel(bike.model)} · ${bike.frameNumber}`}
             </Text>
 
             <View style={styles.statusRow}>
