@@ -1,4 +1,4 @@
-import React, { Ref, useMemo } from 'react';
+import React, { Ref, useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
     Camera,
@@ -32,15 +32,17 @@ export const TOOLBAR_HEIGHT = 3 * 44 + 2 * spacing.sm;
 
 /**
  * The wedge sits outside the body and points the way the camera looks.
- * Bearing 0 is north, and the wedge is drawn pointing up, so a clockwise
- * rotation by the bearing aims it.
+ * Bearing 0 is north. The marker is pinned to the screen, so the map heading
+ * is taken off or the wedge stays put when the map turns.
  */
 const DirectionWedge = ({
     bearing,
+    mapHeading,
     bothWays,
     color,
 }: {
     bearing: number;
+    mapHeading: number;
     bothWays: boolean;
     color: string;
 }) => {
@@ -49,6 +51,7 @@ const DirectionWedge = ({
         borderLeftColor: colors.transparent,
         borderRightColor: colors.transparent,
     };
+    const screenBearing = bearing - mapHeading;
 
     return (
         <View
@@ -56,7 +59,7 @@ const DirectionWedge = ({
             style={[
                 styles.cameraOrbit,
                 bothWays ? styles.cameraOrbitBoth : null,
-                { transform: [{ rotate: `${bearing}deg` }] },
+                { transform: [{ rotate: `${screenBearing}deg` }] },
             ]}
         >
             <View style={[styles.cameraWedge, side, { borderBottomColor: color }]} />
@@ -111,6 +114,21 @@ export const MapCanvas = ({
 }: MapCanvasProps) => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
+    const headingRef = useRef(0);
+    const [mapHeading, setMapHeading] = useState(0);
+    const rememberHeading = useCallback((feature: GeoJSON.Feature) => {
+        const heading = (feature.properties as { heading?: number } | null)?.heading;
+        if (typeof heading !== 'number' || !Number.isFinite(heading)) {
+            return;
+        }
+        const normalized = ((heading % 360) + 360) % 360;
+        const delta = Math.abs(((normalized - headingRef.current + 540) % 360) - 180);
+        if (delta < 0.5) {
+            return;
+        }
+        headingRef.current = normalized;
+        setMapHeading(normalized);
+    }, []);
 
     const centerLatitude = center[0];
     const centerLongitude = center[1];
@@ -147,6 +165,8 @@ export const MapCanvas = ({
             attributionEnabled
             attributionPosition={{ top: insets.top + spacing.sm, left: layout.screenPadding }}
             onDidFailLoadingMap={onTilesFail}
+            onRegionDidChange={rememberHeading}
+            onRegionIsChanging={rememberHeading}
             compassViewPosition={1}
             compassViewMargins={{
                 x: layout.screenPadding,
@@ -263,6 +283,7 @@ export const MapCanvas = ({
                                         bearing={bearing}
                                         bothWays={camera.bothWays}
                                         color={accent}
+                                        mapHeading={mapHeading}
                                     />
                                 ) : null}
                                 <View
