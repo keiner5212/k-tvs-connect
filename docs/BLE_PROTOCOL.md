@@ -175,12 +175,12 @@ which is more than the original does.
 | `src/ble/bleService.ts` | the react-native-ble-plx wrapper |
 | `src/ble/connectionController.ts` | the state machine, scanning and reconnect |
 
-## The legacy family
+## The RTR 160 IoT V2 family
 
 The bike of the rider is the RTR 160 IoT V2, which the original app calls
-N112_V2 (`SecretIdentifier.SERVICE_UUID_N112_V2 = "SERVICE_UUID_RTR_160_IOT_V2"`).
-That family takes its uuids from the server, so the app finds them in the
-discovery instead:
+N112_V2 (`SecretIdentifier.SERVICE_UUID_N112_V2 = "SERVICE_UUID_RTR_160_IOT_V2"`)
+and pairs with the U399C uuids. That family takes its uuids from the server,
+so the app finds them in the discovery instead:
 
 | Kind | Uuid | Properties |
 | --- | --- | --- |
@@ -190,24 +190,23 @@ discovery instead:
 | data | `00005503-d102-11e1-9b23-000240198212` | write with response, indicate |
 | read | `00005504-d102-11e1-9b23-000240198212` | read |
 
-The family speaks letter frames instead of the frames with a start byte: a
-prefix byte, the value and a couple of extra bytes, with no encryption and no
-checksum. The original writes it with the write type "without response"
-(`U324HelperService.getCharacteristicsWriteType()` returns 1 and the write is
-`writeCharacteristic(..., bArr, 1)`), so a write with a response to the
-characteristic `5502` is dropped by the stack and the cluster never answers.
+It speaks the same frames as the newer bikes: a start byte, a data id at byte 1
+and twenty bytes. Three things are different.
 
-The frames the original sends to this family:
+- The payload is xored with **0xEB**, not 0xEA. The original encrypts and
+  decrypts it with `U368EncryptDecryptDataUtils`, whose key is -21, and the
+  receiver rejects any frame that is not twenty bytes long.
+- The original writes it with the write type "with response"
+  (`U399HelperService.getCharacteristicsWriteType()` returns 2 and
+  `U507SendDataToCluster` writes with the literal 2), so the endpoint to write
+  to is `5503`, the one that takes a write with response.
+- The rider name goes five times with a pause of 400 ms between them, then the
+  mobile data frame with the clock, the battery, the signal and the missed
+  calls. The name is not sanitised: `BluetoothUtil.createRiderNameArray` sends
+  it as it is, unlike the newer family that replaces every symbol with an X.
 
-| Frame | Bytes | Meaning |
-| --- | --- | --- |
-| name | `4D` + name (16) + `24` | the name the cluster greets the rider with |
-| clock | `48` + hour + minute + pm | the time on the cluster |
-| signal | `58` + signal + battery + missed + 0 + network | the phone status, every 2 s |
-
-The frames the cluster sends start with the prefix of the value: `41` speed,
-`4F` odometer, `46` fuel, `5A` average speed, `50` gear, `4C` lean angle. The
-port reads the speed and the fuel today and logs the rest raw.
+The N112 family, the one before the V2, is a different one: it speaks letter
+frames, a prefix byte and the value. It is not the family of this bike.
 
 ## Still to confirm
 

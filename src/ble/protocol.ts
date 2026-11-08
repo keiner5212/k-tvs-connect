@@ -5,7 +5,11 @@
  */
 
 export const APACHE_XOR_KEY = 0xea;
-export const LEGACY_XOR_KEY = 0xeb;
+/**
+ * The RTR 160 IoT V2 family xors its payload with 0xEB. The original uses
+ * `U368EncryptDecryptDataUtils`, whose key is -21.
+ */
+export const RTR160_XOR_KEY = 0xeb;
 
 const END_BYTE = 0xff;
 
@@ -169,59 +173,18 @@ export const sanitizeClusterText = (value: string): string => {
 };
 
 /**
- * The older generation of the cluster (the RTR 160 IoT V2 and the families
- * that share its protocol) writes plain letter frames: a prefix byte, the
- * data and a postfix. There is no start byte and no data id.
- */
-export const LEGACY_PREFIX_NAME = 0x4d; // M
-export const LEGACY_PREFIX_TIME = 0x48; // H
-export const LEGACY_PREFIX_SIGNAL = 0x58; // X
-export const LEGACY_POSTFIX = 0x24; // $
-
-export const buildLegacyNamePacket = (name: string): Uint8Array => {
-    const text = sanitizeClusterText(name).slice(0, 16);
-    const bytes = utf8Encode(text);
-    const packet = new Uint8Array(bytes.length + 2);
-    packet[0] = LEGACY_PREFIX_NAME;
-    packet.set(bytes, 1);
-    packet[packet.length - 1] = LEGACY_POSTFIX;
-    return packet;
-};
-
-export const buildLegacyTimePacket = (date: Date): Uint8Array => {
-    const hours = date.getHours() % 12;
-    return new Uint8Array([
-        LEGACY_PREFIX_TIME,
-        hours,
-        date.getMinutes(),
-        date.getHours() >= 12 ? 1 : 0,
-    ]);
-};
-
-export const buildLegacySignalPacket = (
-    signal: number,
-    batteryPercent: number,
-    missedCalls: number,
-    signalType: number,
-): Uint8Array =>
-    new Uint8Array([
-        LEGACY_PREFIX_SIGNAL,
-        signal,
-        batteryPercent,
-        missedCalls,
-        0,
-        signalType,
-    ]);
-
-/**
  * The name the cluster shows. Header 0x5B 0x52.
  */
-export const buildRiderNamePacket = (name: string, key = APACHE_XOR_KEY): Uint8Array => {
+export const buildRiderNamePacket = (
+    name: string,
+    key = APACHE_XOR_KEY,
+    sanitize = true,
+): Uint8Array => {
     const frame = new Uint8Array(OUTBOUND_FRAME_LENGTH);
     frame[0] = 0x5b;
     frame[1] = 0x52;
 
-    const bytes = utf8Encode(sanitizeClusterText(name));
+    const bytes = utf8Encode(sanitize ? sanitizeClusterText(name) : name.slice(0, 17));
     frame.set(bytes.subarray(0, 17), 2);
     frame[OUTBOUND_FRAME_LENGTH - 1] = END_BYTE;
 

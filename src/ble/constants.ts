@@ -13,6 +13,14 @@ export const BIKE_SERVICE_UUID = '5456534D-5647-5341-5342-454E544F5251';
  */
 export const CLUSTER_SERVICE_MARK = '5500';
 
+/**
+ * The cluster of the RTR 160 IoT V2 family takes the same frames as the
+ * newer bikes, but its payload is xored with 0xEB instead of 0xEA. The
+ * original encrypts and decrypts it with `U368EncryptDecryptDataUtils`, whose
+ * key is -21.
+ */
+export const RTR160_XOR_KEY = 0xeb;
+
 /** the same uuid without the dashes, to compare it with any spelling */
 export const bikeServiceKey = (uuid: string): string => uuid.replace(/-/g, '').toUpperCase();
 

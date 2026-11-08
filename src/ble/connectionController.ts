@@ -13,12 +13,12 @@ import {
     RECONNECT_DELAYS_MS,
     SCAN_WINDOW_MS,
 } from './constants';
-import { emptyTelemetry, parseFrame, parseLegacyFrame, telemetryFromFrame } from './parser';
+import { parseFrame, telemetryFromFrame } from './parser';
 import {
+    APACHE_XOR_KEY,
     NavigationUpdate,
-    buildLegacyNamePacket,
-    buildLegacySignalPacket,
-    buildLegacyTimePacket,
+    TRAFFIC_SEQUENCE,
+    RTR160_XOR_KEY,
     buildLocationAddressPacket,
     buildMobileDataPacket,
     buildNavigationControlPacket,
@@ -53,6 +53,12 @@ const PAIRING_HINT =
     'The bike is showing a code. Type that code in the pairing dialog of the phone.';
 
 const CLUSTER_UPDATE_INTERVAL_MS = 2000;
+
+/** the original sends the rider name five times, with a pause between them */
+const RIDER_NAME_REPEATS = 5;
+const RIDER_NAME_PAUSE_MS = 400;
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** the original refreshes the navigation of the cluster every 400 milliseconds */
 const NAVIGATION_UPDATE_INTERVAL_MS = 400;
@@ -136,6 +142,11 @@ export class ConnectionController {
     private receivedFrames = 0;
 
     private clusterKind: ClusterKind = 'modern';
+
+    /** the payload key of the family: 0xEA for the newer bikes, 0xEB for the RTR 160 */
+    private get payloadKey(): number {
+        return this.clusterKind === 'rtr160' ? RTR160_XOR_KEY : APACHE_XOR_KEY;
+    }
 
     private clusterKindChanged = false;
 
@@ -344,18 +355,9 @@ export class ConnectionController {
             return false;
         }
 
-        /**
-         * The older family of the cluster takes the instructions in its own
-         * frames, which this port does not write yet. Sending the modern
-         * frames to it would be noise, so the app says it did not send it.
-         */
-        if (this.clusterKind === 'legacy') {
-            return false;
-        }
-
         try {
             await this.ble.write(buildLocationAddressPacket(address));
-            await this.ble.write(buildTrafficSequencePacket());
+            await this.ble.write(buildTrafficSequencePacket(TRAFFIC_SEQUENCE.Default, this.payloadKey));
             logger.info('destination sent to the cluster', { event: 'ble_write', count: 1 });
             return true;
         } catch (error) {
@@ -583,12 +585,7 @@ export class ConnectionController {
     }
 
     private handleData(bytes: Uint8Array): void {
-        if (this.ble.kind === 'legacy') {
-            this.handleLegacyData(bytes);
-            return;
-        }
-
-        const frame = parseFrame(bytes);
+        const frame = parseFrame(bytes, this.payloadKey);
         if (!frame) {
             /**
              * The start byte and the data id are not encrypted, so the log
@@ -643,59 +640,6 @@ export class ConnectionController {
     }
 
     /**
-     * The older family of the cluster sends letter frames without
-     * encryption. The values that are not ported yet are logged raw, so the
-     * rest can be read from the log of a real ride.
-     */
-    private handleLegacyData(bytes: Uint8Array): void {
-        const legacy = parseLegacyFrame(bytes);
-        this.lastDataAt = Date.now();
-        this.receivedFrames += 1;
-
-        if (this.receivedFrames <= 5) {
-            logger.info('a legacy frame came in', {
-                service: 'ble',
-                event: 'ble_frame',
-                count: this.receivedFrames,
-                pathTemplate: legacy.raw,
-            });
-        }
-
-        const previous = this.telemetry;
-        const speed = legacy.speedKmh ?? previous?.speedKmh ?? null;
-        const fuel = legacy.fuelLevelPercent ?? previous?.fuelLevelPercent ?? null;
-
-        /**
-         * Any frame means the cluster is talking, so the link is up even when
-         * the frame carries a value this port does not read yet.
-         */
-        if (this.state !== 'connected') {
-            this.failureReason = null;
-            this.setState('connected');
-        }
-
-        if (speed === null && fuel === null) {
-            for (const listener of this.telemetryListeners) {
-                if (this.telemetry) {
-                    listener(this.telemetry);
-                }
-            }
-            return;
-        }
-
-        this.telemetry = {
-            ...(previous ?? emptyTelemetry()),
-            speedKmh: speed,
-            fuelLevelPercent: fuel,
-            receivedAt: Date.now(),
-        };
-
-        for (const listener of this.telemetryListeners) {
-            listener(this.telemetry);
-        }
-    }
-
-    /**
      * The original app writes the rider name once after the connection and then
      * refreshes the mobile data packet every two seconds. The cluster shows the
      * clock, the phone battery, the signal and the overspeed limit from it.
@@ -713,11 +657,24 @@ export class ConnectionController {
         const riderName = useSettingsStore.getState().settings.riderName.trim();
         const name = riderName || this.bike?.nickname || '';
         if (name) {
-            const packet =
-                this.clusterKind === 'legacy'
-                    ? buildLegacyNamePacket(name)
-                    : buildRiderNamePacket(name);
-            await this.ble.write(packet).catch(() => undefined);
+            /**
+             * The original app sends the name five times with a pause between
+             * them, because the cluster needs it before it shows the greeting.
+             */
+            for (let attempt = 0; attempt < RIDER_NAME_REPEATS; attempt += 1) {
+                await this.ble
+                    .write(
+                        buildRiderNamePacket(
+                            name,
+                            this.payloadKey,
+                            this.clusterKind !== 'rtr160',
+                        ),
+                    )
+                    .catch(() => undefined);
+                if (attempt < RIDER_NAME_REPEATS - 1) {
+                    await delay(RIDER_NAME_PAUSE_MS);
+                }
+            }
             logger.info('the rider name was sent to the bike', {
                 service: 'ble',
                 event: 'ble_rider_name',
@@ -752,14 +709,6 @@ export class ConnectionController {
             return false;
         }
 
-        /**
-         * The older family of the cluster takes the maneuvers in its own
-         * frames, which this port does not write yet.
-         */
-        if (this.clusterKind === 'legacy') {
-            return false;
-        }
-
         try {
             await this.ble.write(buildNavigationControlPacket(update));
             if (update.instruction && update.instruction !== this.lastInstruction) {
@@ -784,35 +733,21 @@ export class ConnectionController {
         const battery = await getBatteryLevel();
         const networkType = await getNetworkType();
 
-        /**
-         * The older family of the cluster takes a plain letter frame with the
-         * signal, the battery, the missed calls and the kind of network, the
-         * way the original app sends it.
-         */
-        if (this.clusterKind === 'legacy') {
-            await this.ble
-                .write(
-                    buildLegacySignalPacket(0, battery, 0, networkType === 4 ? 1 : 0),
-                )
-                .catch(() => undefined);
-            await this.ble
-                .write(buildLegacyTimePacket(new Date()))
-                .catch(() => undefined);
-            return;
-        }
-
         await this.ble
             .write(
-                buildMobileDataPacket({
-                    batteryPercent: battery,
-                    signalStrength: 0,
-                    overspeedLimitKmh: this.overspeedLimitKmh,
-                    networkType,
-                    missedCalls: 0,
-                    callState: 0,
-                    voiceAssistEnabled: false,
-                    now: new Date(),
-                }),
+                buildMobileDataPacket(
+                    {
+                        batteryPercent: battery,
+                        signalStrength: 0,
+                        overspeedLimitKmh: this.overspeedLimitKmh,
+                        networkType,
+                        missedCalls: 0,
+                        callState: 0,
+                        voiceAssistEnabled: false,
+                        now: new Date(),
+                    },
+                    this.payloadKey,
+                ),
             )
             .catch(() => undefined);
     }

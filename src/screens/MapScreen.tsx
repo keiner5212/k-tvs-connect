@@ -163,7 +163,6 @@ export const MapScreen = () => {
     const [sentToBike, setSentToBike] = useState<boolean | null>(null);
     const [startingNavigation, setStartingNavigation] = useState(false);
     const connectionState = useBleStore((state) => state.state);
-    const clusterKind = useBleStore((state) => state.info.clusterKind);
     const [locationError, setLocationError] = useState<string | null>(null);
     const mapRef = useRef<MapViewRef>(null);
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -676,14 +675,7 @@ export const MapScreen = () => {
                     <Banner message="Destination sent to the bike." tone="info" />
                 ) : null}
                 {sentToBike === false ? (
-                    <Banner
-                        message={
-                            clusterKind === 'legacy'
-                                ? 'This bike takes the instructions in its own format, which the app does not write yet. The route runs on the phone.'
-                                : 'Could not write to the bike. Check the connection.'
-                        }
-                        tone="error"
-                    />
+                    <Banner message="Could not write to the bike. Check the connection." tone="error" />
                 ) : null}
             </View>
         </View>

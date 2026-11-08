@@ -41,11 +41,11 @@ export type DiscoveredDevice = {
 };
 
 /**
- * Which family of the cluster the phone is talking to. The modern one speaks
- * frames with a start byte and a data id, the older one (the RTR 160 IoT V2
- * and the families that share its protocol) speaks plain letter frames.
+ * Which family of the cluster the phone is talking to. Both speak the same
+ * frames; the RTR 160 IoT V2 family xors its payload with 0xEB instead of
+ * 0xEA and answers on its own service.
  */
-export type ClusterKind = 'modern' | 'legacy';
+export type ClusterKind = 'modern' | 'rtr160';
 
 export type TelemetryListener = (bytes: Uint8Array) => void;
 export type StateListener = (state: State) => void;
@@ -256,7 +256,7 @@ export class BleService {
          */
         let kind: ClusterKind = 'modern';
         if (!read || !write) {
-            kind = 'legacy';
+            kind = 'rtr160';
             const cluster = services.find((service) =>
                 service.uuid.toUpperCase().includes(CLUSTER_SERVICE_MARK),
             );
@@ -269,13 +269,10 @@ export class BleService {
                 write =
                     write ??
                     /**
-                     * The original app writes the commands of this family
-                     * with the write type "without response", so the command
-                     * endpoint is the one that only takes that.
+                     * The original app writes this family with the write
+                     * type "with response", so the endpoint that takes it is
+                     * the one to use.
                      */
-                    characteristics.find(
-                        (item) => item.isWritableWithoutResponse && !item.isWritableWithResponse,
-                    ) ??
                     characteristics.find((item) => item.isWritableWithResponse) ??
                     characteristics.find((item) => canWrite(item)) ??
                     null;
