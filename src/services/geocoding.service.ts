@@ -18,7 +18,14 @@ import { readCachedPlaces, writeCachedPlaces } from './db/geocodeCacheRepository
 import { getSetting, setSetting } from './db/settingsRepository';
 import { HttpError, httpGetJson, httpPostJson } from './http.service';
 
-export type GeocodeFailure = 'missing_key' | 'denied' | 'quota' | 'network' | 'invalid' | 'unknown';
+export type GeocodeFailure =
+    | 'missing_key'
+    | 'denied'
+    | 'places_not_allowed'
+    | 'quota'
+    | 'network'
+    | 'invalid'
+    | 'unknown';
 
 export type GeocodeOutcome =
     | { ok: true; places: Place[]; fromCache: boolean }
@@ -67,10 +74,32 @@ const ANDROID_HEADERS = {
 const BIAS_RADIUS_METERS = 5000;
 const POINT_OF_INTEREST_TYPES = ['point_of_interest', 'establishment', 'premise', 'subpremise'];
 
+/**
+ * The types google gives to a result that is not a place but an area. A
+ * country is not a destination, so it is dropped.
+ */
+const AREA_TYPES = new Set([
+    'administrative_area_level_1',
+    'administrative_area_level_2',
+    'administrative_area_level_3',
+    'colocation',
+    'country',
+    'political',
+    'plus_code',
+    'postal_code',
+    'postal_code_prefix',
+    'postal_code_suffix',
+]);
+
+const isPlaceResult = (types: string[]): boolean =>
+    types.length > 0 && types.some((type) => !AREA_TYPES.has(type));
+
 const FAILURE_MESSAGES: Record<GeocodeFailure, string> = {
     missing_key:
         'The Google api key is missing. Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in .env.local and rebuild the app.',
     denied: 'Google refused the api key. Check the key, the api restriction and the android certificate.',
+    places_not_allowed:
+        'The key does not allow the places search. Add the Places API (New) to the api restriction of the key, otherwise the search only answers for addresses.',
     quota: 'The google search quota for today is used up. Try again tomorrow.',
     network: 'No answer from the search service. Check the connection.',
     invalid: 'Google rejected the search. Try a different name.',
@@ -209,6 +238,7 @@ const withDistance = (places: Place[], position?: [number, number] | null): Plac
  * the one that finds a gas station near the rider.
  */
 const requestPlaces = async (query: string, bias: Bias | null): Promise<Place[]> => {
+    await chargeGoogleRequest();
     const payload: Record<string, unknown> = {
         textQuery: query,
         languageCode: GEOCODE_LANGUAGE,
@@ -257,7 +287,8 @@ const requestPlaces = async (query: string, bias: Bias | null): Promise<Place[]>
         return places;
     } catch (error) {
         if (error instanceof HttpError) {
-            throw new GeocodeFailureError(failureFromHttp(error), error.message);
+            const failure = failureFromHttp(error);
+            throw new GeocodeFailureError(failure, FAILURE_MESSAGES[failure]);
         }
         throw error;
     }
@@ -268,6 +299,7 @@ const requestPlaces = async (query: string, bias: Bias | null): Promise<Place[]>
  * the places search is not enabled for the key.
  */
 const requestGeocode = async (query: string, bias: Bias | null): Promise<Place[]> => {
+    await chargeGoogleRequest();
     const params = new URLSearchParams({
         address: query,
         language: GEOCODE_LANGUAGE,
@@ -289,11 +321,15 @@ const requestGeocode = async (query: string, bias: Bias | null): Promise<Place[]
     );
 
     if (body.status !== 'OK' && body.status !== 'ZERO_RESULTS') {
-        throw new GeocodeFailureError(failureFromStatus(body.status), body.error_message ?? body.status);
+        const failure = failureFromStatus(body.status);
+        throw new GeocodeFailureError(failure, FAILURE_MESSAGES[failure]);
     }
 
     const places: Place[] = [];
     for (const result of body.results ?? []) {
+        if (!isPlaceResult(result.types ?? [])) {
+            continue;
+        }
         places.push(
             toPlace(
                 result.place_id,
@@ -321,6 +357,19 @@ const readRequestsToday = async (): Promise<number> => {
 const writeRequestsToday = async (count: number): Promise<void> => {
     await setSetting('googleQuotaDay', today());
     await setSetting('googleQuotaCount', String(count));
+};
+
+/**
+ * Every call to google is counted, so the app stops before it reaches the
+ * daily cap of the key. The counter is a safety net, the real cap is the
+ * monthly quota of the api.
+ */
+const chargeGoogleRequest = async (): Promise<void> => {
+    const used = await readRequestsToday();
+    if (used >= MAX_GOOGLE_REQUESTS_PER_DAY) {
+        throw new GeocodeFailureError('quota', FAILURE_MESSAGES.quota);
+    }
+    await writeRequestsToday(used + 1);
 };
 
 /**
@@ -354,8 +403,8 @@ export const searchPlaces = async (
     if (used >= MAX_GOOGLE_REQUESTS_PER_DAY) {
         return { ok: false, failure: 'quota', message: FAILURE_MESSAGES.quota };
     }
-    await writeRequestsToday(used + 1);
 
+    let placesDenied = false;
     try {
         const places = await requestPlaces(trimmed, bias);
         if (places.length > 0) {
@@ -363,16 +412,33 @@ export const searchPlaces = async (
             return { ok: true, places: withDistance(places, position), fromCache: false };
         }
     } catch (error) {
+        const failure = describeFailure(error);
         logger.warn('the places search failed', {
             service: 'google_places',
             errorName: error instanceof Error ? error.name : 'UnknownError',
         });
+        if (failure === 'denied') {
+            placesDenied = true;
+        } else if (failure !== 'invalid') {
+            return { ok: false, failure, message: FAILURE_MESSAGES[failure] };
+        }
     }
 
     try {
         const places = await requestGeocode(trimmed, bias);
+        if (places.length > 0) {
+            await writeCachedPlaces(cacheKey, trimmed, 'google_geocode', places, now, GEOCODE_CACHE_TTL_MS);
+            return { ok: true, places: withDistance(places, position), fromCache: false };
+        }
+        if (placesDenied) {
+            return {
+                ok: false,
+                failure: 'places_not_allowed',
+                message: FAILURE_MESSAGES.places_not_allowed,
+            };
+        }
         await writeCachedPlaces(cacheKey, trimmed, 'google_geocode', places, now, GEOCODE_CACHE_TTL_MS);
-        return { ok: true, places: withDistance(places, position), fromCache: false };
+        return { ok: true, places: [], fromCache: false };
     } catch (error) {
         const failure = describeFailure(error);
         logger.warn('the geocoder failed', {

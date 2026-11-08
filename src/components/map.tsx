@@ -27,6 +27,7 @@ export interface MapCanvasProps {
     avoidPoints: AvoidPoint[];
     destination?: Place | null;
     followUser: boolean;
+    followKey: number;
     replayPosition?: [number, number] | null;
     cameras?: CameraMarkerData[];
     onCameraPress?: (cameraId: string) => void;
@@ -41,6 +42,7 @@ export const MapCanvas = ({
     avoidPoints,
     destination,
     followUser,
+    followKey,
     replayPosition,
     cameras = [],
     onCameraPress,
@@ -76,9 +78,10 @@ export const MapCanvas = ({
             }
         >
             <Camera
-                centerCoordinate={center}
+                centerCoordinate={followUser ? undefined : center}
                 followUserLocation={followUser}
                 followUserMode={UserTrackingMode.Follow}
+                key={followKey}
                 zoomLevel={zoom}
             />
 

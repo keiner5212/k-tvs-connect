@@ -18,8 +18,9 @@ Use `package-lock.json`. Install with `npm install`.
 
 The app never contacts a TVS host and never carries a TVS credential.
 `tools/verify-bundle.sh` fails the build if `tvsmotor`, `bluconnect`, `aptener`,
-`firebase`, `AIza` or `RSA_TOKEN` reappear in the bundle. Do not add a TVS base url,
-a TVS login or a TVS analytics call.
+`firebase` or `RSA_TOKEN` reappear in the bundle, and it fails on any Google api
+key except the one of this app, which is allowed by its sha256. Do not add a TVS
+base url, a TVS login or a TVS analytics call.
 
 ## Module boundaries
 

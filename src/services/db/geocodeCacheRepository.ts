@@ -13,6 +13,7 @@ interface GeocodeCacheRow {
  */
 export const readCachedPlaces = async (cacheKey: string, now: number): Promise<Place[] | null> => {
     const db = getDatabase();
+    await db.runAsync('DELETE FROM geocode_cache WHERE expires_at <= ?', now);
     const row = await db.getFirstAsync<GeocodeCacheRow>(
         'SELECT cache_key, results, expires_at FROM geocode_cache WHERE cache_key = ?',
         cacheKey,

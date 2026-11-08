@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +8,6 @@ import { MapCanvas, RouteSheet } from '@components/map';
 import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useTheme } from '@hooks/useTheme';
 import { useBleStore } from '@stores/bleStore';
 import { useCameraStore } from '@stores/cameraStore';
@@ -17,12 +16,20 @@ import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { Place, RootStackParamList } from '@typings/types';
 import { distanceAlongPath, decodePolyline, pointAtDistance } from '@utils/polyline';
+import { distanceMeters } from '@utils/geo';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
-const FALLBACK_CENTER: [number, number] = [4.5709, -74.2973];
+const FALLBACK_CENTER: [number, number] = [11.2407, -74.1947];
+
+/**
+ * The route is asked again when the rider has moved this far. Without it the
+ * route was asked again on every position update, which is every couple of
+ * seconds while riding.
+ */
+const RECOMPUTE_MIN_METERS = 200;
 
 export const MapScreen = () => {
     const navigation = useNavigation<Navigation>();
@@ -68,7 +75,7 @@ export const MapScreen = () => {
     const [sentToBike, setSentToBike] = useState<boolean | null>(null);
     const connectionState = useBleStore((state) => state.state);
     const [locationError, setLocationError] = useState<string | null>(null);
-    const [followUser, setFollowUser] = useState(true);
+    const [followKey, setFollowKey] = useState(0);
     const [replay, setReplay] = useState<{
         points: { lat: number; lon: number }[];
         distance: number;
@@ -106,11 +113,44 @@ export const MapScreen = () => {
         void loadAvoidPoints();
     }, [loadAvoidPoints]);
 
+    const lastComputed = useRef<{
+        destinationId: string;
+        latitude: number;
+        longitude: number;
+    } | null>(null);
+
     useEffect(() => {
-        if (destination && position) {
-            void compute(position[0], position[1]);
+        if (!destination || !position) {
+            return;
         }
+        const last = lastComputed.current;
+        if (last && last.destinationId === destination.id) {
+            const moved = distanceMeters(
+                { lat: last.latitude, lon: last.longitude },
+                { lat: position[0], lon: position[1] },
+            );
+            if (moved < RECOMPUTE_MIN_METERS) {
+                return;
+            }
+        }
+        lastComputed.current = {
+            destinationId: destination.id,
+            latitude: position[0],
+            longitude: position[1],
+        };
+        void compute(position[0], position[1]);
     }, [destination, position, compute]);
+
+    /**
+     * A new destination puts the camera back on the rider. The maplibre
+     * camera drops the tracking when the rider drags the map and it never
+     * picks it up again on its own.
+     */
+    useEffect(() => {
+        if (destination) {
+            setFollowKey((key) => key + 1);
+        }
+    }, [destination]);
 
     const recompute = useCallback(() => {
         if (position) {
@@ -191,7 +231,8 @@ export const MapScreen = () => {
                 cameras={cameraMarkers}
                 center={position ?? FALLBACK_CENTER}
                 destination={destination}
-                followUser={followUser}
+                followKey={followKey}
+                followUser={position !== null}
                 onCameraPress={(cameraId) => navigation.navigate('CameraDetail', { cameraId })}
                 onLongPress={onLongPress}
                 replayPosition={replayState?.position ?? null}
@@ -219,32 +260,7 @@ export const MapScreen = () => {
                     label="Routes"
                     onPress={() => navigation.navigate('SavedRoutes')}
                 />
-                <IconLabelButton
-                    accessibilityLabel={followUser ? 'Stop following me' : 'Follow me'}
-                    icon="my-location"
-                    label="Me"
-                    onPress={() => setFollowUser((value) => !value)}
-                    selected={followUser}
-                />
             </View>
-
-            <TouchableOpacity
-                accessibilityLabel="Go to my position"
-                accessibilityRole="button"
-                onPress={() => {
-                    setFollowUser(true);
-                }}
-                style={[
-                    styles.recenter,
-                    {
-                        backgroundColor: colors.card,
-                        borderColor: colors.border,
-                        bottom: insets.bottom + 200,
-                    },
-                ]}
-            >
-                <MaterialIcons color={colors.primary} name="my-location" size={22} />
-            </TouchableOpacity>
 
             <View
                 style={[styles.bottom, { paddingBottom: spacing.md }]}
@@ -272,7 +288,7 @@ export const MapScreen = () => {
                             accessibilityRole="button"
                             onPress={() => {
                                 setReplay(null);
-                                setFollowUser(false);
+                                setFollowKey((key) => key + 1);
                             }}
                             style={[styles.replayStop, { backgroundColor: colors.secondary }]}
                         >
@@ -287,8 +303,8 @@ export const MapScreen = () => {
                             progress.started
                                 ? formatClockTime(now + progress.timeLeftSeconds * 1000)
                                 : arrival
-                                  ? formatClockTime(arrival.arrivalAt)
-                                  : null
+                                    ? formatClockTime(arrival.arrivalAt)
+                                    : null
                         }
                         avoidPointCount={avoidPoints.length}
                         cameraCount={routeSplit.sent}
@@ -357,20 +373,6 @@ const styles = StyleSheet.create({
         marginHorizontal: layout.screenPadding,
         marginTop: spacing.sm,
         padding: layout.cardPadding,
-    },
-    recenter: {
-        alignItems: 'center',
-        borderRadius: radii.full,
-        borderWidth: 1,
-        elevation: 3,
-        height: 48,
-        justifyContent: 'center',
-        position: 'absolute',
-        right: layout.screenPadding,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.18,
-        shadowRadius: 6,
-        width: 48,
     },
     replayDistance: {
         ...typography.readout,

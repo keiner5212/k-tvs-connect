@@ -91,6 +91,12 @@ export const PlaceSearchScreen = () => {
                     results={results}
                 />
 
+                {results.length > 0 ? (
+                    <Text style={[styles.attribution, { color: colors.mutedForeground }]}>
+                        Results by Google
+                    </Text>
+                ) : null}
+
                 <View style={styles.footer}>
                     <PrimaryButton
                         disabled={!results.length}
@@ -286,6 +292,10 @@ export const RoutePreviewScreen = () => {
 const styles = StyleSheet.create({
     actionRow: {
         marginTop: spacing.md,
+    },
+    attribution: {
+        ...typography.caption,
+        marginTop: spacing.sm,
     },
     error: {
         ...typography.caption,

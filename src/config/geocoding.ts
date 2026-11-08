@@ -2,9 +2,14 @@
  * The google key lives in the gitignored .env.local as
  * EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, so it never reaches the repository.
  *
- * On the google side the key is restricted to the places and the geocoding
- * api, to the package name below and to the certificate below. Google only
- * accepts a request that carries both, which is why every call sends them.
+ * On the google side the key is restricted to the package name below, to the
+ * certificate below and to the apis it may call. Google only accepts a
+ * request that carries both headers, which is why every call sends them.
+ *
+ * The places api (new) is the one that finds a place by category, the
+ * gas stations around here for example. The geocoding api is the one that
+ * finds a street address. Both have to be allowed in the key restriction or
+ * the search only answers for addresses.
  */
 export const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
 
