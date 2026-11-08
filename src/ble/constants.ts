@@ -37,6 +37,11 @@ export const SCAN_WINDOW_MS = 5000;
  * up. A bike that is just switched on needs that time to answer.
  */
 export const CONNECT_TIMEOUT_MS = 35000;
+/**
+ * The direct connect to the address the app already knows. It is the fast
+ * path of a reconnection, the scan is the fallback.
+ */
+export const DIRECT_CONNECT_TIMEOUT_MS = 10000;
 export const DATA_TIMEOUT_MS = 5000;
 /**
  * A cluster that answers the gatt connect but never sends a frame is not a

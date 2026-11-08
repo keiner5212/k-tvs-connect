@@ -25,7 +25,8 @@ This is what makes the app work without a TVS account: the characteristics are
 hardcoded and the service uuid is derived on the phone. The older bike families
 (N109, N112, N251, N360, U399, U449) are different: their uuids arrive from a
 server api that needs a login, and their payloads are obfuscated with a xor
-against `0xEA`. Those are not supported yet.
+against `0xEA`. The app finds those uuids in the discovery instead, and it
+speaks the letter frames of the N112 family. See "The legacy family" below.
 
 ## Encryption
 
@@ -169,11 +170,44 @@ which is more than the original does.
 | `src/ble/protocol.ts` | the xor envelope and the checksum |
 | `src/services/cluster.service.ts` | the foreground service and the battery settings |
 | `modules/ktvs-cluster` | the native module with the foreground service |
-| `src/ble/serviceUuid.ts` | the imei derivation |
-| `src/ble/frames.ts` | the offset tables |
-| `src/ble/parser.ts` | the parser and the telemetry mapping |
+| `src/ble/frames.ts` | the offset tables of the modern frames |
+| `src/ble/parser.ts` | the parser and the telemetry mapping of both families |
 | `src/ble/bleService.ts` | the react-native-ble-plx wrapper |
 | `src/ble/connectionController.ts` | the state machine, scanning and reconnect |
+
+## The legacy family
+
+The bike of the rider is the RTR 160 IoT V2, which the original app calls
+N112_V2 (`SecretIdentifier.SERVICE_UUID_N112_V2 = "SERVICE_UUID_RTR_160_IOT_V2"`).
+That family takes its uuids from the server, so the app finds them in the
+discovery instead:
+
+| Kind | Uuid | Properties |
+| --- | --- | --- |
+| service | `00005500-d102-11e1-9b23-000240198212` | |
+| read | `00005501-d102-11e1-9b23-000240198212` | notify |
+| write | `00005502-d102-11e1-9b23-000240198212` | write without response |
+| data | `00005503-d102-11e1-9b23-000240198212` | write with response, indicate |
+| read | `00005504-d102-11e1-9b23-000240198212` | read |
+
+The family speaks letter frames instead of the frames with a start byte: a
+prefix byte, the value and a couple of extra bytes, with no encryption and no
+checksum. The original writes it with the write type "without response"
+(`U324HelperService.getCharacteristicsWriteType()` returns 1 and the write is
+`writeCharacteristic(..., bArr, 1)`), so a write with a response to the
+characteristic `5502` is dropped by the stack and the cluster never answers.
+
+The frames the original sends to this family:
+
+| Frame | Bytes | Meaning |
+| --- | --- | --- |
+| name | `4D` + name (16) + `24` | the name the cluster greets the rider with |
+| clock | `48` + hour + minute + pm | the time on the cluster |
+| signal | `58` + signal + battery + missed + 0 + network | the phone status, every 2 s |
+
+The frames the cluster sends start with the prefix of the value: `41` speed,
+`4F` odometer, `46` fuel, `5A` average speed, `50` gear, `4C` lean angle. The
+port reads the speed and the fuel today and logs the rest raw.
 
 ## Still to confirm
 
@@ -189,6 +223,10 @@ which is more than the original does.
   the music commands, so a connection may need a first packet from the phone.
 - The frames of the other families, Ntorq, Jupiter, U388 and IQUBE, live in the same
   package with their own tables and are not ported yet.
+- The frames the legacy family uses for the maneuvers (`4E` and `4F` outbound in
+  the original are `4E` navigation N and `4F` navigation O). Their layout is in
+  `N112SendDataToCluster`, and the port does not write them yet, so the app says
+  the destination did not go to the bike.
 
 ## The other families
 

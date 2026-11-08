@@ -6,7 +6,13 @@ import { startClusterService, stopClusterService } from '@services/cluster.servi
 import { logger, describeError } from '@utils/logger';
 import { bleService, ClusterKind, DiscoveredDevice, LinkFailure } from './bleService';
 import { ensureBlePermissions } from './permissions';
-import { DATA_TIMEOUT_MS, FIRST_FRAME_TIMEOUT_MS, RECONNECT_DELAYS_MS, SCAN_WINDOW_MS } from './constants';
+import {
+    DATA_TIMEOUT_MS,
+    DIRECT_CONNECT_TIMEOUT_MS,
+    FIRST_FRAME_TIMEOUT_MS,
+    RECONNECT_DELAYS_MS,
+    SCAN_WINDOW_MS,
+} from './constants';
 import { emptyTelemetry, parseFrame, parseLegacyFrame, telemetryFromFrame } from './parser';
 import {
     NavigationUpdate,
@@ -30,6 +36,8 @@ export interface ConnectionInfo {
     nextRetryAt: number | null;
     /** why the link is not up, in words the rider can read */
     reason: string | null;
+    /** which family of the cluster the phone is talking to */
+    clusterKind: ClusterKind;
 }
 
 /** what the rider is told when the link does not come up */
@@ -129,6 +137,8 @@ export class ConnectionController {
 
     private clusterKind: ClusterKind = 'modern';
 
+    private clusterKindChanged = false;
+
     private clusterTimer: ReturnType<typeof setInterval> | null = null;
 
     private navigationTimer: ReturnType<typeof setInterval> | null = null;
@@ -191,6 +201,7 @@ export class ConnectionController {
             attempt: this.reconnectAttempt,
             nextRetryAt: this.nextRetryAt,
             reason: this.failureReason,
+            clusterKind: this.clusterKind,
         };
     }
 
@@ -333,6 +344,15 @@ export class ConnectionController {
             return false;
         }
 
+        /**
+         * The older family of the cluster takes the instructions in its own
+         * frames, which this port does not write yet. Sending the modern
+         * frames to it would be noise, so the app says it did not send it.
+         */
+        if (this.clusterKind === 'legacy') {
+            return false;
+        }
+
         try {
             await this.ble.write(buildLocationAddressPacket(address));
             await this.ble.write(buildTrafficSequencePacket());
@@ -432,12 +452,24 @@ export class ConnectionController {
             }
 
             const target = this.bike;
-            const found: { device: DiscoveredDevice | null } = { device: null };
+            if (!target) {
+                return false;
+            }
 
+            /**
+             * The original app and the other clients reconnect straight to the
+             * address they know, without a scan first. The scan is the slow
+             * path, so it is the fallback.
+             */
+            if (await this.linkToCluster(target.macAddress, DIRECT_CONNECT_TIMEOUT_MS)) {
+                return this.finishLink();
+            }
+
+            let match: DiscoveredDevice | null = null;
             await this.ble.scan(
                 (device) => {
-                    if (target && device.id.toUpperCase() === target.macAddress.toUpperCase()) {
-                        found.device = device;
+                    if (device.id.toUpperCase() === target.macAddress.toUpperCase()) {
+                        match = device;
                     }
                 },
                 SCAN_WINDOW_MS,
@@ -447,7 +479,6 @@ export class ConnectionController {
                 return false;
             }
 
-            const match = found.device;
             if (!match) {
                 logger.info('the cluster was not in the scan', {
                     service: 'ble',
@@ -458,47 +489,69 @@ export class ConnectionController {
                 return false;
             }
 
-            this.setState(this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
+            if (!(await this.linkToCluster((match as DiscoveredDevice).id))) {
+                this.setState('failed');
+                return false;
+            }
+            return this.finishLink();
+        } finally {
+            this.scanning = false;
+        }
+    }
 
-            try {
-                const device = await this.ble.connect(match.id, () => {
+    /** Connects to the cluster and subscribes to its data. */
+    private async linkToCluster(macAddress: string, timeoutMs?: number): Promise<boolean> {
+        try {
+            const device = await this.ble.connect(
+                macAddress,
+                () => {
                     /**
                      * The cluster shows a code on its screen and the phone has
                      * to answer it. The rider needs to know the code.
                      */
                     this.failureReason = PAIRING_HINT;
                     this.setState('pairing');
-                });
-                await this.ble.discover(device, (bytes) => this.handleData(bytes));
-                this.clusterKind = this.ble.kind;
-                this.reconnectAttempt = 0;
-                this.nextRetryAt = null;
-                this.failureReason = null;
-                this.linkUp = true;
-                this.linkUpAt = Date.now();
-                const { useSettingsStore } = await import('@stores/settingsStore');
-                this.overspeedLimitKmh = useSettingsStore.getState().settings.overspeedLimitKmh;
-                await this.startClusterUpdates();
-                /**
-                 * The link is up, but the app is only connected when the
-                 * cluster sends data. A device that answers the connect and
-                 * then stays silent is not a bike.
-                 */
-                this.setState('connecting');
-                return true;
-            } catch (error) {
-                this.linkUp = false;
-                this.failureReason = this.reasonFor(error);
-                logger.warn(`the link with the cluster did not come up: ${describeError(error)}`, {
-                    event: 'connect',
-                    errorName: error instanceof Error ? error.name : 'UnknownError',
-                });
-                this.setState('failed');
-                return false;
-            }
-        } finally {
-            this.scanning = false;
+                },
+                timeoutMs,
+            );
+            await this.ble.discover(device, (bytes) => this.handleData(bytes));
+            return true;
+        } catch (error) {
+            this.linkUp = false;
+            this.failureReason = this.reasonFor(error);
+            logger.warn(`the link with the cluster did not come up: ${describeError(error)}`, {
+                event: 'connect',
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+            await this.ble.disconnect().catch(() => undefined);
+            return false;
         }
+    }
+
+    /**
+     * The link is up, but the app is only connected when the cluster sends
+     * data. A device that answers the connect and then stays silent is not a
+     * bike.
+     */
+    private async finishLink(): Promise<boolean> {
+        if (this.clusterKind !== this.ble.kind) {
+            this.clusterKind = this.ble.kind;
+            this.clusterKindChanged = true;
+        }
+        this.reconnectAttempt = 0;
+        this.nextRetryAt = null;
+        this.failureReason = null;
+        this.linkUp = true;
+        this.linkUpAt = Date.now();
+        const { useSettingsStore } = await import('@stores/settingsStore');
+        this.overspeedLimitKmh = useSettingsStore.getState().settings.overspeedLimitKmh;
+        await this.startClusterUpdates();
+        this.setState('connecting');
+        if (this.clusterKindChanged) {
+            this.clusterKindChanged = false;
+            this.notifyInfo();
+        }
+        return true;
     }
 
     private waitBeforeRetry(): Promise<void> {
@@ -530,7 +583,7 @@ export class ConnectionController {
     }
 
     private handleData(bytes: Uint8Array): void {
-        if (this.clusterKind === 'legacy') {
+        if (this.ble.kind === 'legacy') {
             this.handleLegacyData(bytes);
             return;
         }
@@ -611,7 +664,22 @@ export class ConnectionController {
         const previous = this.telemetry;
         const speed = legacy.speedKmh ?? previous?.speedKmh ?? null;
         const fuel = legacy.fuelLevelPercent ?? previous?.fuelLevelPercent ?? null;
+
+        /**
+         * Any frame means the cluster is talking, so the link is up even when
+         * the frame carries a value this port does not read yet.
+         */
+        if (this.state !== 'connected') {
+            this.failureReason = null;
+            this.setState('connected');
+        }
+
         if (speed === null && fuel === null) {
+            for (const listener of this.telemetryListeners) {
+                if (this.telemetry) {
+                    listener(this.telemetry);
+                }
+            }
             return;
         }
 
@@ -621,11 +689,6 @@ export class ConnectionController {
             fuelLevelPercent: fuel,
             receivedAt: Date.now(),
         };
-
-        if (this.state !== 'connected') {
-            this.failureReason = null;
-            this.setState('connected');
-        }
 
         for (const listener of this.telemetryListeners) {
             listener(this.telemetry);
@@ -686,6 +749,14 @@ export class ConnectionController {
     private async writeNavigation(): Promise<boolean> {
         const update = this.navigationUpdate;
         if (!update || !this.linkUp) {
+            return false;
+        }
+
+        /**
+         * The older family of the cluster takes the maneuvers in its own
+         * frames, which this port does not write yet.
+         */
+        if (this.clusterKind === 'legacy') {
             return false;
         }
 

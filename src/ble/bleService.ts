@@ -157,7 +157,11 @@ export class BleService {
         logger.info('the scan finished', { service: 'ble', event: 'ble_scan_end', count: found });
     }
 
-    async connect(deviceId: string, onBonding?: () => void): Promise<Device> {
+    async connect(
+        deviceId: string,
+        onBonding?: () => void,
+        timeoutMs: number = CONNECT_TIMEOUT_MS,
+    ): Promise<Device> {
         await this.ensureBond(deviceId, onBonding);
         const started = Date.now();
         logger.info('connecting to the cluster', {
@@ -168,7 +172,7 @@ export class BleService {
             this.device = await this.manager.connectToDevice(deviceId, {
                 autoConnect: false,
                 requestMTU: BLE_MTU,
-                timeout: CONNECT_TIMEOUT_MS,
+                timeout: timeoutMs,
             });
         } catch (error) {
             logger.error(`the connection failed: ${describeError(error)}`, {
@@ -285,6 +289,8 @@ export class BleService {
             pathTemplate: found.join(' | '),
         });
 
+        this.clusterKind = kind;
+
         if (read) {
             await read.monitor((error: BleError | null, value: Characteristic | null) => {
                 if (error || !value?.value) {
@@ -320,7 +326,6 @@ export class BleService {
             );
         }
 
-        this.clusterKind = kind;
         return kind;
     }
 

@@ -383,6 +383,7 @@ export const RouteDetailsScreen = () => {
     const { colors } = useTheme();
     const { settings } = useSettingsStore();
     const connectionState = useBleStore((state) => state.state);
+    const clusterKind = useBleStore((state) => state.info.clusterKind);
     const { routeCameras, routeSplit, publishedAt, stale } = useCameraStore();
     const { navigation: progress, startNavigation, stopNavigation } = useMapStore();
     const { arrival, avoidPoints, destination, route } = useMapStore();
@@ -482,7 +483,9 @@ export const RouteDetailsScreen = () => {
             ) : null}
             {sent === false ? (
                 <Text style={[styles.note, { color: colors.error }]}>
-                    Could not write to the bike. Check the connection.
+                    {clusterKind === 'legacy'
+                        ? 'This bike takes the instructions in its own format, which the app does not write yet. The route runs on the phone.'
+                        : 'Could not write to the bike. Check the connection.'}
                 </Text>
             ) : null}
 
