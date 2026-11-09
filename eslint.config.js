@@ -22,6 +22,7 @@ module.exports = [
             'tailwind.config.js',
             'metro.config.js',
             'jest.config.js',
+            'tools/**',
         ],
     },
     {
@@ -81,12 +82,6 @@ module.exports = [
             react: {
                 version: 'detect',
             },
-        },
-    },
-    {
-        files: ['src/ble/**/*.ts'],
-        rules: {
-            'react-native/split-platform-components': 'off',
         },
     },
     {

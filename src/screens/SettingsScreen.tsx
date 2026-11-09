@@ -11,10 +11,6 @@ import { useCameraStore } from '@stores/cameraStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { isAllowedBaseUrl } from '@services/http.service';
-import {
-    isIgnoringBatteryOptimizations,
-    openBatteryOptimizationSettings,
-} from '@services/cluster.service';
 import { layout, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -35,29 +31,19 @@ export const SettingsScreen = () => {
     const setAvoidEnabledGlobally = useCameraStore((state) => state.setAvoidEnabledGlobally);
     const setRadiusMeters = useCameraStore((state) => state.setRadiusMeters);
 
-    const [riderName, setRiderName] = useState(settings.riderName);
     const [valhallaUrl, setValhallaUrl] = useState(settings.valhallaBaseUrl);
     const [styleUrl, setStyleUrl] = useState(settings.mapStyleUrl);
     const [routingError, setRoutingError] = useState<string | null>(null);
     const [styleError, setStyleError] = useState<string | null>(null);
-    const [batteryRestricted, setBatteryRestricted] = useState(false);
 
     useEffect(() => {
         void load();
     }, [load]);
 
     useEffect(() => {
-        void isIgnoringBatteryOptimizations().then((ignored) => setBatteryRestricted(!ignored));
-    }, []);
-
-    useEffect(() => {
         setValhallaUrl(settings.valhallaBaseUrl);
         setStyleUrl(settings.mapStyleUrl);
     }, [settings]);
-
-    const saveRiderName = () => {
-        void update({ riderName: riderName.trim() });
-    };
 
     const normalizeUrl = (value: string): string => value.trim().replace(/\/+$/, '');
 
@@ -92,23 +78,6 @@ export const SettingsScreen = () => {
             >
                 <Text style={[styles.title, { color: colors.foreground }]}>Settings</Text>
 
-                <SettingsSection
-                    title="Profile"
-                    footer="The bike greets you with this name when it says hello. It travels to the cluster in the rider name packet."
-                >
-                    <SettingsBody>
-                        <TextField
-                            autoCapitalize="words"
-                            helperText="Up to seventeen letters. The cluster replaces the symbols with an at sign."
-                            label="Your name"
-                            onChangeText={setRiderName}
-                            placeholder="How the bike should call you"
-                            value={riderName}
-                        />
-                    </SettingsBody>
-                    <SettingsRow label="Save your name" onPress={saveRiderName} />
-                </SettingsSection>
-
                 <SettingsSection title="Units">
                     <SettingsBody>
                         <SegmentedControl
@@ -120,18 +89,6 @@ export const SettingsScreen = () => {
                             value={settings.unitSystem}
                         />
                     </SettingsBody>
-                </SettingsSection>
-
-                <SettingsSection title="Speed alert">
-                    <NumberStepper
-                        label="Overspeed limit"
-                        max={200}
-                        min={20}
-                        onChange={(value) => void update({ overspeedLimitKmh: value })}
-                        step={5}
-                        unit="km/h"
-                        value={settings.overspeedLimitKmh}
-                    />
                 </SettingsSection>
 
                 <SettingsSection
@@ -198,21 +155,6 @@ export const SettingsScreen = () => {
                 </SettingsSection>
 
                 <SettingsSection
-                    title="Background"
-                    footer="Android can stop the app while the screen is off. Let it run without the battery saver so the guidance keeps reaching the bike."
-                >
-                    <SettingsRow
-                        description={
-                            batteryRestricted
-                                ? 'The system can stop the app while the screen is off.'
-                                : 'The app runs without restrictions while the screen is off.'
-                        }
-                        label="Battery optimisation"
-                        onPress={() => void openBatteryOptimizationSettings()}
-                    />
-                </SettingsSection>
-
-                <SettingsSection
                     title="Routing"
                     footer="Valhalla answers the route. Point this to your own instance to leave the public service completely."
                 >
@@ -230,12 +172,6 @@ export const SettingsScreen = () => {
 
                 <SettingsSection title="Privacy">
                     <SettingsRow
-                        description="Keep a track of every ride on this device."
-                        label="Save ride tracks"
-                        onSwitchChange={(value) => void update({ saveTracks: value })}
-                        switchValue={settings.saveTracks}
-                    />
-                    <SettingsRow
                         description="Ask for a pin when the app opens."
                         label="Pin lock"
                         onPress={() => navigation.navigate('Pin', { mode: settings.pinEnabled ? 'change' : 'create' })}
@@ -246,11 +182,6 @@ export const SettingsScreen = () => {
                 <SettingsSection title="Data">
                     <SettingsRow label="Permissions" onPress={() => navigation.navigate('Permissions')} />
                     <SettingsRow label="Export data" onPress={() => navigation.navigate('ExportData')} />
-                    <SettingsRow
-                        description="The log of the last ride, with the connection events."
-                        label="Diagnostics"
-                        onPress={() => navigation.navigate('Diagnostics')}
-                    />
                     <SettingsRow
                         destructive
                         label="Delete all data"

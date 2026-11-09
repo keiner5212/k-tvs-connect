@@ -13,16 +13,13 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
     settings: {
         unitSystem: 'metric',
-        riderName: '',
         cameraAvoidEnabled: true,
         cameraRadiusMeters: 5000,
         ansvFetchedAt: null,
         ansvPublishedAt: null,
-        overspeedLimitKmh: 80,
         mapProvider: 'google',
         mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
         valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
-        saveTracks: false,
         pinEnabled: false,
     },
     loading: false,

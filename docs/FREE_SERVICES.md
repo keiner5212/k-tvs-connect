@@ -48,7 +48,7 @@ limit.
 | Bright | `https://tiles.openfreemap.org/styles/bright` |
 | Positron | `https://tiles.openfreemap.org/styles/positron` |
 
-The tiles still need a unique user agent, the app sends `K-Tvs-Connect/0.1`.
+The tiles still need a unique user agent, the app sends `K-Routes/0.1`.
 
 ## Place search
 

@@ -5,6 +5,8 @@
  * On the google side the key is restricted to the package name below, to the
  * certificate below and to the apis it may call. Google only accepts a
  * request that carries both headers, which is why every call sends them.
+ * The key has to be restricted to this package name in the google console,
+ * otherwise google answers that the application is not authorized.
  *
  * The places api (new) is the one that finds a place by category, the
  * gas stations around here for example. The geocoding api is the one that
@@ -13,7 +15,7 @@
  */
 export const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
 
-export const ANDROID_PACKAGE_NAME = 'com.ktvsconnect.app';
+export const ANDROID_PACKAGE_NAME = 'com.kroutes.app';
 
 /** sha1 of the certificate that signs the apk, in the form google expects it */
 export const ANDROID_CERT_SHA1 = '5e8f16062ea3cd2c4a0d547876baa6f38cabf625';

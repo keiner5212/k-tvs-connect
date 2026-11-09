@@ -35,7 +35,7 @@ if grep -rIqE "$patterns" "$scan"; then
   exit 1
 fi
 
-for key in $(grep -rhoE 'AIza[0-9A-Za-z_-]{35}' "$scan" | sort -u); do
+for key in $(grep -rhoaE 'AIza[0-9A-Za-z_-]{35}' "$scan" | sort -u); do
   hash=$(printf '%s' "$key" | sha256sum | cut -d' ' -f1)
   case " $allowed_key_sha256 " in
     *" $hash "*) ;;

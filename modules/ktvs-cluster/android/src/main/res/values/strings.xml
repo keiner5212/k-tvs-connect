@@ -1,5 +1,0 @@
-<resources>
-    <string name="cluster_service_channel">Scooter connection</string>
-    <string name="cluster_service_title">K Tvs Connect</string>
-    <string name="cluster_service_text">Connected to your scooter</string>
-</resources>

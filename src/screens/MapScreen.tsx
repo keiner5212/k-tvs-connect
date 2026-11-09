@@ -25,7 +25,6 @@ import { Banner } from '@components/feedback';
 import { useNow } from '@hooks/useNow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@hooks/useTheme';
-import { useBleStore } from '@stores/bleStore';
 import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
@@ -36,6 +35,7 @@ import { distanceAlongPath, decodePolyline, pointAtDistance } from '@utils/polyl
 import { distanceMeters } from '@utils/geo';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
 import { compassName } from '@utils/cameraSense';
+import { logger } from '@utils/logger';
 import { GEOCODE_COUNTRY } from '@config/geocoding';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -111,6 +111,15 @@ export const MapScreen = () => {
     } = useMapStore();
 
     const { cameras: allCameras, nearby: nearbyCameras, routeSplit } = useCameraStore();
+
+    /**
+     * The save button answers until the route changes, so the rider knows the
+     * route is on the device without saving it twice.
+     */
+    const saveKey = `${destination?.id ?? ''}|${route?.geometry ?? ''}`;
+    useEffect(() => {
+        setRouteSaved(false);
+    }, [saveKey]);
     const {
         googleStyle,
         unavailable: tilesUnavailable,
@@ -160,9 +169,8 @@ export const MapScreen = () => {
         return markers;
     }, [focusedCamera, nearbyCameras]);
     const position = useLocationStore((state) => state.position);
-    const [sentToBike, setSentToBike] = useState<boolean | null>(null);
     const [startingNavigation, setStartingNavigation] = useState(false);
-    const connectionState = useBleStore((state) => state.state);
+    const [routeSaved, setRouteSaved] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
     const mapRef = useRef<MapViewRef>(null);
     const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -400,8 +408,9 @@ export const MapScreen = () => {
     const startNavigation = async () => {
         setStartingNavigation(true);
         try {
-            const sent = await startNavigationAction();
-            setSentToBike(sent);
+            const { requestTurnPermission } = await import('@services/notifications.service');
+            await requestTurnPermission();
+            await startNavigationAction();
         } finally {
             setStartingNavigation(false);
         }
@@ -409,12 +418,11 @@ export const MapScreen = () => {
 
     const stopNavigation = () => {
         stopNavigationAction();
-        setSentToBike(null);
     };
 
     const saveRoute = async (result: NonNullable<typeof route>, target: Place) => {
         const { insertRoute } = await import('@services/db/routeRepository');
-        await insertRoute({
+        const saved = await insertRoute({
             name: target.name,
             originName: position ? 'Current position' : 'Start',
             destinationName: target.name,
@@ -426,6 +434,12 @@ export const MapScreen = () => {
             durationSeconds: result.durationSeconds,
             geometry: result.geometry,
             avoidPoints,
+        });
+        setRouteSaved(true);
+        logger.info('the route was saved', {
+            service: 'db',
+            event: 'route_saved',
+            count: saved.id.length,
         });
     };
 
@@ -627,7 +641,6 @@ export const MapScreen = () => {
                         }
                         avoidPointCount={avoidPoints.length}
                         cameraCount={routeSplit.sent}
-                        canStart={connectionState === 'connected'}
                         isStarting={startingNavigation}
                         destinationName={destination?.name ?? null}
                         distanceLabel={formatDistance(
@@ -652,6 +665,7 @@ export const MapScreen = () => {
                             stopNavigation();
                         }}
                         onOpenDetails={() => navigation.navigate('RouteDetails')}
+                        isSaved={routeSaved}
                         onSave={() => {
                             if (route && destination) {
                                 void saveRoute(route, destination);
@@ -665,17 +679,14 @@ export const MapScreen = () => {
                     />
                 )}
 
+                {routeSaved ? (
+                    <Banner message="The route is saved on this device." tone="info" />
+                ) : null}
                 {route?.avoidOutcome?.relaxed ? (
                     <Banner
                         message="Some points to avoid were left out, because with them the router found no path."
                         tone="warning"
                     />
-                ) : null}
-                {sentToBike === true ? (
-                    <Banner message="Destination sent to the bike." tone="info" />
-                ) : null}
-                {sentToBike === false ? (
-                    <Banner message="Could not write to the bike. Check the connection." tone="error" />
                 ) : null}
             </View>
         </View>

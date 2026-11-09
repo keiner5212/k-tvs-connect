@@ -1,92 +1,65 @@
-import { ClusterNotification, getClusterModule } from '@cluster';
-import { connectionController } from '@ble/connectionController';
-import {
-    buildCallerInfoPacket,
-    buildMusicPacket,
-    buildMusicStatePacket,
-} from '@ble/protocol';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
 import { logger } from '@utils/logger';
 
+const CHANNEL_ID = 'turn-by-turn';
+
+let channelReady = false;
+
 /**
- * The cluster shows the name of the caller and the title of the song. The
- * original app reads the notifications of the phone for that, and so does this
- * one, but only when the user gives the app the access to the notifications.
+ * The channel of the turn by turn notifications. The rider reads them with the
+ * phone in the pocket, so they have to make a sound.
  */
-class NotificationBridge {
-    private subscription: { remove: () => void } | null = null;
-
-    private lastMusicTitle = '';
-
-    start(): void {
-        if (this.subscription) {
-            return;
-        }
-        const native = getClusterModule();
-        if (!native) {
-            return;
-        }
-        try {
-            this.subscription = native.addListener('notification', (payload) => {
-                void this.handle(payload);
-            });
-            logger.info('the app is listening to the notifications', {
-                service: 'ble',
-                event: 'ble_notifications',
-            });
-        } catch (error) {
-            logger.warn('the notifications could not be read', {
-                service: 'ble',
-                event: 'ble_notifications',
-                errorName: error instanceof Error ? error.name : 'UnknownError',
-            });
-        }
+const ensureChannel = async (): Promise<void> => {
+    if (channelReady || Platform.OS !== 'android') {
+        return;
     }
+    await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+        name: 'Turn by turn',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+        vibrationPattern: [0, 300, 200, 300],
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
+    channelReady = true;
+};
 
-    private async handle(payload: ClusterNotification): Promise<void> {
-        if (!payload.title && !payload.text) {
-            return;
-        }
-
-        if (payload.isCall) {
-            const name = payload.title.trim();
-            const number = payload.text.trim();
-            await connectionController.sendPacket(
-                buildCallerInfoPacket(name || number, name ? 2 : 1),
-            );
-            logger.info('the caller went to the cluster', {
-                service: 'ble',
-                event: 'ble_caller',
-                count: (name || number).length,
-            });
-            return;
-        }
-
-        if (payload.isMedia) {
-            const title = payload.title.trim();
-            const artist = payload.text.trim();
-            if (title && title !== this.lastMusicTitle) {
-                this.lastMusicTitle = title;
-                await connectionController.sendPacket(buildMusicPacket('song', title));
-                if (artist) {
-                    await connectionController.sendPacket(buildMusicPacket('artist', artist));
-                }
-                if (payload.album) {
-                    await connectionController.sendPacket(buildMusicPacket('album', payload.album));
-                }
-                logger.info('the song went to the cluster', {
-                    service: 'ble',
-                    event: 'ble_music',
-                    count: title.length,
-                });
-            }
-            await connectionController.sendPacket(buildMusicStatePacket(0, 0, 0, 60));
-        }
+/**
+ * Android asks for the permission to post notifications. The rider only needs
+ * it while the route is running.
+ */
+export const requestTurnPermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') {
+        return true;
     }
-
-    stop(): void {
-        this.subscription?.remove();
-        this.subscription = null;
+    const current = await Notifications.getPermissionsAsync();
+    if (current.granted) {
+        return true;
     }
-}
+    const asked = await Notifications.requestPermissionsAsync();
+    return asked.granted;
+};
 
-export const notificationBridge = new NotificationBridge();
+/**
+ * Posts the indication of the next turn on the phone.
+ */
+export const notifyTurn = async (title: string, body: string): Promise<void> => {
+    try {
+        await ensureChannel();
+        await Notifications.scheduleNotificationAsync({
+            content: {
+                body,
+                sound: 'default',
+                title,
+            },
+            trigger: null,
+        });
+    } catch (error) {
+        logger.warn('the turn notification could not be posted', {
+            service: 'notifications',
+            event: 'notify_failed',
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+    }
+};

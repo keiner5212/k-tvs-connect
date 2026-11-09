@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
@@ -151,14 +151,14 @@ export const ExportDataScreen = () => {
 
     const exportData = async () => {
         const db = getDatabase();
-        const bikes = await db.getAllAsync('SELECT * FROM bikes');
         const routes = await db.getAllAsync('SELECT * FROM routes');
-        const rides = await db.getAllAsync('SELECT * FROM rides');
+        const cameras = await db.getAllAsync('SELECT * FROM cameras');
+        const avoidPoints = await db.getAllAsync('SELECT * FROM avoid_points');
 
-        const payload = JSON.stringify({ bikes, routes, rides }, null, 2);
+        const payload = JSON.stringify({ routes, cameras, avoidPoints }, null, 2);
 
         try {
-            await Share.share({ message: payload, title: 'K Tvs Connect data' });
+            await Share.share({ message: payload, title: 'K Routes data' });
             setSummary('Shared.');
         } catch {
             setSummary('Export failed. There was not enough space to write the file.');
@@ -171,7 +171,8 @@ export const ExportDataScreen = () => {
 
                 <Text style={[styles.title, { color: colors.foreground }]}>Export data</Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    Shares a copy of the bikes, routes and rides stored on this device.
+                    Shares a copy of the routes, the camera points and the points to avoid
+                    stored on this device.
                 </Text>
                 <PrimaryButton label="Export" onPress={() => void exportData()} />
                 {summary ? <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text> : null}
@@ -193,9 +194,10 @@ export const DeleteDataScreen = () => {
             return;
         }
         const db = getDatabase();
-        await db.runAsync('DELETE FROM bikes');
         await db.runAsync('DELETE FROM routes');
-        await db.runAsync('DELETE FROM rides');
+        await db.runAsync('DELETE FROM cameras');
+        await db.runAsync('DELETE FROM camera_preferences');
+        await db.runAsync('DELETE FROM avoid_points');
         await db.runAsync('DELETE FROM settings');
         navigation.goBack();
     };
@@ -206,7 +208,8 @@ export const DeleteDataScreen = () => {
 
                 <Text style={[styles.title, { color: colors.foreground }]}>Delete all data</Text>
                 <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    This permanently removes every bike, ride, route and setting on this device.
+                    This permanently removes every route, camera point, point to avoid and
+                    setting on this device.
                 </Text>
                 <TextField
                     autoCapitalize="none"
@@ -225,38 +228,20 @@ export const DeleteDataScreen = () => {
 export const PermissionsScreen = () => {
     const { colors } = useTheme();
     const [status, setStatus] = useState<string>('Checking...');
-    const [notificationStatus, setNotificationStatus] = useState<string>('Checking...');
 
     const check = async () => {
-        const { connectionController } = await import('@ble/connectionController');
-        const granted = await connectionController.requestPermissions();
-        setStatus(granted ? 'Bluetooth permission granted.' : 'Bluetooth permission is not granted.');
-    };
-
-    const checkNotifications = async () => {
-        const { getClusterModule } = await import('@cluster');
-        const native = getClusterModule();
-        if (!native) {
-            setNotificationStatus('The notification access is not available in this build.');
-            return;
-        }
-        const granted = await native.isNotificationAccessGranted();
-        setNotificationStatus(
-            granted
-                ? 'The app can read the notifications.'
-                : 'The app cannot read the notifications yet.',
+        const { useLocationStore } = await import('@stores/locationStore');
+        await useLocationStore.getState().request();
+        const permission = useLocationStore.getState().permission;
+        setStatus(
+            permission === 'granted'
+                ? 'The location permission is granted.'
+                : 'The location permission is not granted.',
         );
-    };
-
-    const openNotificationSettings = async () => {
-        const { getClusterModule } = await import('@cluster');
-        const native = getClusterModule();
-        await native?.openNotificationAccessSettings();
     };
 
     useEffect(() => {
         void check();
-        void checkNotifications();
     }, []);
 
     return (
@@ -270,114 +255,16 @@ export const PermissionsScreen = () => {
                     If a permission is blocked, turn it on in the system settings for this app.
                 </Text>
 
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    {notificationStatus}
-                </Text>
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    With the access to the notifications the bike shows the name of the caller
-                    and the title of the song, the same way the original app does.
-                </Text>
-                <View style={styles.buttons}>
-                    <PrimaryButton
-                        label="Open the notification access"
-                        onPress={() => void openNotificationSettings()}
-                    />
-                    <PrimaryButton label="Check again" onPress={() => void checkNotifications()} />
-                </View>
-
-            </ScreenContainer>
-        </View>
-    );
-};
-
-/**
- * The log of the ride. It is written to a file by the native module, so it
- * survives the app being closed and can be read from a computer.
- */
-export const DiagnosticsScreen = () => {
-    const { colors } = useTheme();
-    const [lines, setLines] = useState<string[]>([]);
-    const [summary, setSummary] = useState<string | null>(null);
-
-    const load = useCallback(async () => {
-        const { getClusterModule } = await import('@cluster');
-        const native = getClusterModule();
-        if (!native) {
-            setSummary('The log is not available in this build.');
-            return;
-        }
-        try {
-            const text = await native.readLog(400);
-            setLines(text.length > 0 ? text.split('\n') : []);
-            if (text.length === 0) {
-                setSummary('The log is empty.');
-            }
-        } catch {
-            setSummary('The log could not be read.');
-        }
-    }, []);
-
-    useEffect(() => {
-        void load();
-    }, [load]);
-
-    const share = async () => {
-        try {
-            await Share.share({ message: lines.join('\n'), title: 'K Tvs Connect log' });
-        } catch {
-            setSummary('The log could not be shared.');
-        }
-    };
-
-    const clear = async () => {
-        const { getClusterModule } = await import('@cluster');
-        const native = getClusterModule();
-        await native?.clearLog();
-        setLines([]);
-        setSummary('The log was cleared.');
-    };
-
-    return (
-        <View style={[styles.screen, { backgroundColor: colors.background }]}>
-            <ScreenContainer edges={['bottom']} scroll>
-                <Text style={[styles.title, { color: colors.foreground }]}>Diagnostics</Text>
-                <Text style={[styles.help, { color: colors.mutedForeground }]}>
-                    The log of the connection with the bike. The last four hundred lines are
-                    kept on this device.
-                </Text>
-                <View style={styles.buttons}>
-                    <PrimaryButton label="Reload" onPress={() => void load()} />
-                    <PrimaryButton label="Share the log" onPress={() => void share()} />
-                    <PrimaryButton label="Clear the log" onPress={() => void clear()} />
-                </View>
-                {summary ? (
-                    <Text style={[styles.help, { color: colors.mutedForeground }]}>{summary}</Text>
-                ) : null}
-                {lines.map((line, index) => (
-                    <Text
-                        key={`${index}-${line.slice(0, 12)}`}
-                        style={[styles.logLine, { color: colors.mutedForeground }]}
-                    >
-                        {line}
-                    </Text>
-                ))}
             </ScreenContainer>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    buttons: {
-        gap: spacing.md,
-    },
     help: {
         ...typography.body,
         marginBottom: spacing.lg,
         marginTop: spacing.sm,
-    },
-    logLine: {
-        ...typography.caption,
-        marginBottom: spacing.xs,
     },
     screen: {
         flex: 1,

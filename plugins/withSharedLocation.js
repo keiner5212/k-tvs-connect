@@ -1,6 +1,6 @@
 const { withAndroidManifest } = require('@expo/config-plugins');
 
-const SCHEME = 'ktvsconnect';
+const SCHEME = 'kroutes';
 
 const HOSTS = ['maps.google.com', 'www.google.com', 'google.com'];
 

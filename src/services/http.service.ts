@@ -115,8 +115,8 @@ export const httpGetJson = async <T>(
             signal: controller.signal,
             headers: {
                 Accept: 'application/json',
-                'User-Agent': 'K-Tvs-Connect/0.1 (personal bike companion)',
-                'X-Client-Id': 'k-tvs-connect',
+                'User-Agent': 'K-Routes/0.1 (personal route planner)',
+                'X-Client-Id': 'k-routes',
                 ...options.headers,
             },
         });
@@ -208,8 +208,8 @@ export const httpPostJson = async <T>(
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                'User-Agent': 'K-Tvs-Connect/0.1 (personal bike companion)',
-                'X-Client-Id': 'k-tvs-connect',
+                'User-Agent': 'K-Routes/0.1 (personal route planner)',
+                'X-Client-Id': 'k-routes',
                 ...options.headers,
             },
             body: JSON.stringify(payload),

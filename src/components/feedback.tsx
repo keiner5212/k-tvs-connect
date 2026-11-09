@@ -2,41 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@hooks/useTheme';
-import { ConnectionState } from '@typings/types';
 import { layout, radii, spacing, typography } from '@config/theme';
-
-interface StatusDotProps {
-    state: ConnectionState;
-    size?: number;
-}
-
-const stateColor = (state: ConnectionState, colors: ReturnType<typeof useTheme>['colors']) => {
-    switch (state) {
-        case 'connected':
-            return colors.success;
-        case 'scanning':
-        case 'connecting':
-        case 'pairing':
-        case 'reconnecting':
-            return colors.info;
-        case 'failed':
-            return colors.error;
-        default:
-            return colors.mutedForeground;
-    }
-};
-
-export const StatusDot = ({ state, size = spacing.md }: StatusDotProps) => {
-    const { colors } = useTheme();
-
-    return (
-        <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={[styles.dot, { backgroundColor: stateColor(state, colors), height: size, width: size }]}
-        />
-    );
-};
 
 interface EmptyStateProps {
     title: string;
@@ -179,9 +145,6 @@ const styles = StyleSheet.create({
     description: {
         ...typography.body,
         textAlign: 'center',
-    },
-    dot: {
-        borderRadius: radii.full,
     },
     title: {
         ...typography.heading,

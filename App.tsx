@@ -1,47 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, View } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ErrorBoundary from '@components/ErrorBoundary';
 import { RootNavigator, navigationRef } from '@/navigation/RootNavigator';
 import { openDatabase } from '@services/db/database';
 import { useCameraStore } from '@stores/cameraStore';
-import { notificationBridge } from '@services/notifications.service';
-import { useGarageStore } from '@stores/garageStore';
 import { useSettingsStore } from '@stores/settingsStore';
-import { bindRideTracker, rideTracker } from '@services/rideTracker';
 import { parseSharedLocation } from '@services/sharedLocation';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
+import { notifyTurn } from '@services/notifications.service';
+import { formatDistance } from '@utils/format';
 import '@/config/i18n';
+import { darkTheme, typography } from '@config/theme';
 
 export default function App() {
     const [ready, setReady] = useState(false);
-
-    useEffect(() => {
-        const unbind = bindRideTracker();
-        const unsubscribe = useGarageStore.subscribe((state, previous) => {
-            const active = state.bikes.find((bike) => bike.isActive);
-            const before = previous.bikes.find((bike) => bike.isActive);
-            if (active?.id !== before?.id) {
-                if (active) {
-                    rideTracker.start(active.id);
-                } else {
-                    rideTracker.stop();
-                }
-            }
-        });
-
-        return () => {
-            unbind();
-            unsubscribe();
-        };
-    }, []);
+    const [failed, setFailed] = useState(false);
 
     useEffect(() => {
         /**
-         * While the navigation runs, every new position refreshes what is left on
-         * the route and what the bike shows.
+         * While a route is on screen, every new position refreshes what is
+         * left of it.
          */
         const unsubscribe = useLocationStore.subscribe((state, previous) => {
             if (!state.position || state.position === previous.position) {
@@ -54,6 +35,44 @@ export default function App() {
             }
 
             map.updateNavigation(state.position[0], state.position[1]);
+        });
+
+        return unsubscribe;
+    }, []);
+
+    useEffect(() => {
+        /**
+         * Every change of the indication is a notification on the phone: the
+         * rider reads it with the phone in the pocket, not on the screen.
+         */
+        let lastInstruction: string | null = null;
+        let arrived = false;
+
+        const unsubscribe = useMapStore.subscribe((state) => {
+            const navigation = state.navigation;
+            if (!navigation.started) {
+                lastInstruction = null;
+                arrived = false;
+                return;
+            }
+
+            if (navigation.arrived && !arrived) {
+                arrived = true;
+                void notifyTurn('You have arrived', 'The route ends here.');
+                return;
+            }
+
+            const instruction = navigation.instruction;
+            if (!instruction || instruction === lastInstruction) {
+                return;
+            }
+            lastInstruction = instruction;
+
+            const distance = navigation.distanceToManeuverMeters;
+            void notifyTurn(
+                instruction,
+                distance > 0 ? `in ${formatDistance(distance, 'metric')}` : 'now',
+            );
         });
 
         return unsubscribe;
@@ -104,14 +123,12 @@ export default function App() {
             try {
                 await openDatabase();
             } catch {
-                setReady(false);
+                setFailed(true);
                 return;
             }
-            await useGarageStore.getState().load();
             await useSettingsStore.getState().load();
             setReady(true);
             void useCameraStore.getState().refresh();
-            void notificationBridge.start();
         };
         void bootstrap();
 
@@ -121,7 +138,15 @@ export default function App() {
     }, []);
 
     if (!ready) {
-        return <View style={{ flex: 1 }} />;
+        return (
+            <View style={[styles.center, { backgroundColor: darkTheme.background }]}>
+                <Text style={styles.failed}>
+                    {failed
+                        ? 'The local database could not be opened. Restart the app.'
+                        : 'Opening the local database...'}
+                </Text>
+            </View>
+        );
     }
 
     return (
@@ -132,3 +157,17 @@ export default function App() {
         </SafeAreaProvider>
     );
 }
+
+const styles = StyleSheet.create({
+    center: {
+        alignItems: 'center',
+        flex: 1,
+        justifyContent: 'center',
+        padding: 24,
+    },
+    failed: {
+        ...typography.body,
+        color: darkTheme.mutedForeground,
+        textAlign: 'center',
+    },
+});

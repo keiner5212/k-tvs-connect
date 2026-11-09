@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 
 import { AvoidPoint, Place, RouteResult, TrafficCamera } from '@typings/types';
-import { NavigationUpdate } from '@ble/protocol';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { CAMERA_AVOID_RADIUS_METERS } from '@services/ansv.service';
 import { Costing, computeRoute, DirectedAvoid } from '@services/valhalla.service';
@@ -81,7 +80,6 @@ interface MapState {
     setReplayRoute: (route: ReplayRoute | null) => void;
     startNavigation: () => Promise<boolean>;
     stopNavigation: () => void;
-    navigationUpdate: () => NavigationUpdate;
     updateNavigation: (latitude: number, longitude: number) => void;
 }
 
@@ -89,18 +87,20 @@ interface MapState {
  * The pictogram the cluster draws. The original sends the id of the arrow of
  * the manoeuvre, and 34 when there is no manoeuvre left.
  */
-const NAVIGATION_PICTO_DEFAULT = 0;
-const NAVIGATION_PICTO_ARRIVED = 34;
-
 /**
  * The direction of a valhalla manoeuvre, which is what the cluster uses to show
  * a left or a right arrow when the turn is close.
  */
 const turnDirectionFromType = (type: number): 'left' | 'right' | null => {
-    if ([2, 13, 14, 15, 16, 24].includes(type)) {
+    /**
+     * The types of the router: 0 keep left, 1 left, 2 slight left, 3 sharp
+     * left, 4 right, 5 slight right, 6 sharp right, 23 start right, 24 start
+     * left, 32 slight right, 33 slight left, 34 right, 35 left, 36 uturn.
+     */
+    if ([4, 5, 6, 23, 32, 34].includes(type)) {
         return 'right';
     }
-    if ([3, 9, 10, 11, 12, 25].includes(type)) {
+    if ([0, 1, 2, 3, 24, 33, 35].includes(type)) {
         return 'left';
     }
     return null;
@@ -510,11 +510,6 @@ export const useMapStore = create<MapState>((set, get) => ({
             return false;
         }
 
-        const { connectionController } = await import('@ble/connectionController');
-        const address = destination.address || destination.name;
-        await connectionController.requestNotificationPermission();
-        const sent = await connectionController.sendDestinationToCluster(address);
-
         set({
             navigation: {
                 ...get().navigation,
@@ -531,10 +526,7 @@ export const useMapStore = create<MapState>((set, get) => ({
             get().updateNavigation(position[0], position[1]);
         }
 
-        await connectionController.refreshEnvironment();
-        await connectionController.startNavigation(get().navigationUpdate());
-
-        return sent;
+        return true;
     },
 
     stopNavigation: () => {
@@ -550,26 +542,9 @@ export const useMapStore = create<MapState>((set, get) => ({
             },
         });
 
-        void import('@ble/connectionController').then(({ connectionController }) => {
-            connectionController.stopNavigation();
-        });
         void import('@stores/locationStore').then(({ useLocationStore }) => {
             useLocationStore.getState().stopWatching('navigation');
         });
-    },
-
-    navigationUpdate: () => {
-        const { navigation } = get();
-        return {
-            distanceToNextManeuverMeters: Math.round(navigation.distanceToManeuverMeters),
-            timeLeftMinutes: Math.round(navigation.timeLeftSeconds / 60),
-            totalDistanceLeftMeters: Math.round(navigation.distanceLeftMeters),
-            pictogramId: navigation.arrived ? NAVIGATION_PICTO_ARRIVED : NAVIGATION_PICTO_DEFAULT,
-            navigationOn: navigation.started && !navigation.arrived,
-            arrived: navigation.arrived,
-            turnDirection: navigation.turnDirection,
-            instruction: navigation.instruction,
-        };
     },
 
     updateNavigation: (latitude, longitude) => {
@@ -618,8 +593,5 @@ export const useMapStore = create<MapState>((set, get) => ({
             },
         });
 
-        void import('@ble/connectionController').then(({ connectionController }) => {
-            connectionController.updateNavigation(get().navigationUpdate());
-        });
     },
 }));

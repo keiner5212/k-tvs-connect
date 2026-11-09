@@ -1,10 +1,10 @@
-# Project conventions - k-tvs-connect
+# Project conventions - k-routes
 
 ## Stack
 
 Expo SDK 54, React Native 0.81.5, React 19.1, TypeScript strict, legacy architecture.
 Runs on a **development client**, not Expo Go: `npm start` uses `expo start --dev-client --clear`.
-Android application id `com.ktvsconnect.app`, iOS bundle id `com.ktvsconnect.app`.
+Android application id `com.kroutes.app`, iOS bundle id `com.kroutes.app`.
 
 MapLibre React Native is pinned to `10.4.2`, the last release that supports the
 legacy architecture. Moving to the new architecture means moving to `11.x`.
@@ -14,17 +14,16 @@ legacy architecture. Moving to the new architecture means moving to `11.x`.
 **npm only.** Never pnpm/yarn here, Expo breaks with them.
 Use `package-lock.json`. Install with `npm install`.
 
-## No TVS
+## No vendor backend
 
-The app never contacts a TVS host and never carries a TVS credential.
-`tools/verify-bundle.sh` fails the build if `tvsmotor`, `bluconnect`, `aptener`,
-`firebase` or `RSA_TOKEN` reappear in the bundle, and it fails on any Google api
-key except the one of this app, which is allowed by its sha256. Do not add a TVS
-base url, a TVS login or a TVS analytics call.
+The app never contacts the vendor of the original app and never carries a
+credential of it. `tools/verify-bundle.sh` fails the build if `tvsmotor`,
+`bluconnect`, `aptener`, `firebase` or `RSA_TOKEN` reappear in the bundle, and it
+fails on any Google api key except the one of this app, which is allowed by its
+sha256. Do not add a vendor base url, a vendor login or a vendor analytics call.
 
 ## Module boundaries
 
-- `src/ble` owns bluetooth. Only that folder imports `react-native-ble-plx`.
 - `src/services/db` owns the local database. Everything else goes through a repository.
 - `src/services/http.service.ts` is the only network entry point. No other module
   calls `fetch`.
@@ -33,14 +32,9 @@ base url, a TVS login or a TVS analytics call.
 - `src/stores` owns the client state, one writer per value.
 - `src/config/theme.ts` owns colors, spacing and radii.
 
-## Live data never touches the disk
-
-Live speed, the ble gps stream and the raw frames stay in memory. Only ride
-summaries are written, and only when the user asks for it.
-
 ## Path aliases
 
-`@` (src), `@ble`, `@components`, `@hooks`, `@screens`, `@navigation`, `@config`,
+`@` (src), `@components`, `@hooks`, `@screens`, `@navigation`, `@config`,
 `@stores`, `@locales`, `@utils`, `@services`, `@constants`, `@contexts`, `@typings`.
 Declared in `babel.config.js` (module-resolver) and `tsconfig.json` (paths).
 A new alias goes in both files.
@@ -132,9 +126,9 @@ Docker build uses is public and must never sign anything else.
 
 ## Reverse engineering workspace
 
-`.tmp/` holds the unpacked XAPK, the jadx and apktool output and the MobSF
-reports. It is gitignored. The recovered protocol is in `docs/BLE_PROTOCOL.md`,
-the free service stack in `docs/FREE_SERVICES.md`.
+`.tmp/target` holds the unpacked XAPK and the jadx output of the official TVS
+Connect app, kept for the work on the handoff between that app and this one.
+It is gitignored. The free service stack is in `docs/FREE_SERVICES.md`.
 
-Do not copy proprietary code, artwork or resources from the original app into `src/`.
-The replacement client must be clean room: own code, own assets.
+Do not copy proprietary code, artwork or resources from the original app into
+`src/`. This client must be clean room: own code, own assets.

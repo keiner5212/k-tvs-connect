@@ -49,34 +49,6 @@ export interface CameraMarkerData {
     label: string;
 }
 
-export type ConnectionState =
-    | 'off'
-    | 'scanning'
-    | 'connecting'
-    | 'pairing'
-    | 'connected'
-    | 'reconnecting'
-    | 'failed';
-
-/** the value of the model comes from the catalog of bikes */
-export type BikeModel = string;
-
-export interface Bike {
-    id: string;
-    nickname: string;
-    model: BikeModel;
-    macAddress: string;
-    isActive: boolean;
-    createdAt: number;
-    updatedAt: number;
-}
-
-export interface BikeInput {
-    nickname: string;
-    model: BikeModel;
-    macAddress: string;
-}
-
 export interface AvoidPoint {
     id: string;
     latitude: number;
@@ -126,38 +98,6 @@ export interface VehicleAlert {
  * The values the cluster sends. A value is null until the bike sends it, so
  * the app never shows a zero that the bike did not say.
  */
-export interface BikeTelemetry {
-    speedKmh: number | null;
-    engineRpm: number | null;
-    fuelLevelPercent: number | null;
-    batteryVoltage: number | null;
-    odometerKm: number | null;
-    tripDistanceKm: number | null;
-    tripTimeSeconds: number | null;
-    tripMileage: number | null;
-    tripFuel: number | null;
-    averageSpeedKmh: number | null;
-    topSpeedKmh: number | null;
-    throttlePercent: number | null;
-    leanAngleDegree: number | null;
-    gearPosition: number | null;
-    sideStandDown: boolean;
-    turnSignal: 'none' | 'left' | 'right';
-    turnSignalStatus: number;
-    vehicleState: number;
-    switchStatus: number;
-    overspeedThreshold: number;
-    engineTemperature: number | null;
-    intakeAirTemperature: number | null;
-    cruisingRange: number | null;
-    lapNumber: number | null;
-    lapTimeMs: number | null;
-    bestLapNumber: number | null;
-    bestLapMs: number | null;
-    latitude: number | null;
-    longitude: number | null;
-    receivedAt: number;
-}
 
 export interface Place {
     id: string;
@@ -195,16 +135,13 @@ export interface RouteResult {
 export interface AppSettings {
     unitSystem: 'metric' | 'imperial';
     /** the name the bike greets the rider with */
-    riderName: string;
     cameraAvoidEnabled: boolean;
     cameraRadiusMeters: number;
     ansvFetchedAt: number | null;
     ansvPublishedAt: number | null;
-    overspeedLimitKmh: number;
     mapProvider: 'google' | 'openfreemap';
     mapStyleUrl: string;
     valhallaBaseUrl: string;
-    saveTracks: boolean;
     pinEnabled: boolean;
 }
 
@@ -213,23 +150,16 @@ export type RootStackParamList = {
     RouteDetails: undefined;
     Cameras: undefined;
     CameraDetail: { cameraId: string };
-    AddBike: undefined;
-    EditBike: { bikeId: string };
-    BikeDetails: { bikeId: string };
-    Connection: { bikeId: string };
     PlaceSearch: undefined;
     SavedRoutes: undefined;
     RoutePreview: { routeId: string };
     Pin: { mode: 'create' | 'change' | 'remove' };
     ExportData: undefined;
-    Diagnostics: undefined;
     DeleteData: undefined;
     Permissions: undefined;
 };
 
 export type MainTabParamList = {
-    Garage: undefined;
-    Dashboard: undefined;
     Map: undefined;
     Settings: undefined;
 };

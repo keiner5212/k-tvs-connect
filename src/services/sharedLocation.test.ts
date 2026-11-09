@@ -39,7 +39,7 @@ describe('parseSharedLocation', () => {
     });
 
     it('reads the app scheme', () => {
-        const place = parseSharedLocation('ktvsconnect://route?lat=11.2407&lon=-74.1947');
+        const place = parseSharedLocation('kroutes://route?lat=11.2407&lon=-74.1947');
 
         expect(place).toBeNull();
     });

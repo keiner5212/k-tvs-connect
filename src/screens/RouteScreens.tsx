@@ -13,7 +13,6 @@ import { EmptyState } from '@components/feedback';
 import { PrimaryButton, TextField, showConfirm } from '@components/controls';
 import ScreenContainer from '@components/ScreenContainer';
 import { useTheme } from '@hooks/useTheme';
-import { useBleStore } from '@stores/bleStore';
 import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
@@ -23,7 +22,7 @@ import { searchPlaces } from '@services/geocoding.service';
 import { MIN_QUERY_LENGTH } from '@config/geocoding';
 import { deleteRoute, getRoute, listRoutes, renameRoute } from '@services/db/routeRepository';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
-import { layout, spacing, typography } from '@config/theme';
+import { layout, radii, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
@@ -188,29 +187,53 @@ export const SavedRoutesScreen = () => {
                                     onPress={() => navigation.navigate('RoutePreview', { routeId: route.id })}
                                     style={styles.routeMain}
                                 >
-                                    <Text style={[styles.routeName, { color: colors.foreground }]}>
-                                        {route.name}
-                                    </Text>
-                                    <Text style={[styles.routeMeta, { color: colors.mutedForeground }]}>
-                                        {`${formatDistance(route.distanceMeters, 'metric')} · ${formatDuration(route.durationSeconds)} · ${route.avoidPoints.length} avoided`}
-                                    </Text>
+                                    <View
+                                        style={[
+                                            styles.routeBadge,
+                                            { backgroundColor: colors.primarySubtle },
+                                        ]}
+                                    >
+                                        <MaterialIcons
+                                            color={colors.primary}
+                                            name="route"
+                                            size={20}
+                                        />
+                                    </View>
+                                    <View style={styles.routeText}>
+                                        <Text
+                                            numberOfLines={1}
+                                            style={[styles.routeName, { color: colors.foreground }]}
+                                        >
+                                            {route.name}
+                                        </Text>
+                                        <Text
+                                            numberOfLines={1}
+                                            style={[styles.routeMeta, { color: colors.mutedForeground }]}
+                                        >
+                                            {`${formatDistance(route.distanceMeters, 'metric')} · ${formatDuration(route.durationSeconds)} · ${route.avoidPoints.length} avoided`}
+                                        </Text>
+                                    </View>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     accessibilityLabel={`Rename ${route.name}`}
                                     accessibilityRole="button"
+                                    hitSlop={8}
                                     onPress={() => {
                                         setRenaming(route.id);
                                         setDraft(route.name);
                                     }}
-                                    style={styles.routeAction}
+                                    style={styles.routeIconButton}
                                 >
-                                    <Text style={[styles.routeActionLabel, { color: colors.primary }]}>
-                                        Rename
-                                    </Text>
+                                    <MaterialIcons
+                                        color={colors.mutedForeground}
+                                        name="edit"
+                                        size={20}
+                                    />
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     accessibilityLabel={`Delete ${route.name}`}
                                     accessibilityRole="button"
+                                    hitSlop={8}
                                     onPress={() =>
                                         showConfirm(
                                             `Delete ${route.name}?`,
@@ -222,11 +245,9 @@ export const SavedRoutesScreen = () => {
                                             true,
                                         )
                                     }
-                                    style={styles.routeAction}
+                                    style={styles.routeIconButton}
                                 >
-                                    <Text style={[styles.routeActionLabel, { color: colors.error }]}>
-                                        Delete
-                                    </Text>
+                                    <MaterialIcons color={colors.error} name="delete" size={20} />
                                 </TouchableOpacity>
                             </>
                         )}
@@ -337,19 +358,40 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: spacing.lg,
     },
+    routeBadge: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        height: 40,
+        justifyContent: 'center',
+        width: 40,
+    },
+    routeIconButton: {
+        alignItems: 'center',
+        height: 44,
+        justifyContent: 'center',
+        width: 44,
+    },
     routeMain: {
-        marginBottom: spacing.sm,
+        alignItems: 'center',
+        flex: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
     },
     routeMeta: {
         ...typography.caption,
-        marginTop: spacing.xs,
     },
     routeName: {
         ...typography.subheading,
     },
     routeRow: {
+        alignItems: 'center',
         borderBottomWidth: StyleSheet.hairlineWidth,
-        paddingVertical: spacing.md,
+        flexDirection: 'row',
+        gap: spacing.xs,
+        paddingVertical: spacing.sm,
+    },
+    routeText: {
+        flex: 1,
     },
     screen: {
         flex: 1,
@@ -382,11 +424,9 @@ export const RouteDetailsScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
     const { colors } = useTheme();
     const { settings } = useSettingsStore();
-    const connectionState = useBleStore((state) => state.state);
     const { routeCameras, routeSplit, publishedAt, stale } = useCameraStore();
     const { navigation: progress, startNavigation, stopNavigation } = useMapStore();
     const { arrival, avoidPoints, destination, route } = useMapStore();
-    const [sent, setSent] = useState<boolean | null>(null);
 
     const staleCameraData = stale;
 
@@ -446,45 +486,28 @@ export const RouteDetailsScreen = () => {
             ) : null}
 
             <View style={styles.sectionHeader}>
-                <MaterialIcons color={colors.mutedForeground} name="send" size={18} />
+                <MaterialIcons color={colors.mutedForeground} name="navigation" size={18} />
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                    Navigation to the bike
+                    Follow the route
                 </Text>
             </View>
             <Text style={[styles.note, { color: colors.mutedForeground }]}>
-                The app sends the destination address to the bike as text and then keeps it
-                updated with the position, so the cluster shows the distance to the next turn. It
-                does not send the route.
-            </Text>
-            <Text style={[styles.note, { color: colors.mutedForeground }]}>
-                {connectionState === 'connected'
-                    ? 'The bike is connected.'
-                    : 'The bike is not connected. Turn the bike on to send the destination.'}
+                The app follows your position along the route and shows the next turn, the
+                distance that is left and the time of arrival.
             </Text>
             <View style={styles.actionRow}>
                 <PrimaryButton
-                    disabled={connectionState !== 'connected'}
                     icon={progress.started ? 'stop' : 'navigation'}
-                    label={progress.started ? 'Stop the navigation' : 'Start the navigation'}
+                    label={progress.started ? 'Stop following' : 'Follow the route'}
                     onPress={() => {
                         if (progress.started) {
                             stopNavigation();
                             return;
                         }
-                        void startNavigation().then(setSent);
+                        void startNavigation();
                     }}
                 />
             </View>
-            {sent === true ? (
-                <Text style={[styles.note, { color: colors.success }]}>
-                    Destination sent to the bike.
-                </Text>
-            ) : null}
-            {sent === false ? (
-                <Text style={[styles.note, { color: colors.error }]}>
-                    Could not write to the bike. Check the connection.
-                </Text>
-            ) : null}
 
             <View style={styles.sectionHeader}>
                 <MaterialIcons color={colors.mutedForeground} name="videocam" size={18} />

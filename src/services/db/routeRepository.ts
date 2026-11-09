@@ -45,7 +45,21 @@ const toRoute = (row: RouteRow): SavedRoute => {
 export const listRoutes = async (): Promise<SavedRoute[]> => {
     const db = getDatabase();
     const rows = await db.getAllAsync<RouteRow>('SELECT * FROM routes ORDER BY created_at DESC');
-    return rows.map(toRoute);
+    /**
+     * A route saved twice is one route in the list. The copies stay in the
+     * database, they just do not show up twice.
+     */
+    const seen = new Set<string>();
+    const routes: SavedRoute[] = [];
+    for (const row of rows) {
+        const key = `${row.destination_lat},${row.destination_lon},${row.geometry}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        routes.push(toRoute(row));
+    }
+    return routes;
 };
 
 export const getRoute = async (id: string): Promise<SavedRoute | null> => {
@@ -56,6 +70,24 @@ export const getRoute = async (id: string): Promise<SavedRoute | null> => {
 
 export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): Promise<SavedRoute> => {
     const db = getDatabase();
+
+    /**
+     * The same route saved twice is one route. The rider taps the save button
+     * until the app answers, so the answer is the button, but the database
+     * also refuses the copy.
+     */
+    const existing = await db.getFirstAsync<RouteRow>(
+        `SELECT * FROM routes
+     WHERE destination_lat = ? AND destination_lon = ? AND geometry = ?
+     LIMIT 1;`,
+        route.destinationLat,
+        route.destinationLon,
+        route.geometry,
+    );
+    if (existing) {
+        return toRoute(existing);
+    }
+
     const saved: SavedRoute = { ...route, id: newId(), createdAt: Date.now() };
 
     await db.runAsync(

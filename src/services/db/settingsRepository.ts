@@ -3,16 +3,13 @@ import { getDatabase } from './database';
 
 const DEFAULTS: AppSettings = {
     unitSystem: 'metric',
-    riderName: '',
     cameraAvoidEnabled: true,
     cameraRadiusMeters: 5000,
     ansvFetchedAt: null,
     ansvPublishedAt: null,
-    overspeedLimitKmh: 80,
     mapProvider: 'google',
     mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
     valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
-    saveTracks: false,
     pinEnabled: false,
 };
 
@@ -32,7 +29,6 @@ export const getSettings = async (): Promise<AppSettings> => {
 
     return {
         unitSystem: (stored.unitSystem as AppSettings['unitSystem']) ?? DEFAULTS.unitSystem,
-        riderName: stored.riderName ?? DEFAULTS.riderName,
         cameraAvoidEnabled: stored.cameraAvoidEnabled
             ? stored.cameraAvoidEnabled === 'true'
             : DEFAULTS.cameraAvoidEnabled,
@@ -41,13 +37,9 @@ export const getSettings = async (): Promise<AppSettings> => {
             : DEFAULTS.cameraRadiusMeters,
         ansvFetchedAt: stored.ansvFetchedAt ? Number(stored.ansvFetchedAt) : DEFAULTS.ansvFetchedAt,
         ansvPublishedAt: stored.ansvPublishedAt ? Number(stored.ansvPublishedAt) : DEFAULTS.ansvPublishedAt,
-        overspeedLimitKmh: stored.overspeedLimitKmh
-            ? Number(stored.overspeedLimitKmh)
-            : DEFAULTS.overspeedLimitKmh,
         mapProvider: (stored.mapProvider as AppSettings['mapProvider']) ?? DEFAULTS.mapProvider,
         mapStyleUrl: stored.mapStyleUrl ?? DEFAULTS.mapStyleUrl,
         valhallaBaseUrl: stored.valhallaBaseUrl ?? DEFAULTS.valhallaBaseUrl,
-        saveTracks: stored.saveTracks ? stored.saveTracks === 'true' : DEFAULTS.saveTracks,
         pinEnabled: stored.pinEnabled ? stored.pinEnabled === 'true' : DEFAULTS.pinEnabled,
     };
 };

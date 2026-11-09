@@ -48,27 +48,6 @@ const pickAllowed = (fields: LogFields): LogFields => {
     return picked as LogFields;
 };
 
-const formatEntry = (entry: LogEntry): string => {
-    const fields = Object.entries(entry.fields)
-        .map(([key, value]) => `${key}=${String(value)}`)
-        .join(' ');
-    const time = new Date(entry.at).toISOString();
-    return `${time} ${entry.level.toUpperCase()} ${entry.message}${fields ? ` ${fields}` : ''}`;
-};
-
-/**
- * The log of a ride has to survive the app being closed, and it has to be
- * readable from a computer, so the native module keeps it in a file.
- */
-const persist = (entry: LogEntry) => {
-    void import('@cluster')
-        .then(({ getClusterModule }) => {
-            const native = getClusterModule();
-            return native ? native.appendLog(formatEntry(entry)) : null;
-        })
-        .catch(() => undefined);
-};
-
 const write = (level: LogLevel, message: string, fields: LogFields) => {
     const safeFields = pickAllowed(fields);
     const entry: LogEntry = { at: Date.now(), level, message, fields: safeFields };
@@ -77,8 +56,6 @@ const write = (level: LogLevel, message: string, fields: LogFields) => {
     if (ring.length > RING_LIMIT) {
         ring.shift();
     }
-
-    persist(entry);
 
     if (!__DEV__) {
         return;

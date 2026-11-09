@@ -98,7 +98,7 @@ const isPlaceResult = (types: string[]): boolean =>
 const FAILURE_MESSAGES: Record<GeocodeFailure, string> = {
     missing_key:
         'The Google api key is missing. Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in .env.local and rebuild the app.',
-    denied: 'Google refused the api key. Check the key, the api restriction and the android certificate.',
+    denied: `Google refused the api key. The key has to be restricted to the android app ${ANDROID_PACKAGE_NAME} and to the signing certificate.`,
     places_not_allowed:
         'The key does not allow the places search. Add the Places API (New) to the api restriction of the key, otherwise the search only answers for addresses.',
     quota: 'The google search quota for today is used up. Try again tomorrow.',

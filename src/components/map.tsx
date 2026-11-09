@@ -419,8 +419,8 @@ interface RouteSheetProps {
     avoidPointCount: number;
     isComputing: boolean;
     isNavigating: boolean;
+    isSaved: boolean;
     isStarting?: boolean;
-    canStart: boolean;
     instruction: string;
     distanceToManeuverLabel: string | null;
     variant: RouteVariant;
@@ -448,8 +448,8 @@ export const RouteSheet = ({
     avoidPointCount,
     isComputing,
     isNavigating,
+    isSaved,
     isStarting,
-    canStart,
     instruction,
     distanceToManeuverLabel,
     variant,
@@ -582,7 +582,7 @@ export const RouteSheet = ({
             <View style={styles.sheetActions}>
                 <IconLabelButton
                     accessibilityLabel={isNavigating ? 'Stop the navigation' : 'Start the navigation'}
-                    disabled={isStarting || (!canStart && !isNavigating)}
+                    disabled={isStarting}
                     icon={isNavigating ? 'stop' : 'navigation'}
                     label={isStarting ? 'Sending...' : isNavigating ? 'Stop' : 'Start'}
                     onPress={isNavigating ? onStop : onStart}
@@ -590,10 +590,12 @@ export const RouteSheet = ({
                 />
 
                 <IconLabelButton
-                    accessibilityLabel="Save route"
-                    icon="bookmark-border"
-                    label="Save"
+                    accessibilityLabel={isSaved ? 'Route saved' : 'Save route'}
+                    disabled={isSaved}
+                    icon={isSaved ? 'bookmark' : 'bookmark-border'}
+                    label={isSaved ? 'Saved' : 'Save'}
                     onPress={onSave}
+                    selected={isSaved}
                     variant="pill"
                 />
                 <IconLabelButton
@@ -984,6 +986,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: spacing.sm,
+        justifyContent: 'center',
         marginTop: spacing.md,
     },
     sheetHint: {

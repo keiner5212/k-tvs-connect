@@ -4,20 +4,10 @@ import * as SQLite from 'expo-sqlite';
 
 import { logger } from '@utils/logger';
 
-const DB_NAME = 'k-tvs-connect.db';
-const DB_KEY_NAME = 'k_tvs_connect_db_key';
+const DB_NAME = 'k-routes.db';
+const DB_KEY_NAME = 'k_routes_db_key';
 
 const SCHEMA = `
-CREATE TABLE IF NOT EXISTS bikes (
-  id TEXT PRIMARY KEY NOT NULL,
-  nickname TEXT NOT NULL,
-  model TEXT NOT NULL,
-  mac_address TEXT NOT NULL UNIQUE,
-  is_active INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS routes (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL,
@@ -32,17 +22,6 @@ CREATE TABLE IF NOT EXISTS routes (
   geometry TEXT NOT NULL,
   avoid_points TEXT NOT NULL,
   created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS rides (
-  id TEXT PRIMARY KEY NOT NULL,
-  bike_id TEXT NOT NULL,
-  started_at INTEGER NOT NULL,
-  ended_at INTEGER,
-  distance_meters REAL NOT NULL DEFAULT 0,
-  max_speed_kmh REAL NOT NULL DEFAULT 0,
-  average_speed_kmh REAL NOT NULL DEFAULT 0,
-  duration_seconds REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS avoid_points (
@@ -136,26 +115,12 @@ CREATE TABLE IF NOT EXISTS settings (
  * The schema of the app has a version, so a table that changes shape can be
  * rebuilt on the phones that already have the old one.
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const MIGRATIONS: { version: number; statements: string[] }[] = [
     {
-        version: 3,
-        statements: [
-            `CREATE TABLE bikes_v2 (
-  id TEXT PRIMARY KEY NOT NULL,
-  nickname TEXT NOT NULL,
-  model TEXT NOT NULL,
-  mac_address TEXT NOT NULL UNIQUE,
-  is_active INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);`,
-            `INSERT INTO bikes_v2 (id, nickname, model, mac_address, is_active, created_at, updated_at)
-  SELECT id, nickname, model, mac_address, is_active, created_at, updated_at FROM bikes;`,
-            'DROP TABLE bikes;',
-            'ALTER TABLE bikes_v2 RENAME TO bikes;',
-        ],
+        version: 4,
+        statements: ['DROP TABLE IF EXISTS bikes;', 'DROP TABLE IF EXISTS rides;'],
     },
 ];
 
@@ -195,7 +160,7 @@ export const openDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
 
     const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
     const current = version?.user_version ?? 0;
-    const bikesBefore = current < SCHEMA_VERSION ? await countRows(db, 'bikes') : null;
+    const routesBefore = current < SCHEMA_VERSION ? await countRows(db, 'routes') : null;
 
     if (current < SCHEMA_VERSION) {
         /**
@@ -212,17 +177,17 @@ export const openDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
         });
     }
 
-    if (bikesBefore !== null) {
-        const bikesAfter = await countRows(db, 'bikes');
+    if (routesBefore !== null) {
+        const routesAfter = await countRows(db, 'routes');
         logger.info('the database was migrated', {
             event: 'migrate',
-            count: bikesAfter,
-            durationMs: bikesBefore - bikesAfter,
+            count: routesAfter,
+            durationMs: routesBefore - routesAfter,
         });
-        if (bikesAfter < bikesBefore) {
-            logger.warn('the migration lost bikes', {
+        if (routesAfter < routesBefore) {
+            logger.warn('the migration lost routes', {
                 event: 'migrate',
-                count: bikesBefore - bikesAfter,
+                count: routesBefore - routesAfter,
             });
         }
     }

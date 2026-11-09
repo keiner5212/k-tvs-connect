@@ -52,13 +52,10 @@ the bundle.
 
 1. Open the app. The development client shows its own welcome sheet the first
    time, tap **Continue** to close it.
-2. Go to **Garage** and tap **Add scooter**.
-3. Turn the scooter on and tap **Scan for scooters**. The phone asks for the
-   bluetooth permission the first time. The bike shows up as a bluetooth device,
-   tap it to fill the address. Or type the address yourself.
-4. Fill the name and the frame number, then **Add scooter**.
-5. The scooter becomes the active one. Go to **Dashboard** and turn the ignition
-   on: the app connects on its own and the live values start to arrive.
+2. The app opens on the map. The phone asks for the location permission the
+   first time, accept it so the route can start from where the rider is.
+3. Tap the search icon, type a place and pick it. The route arrives with the
+   camera points that have to be avoided already in it.
 
 ## Local routing service
 
@@ -77,8 +74,8 @@ npm run typecheck
 npm test
 ```
 
-The tests cover the bluetooth frame parser against the offset tables recovered from
-the original app, and the polyline maths used for the routes.
+The tests cover the polyline maths used for the routes, the arrival estimate
+and the shared locations.
 
 ## Reverse engineering toolchain
 
