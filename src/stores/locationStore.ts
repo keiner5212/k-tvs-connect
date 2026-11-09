@@ -1,4 +1,7 @@
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
+
+import { LOCATION_TASK_NAME } from '@constants/constants';
 import { create } from 'zustand';
 
 import { logger } from '@utils/logger';
@@ -81,6 +84,24 @@ export const useLocationStore = create<LocationState>((set, get) => ({
                 },
             );
             set({ following: true });
+
+            /**
+             * On android the position keeps coming with a foreground service,
+             * so the app survives the screen being off and the indications
+             * keep arriving.
+             */
+            if (Platform.OS === 'android') {
+                await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+                    accuracy: Location.Accuracy.High,
+                    distanceInterval: 1,
+                    foregroundService: {
+                        notificationBody: 'The position is needed to guide the route.',
+                        notificationColor: '#E4002B',
+                        notificationTitle: 'Following the route',
+                    },
+                    timeInterval: 1000,
+                }).catch(() => undefined);
+            }
         } catch (error) {
             logger.warn('the location watch failed', {
                 event: 'location',
@@ -91,6 +112,9 @@ export const useLocationStore = create<LocationState>((set, get) => ({
 
     stopWatching: (owner: string) => {
         watchOwners.delete(owner);
+        if (watchOwners.size === 0 && Platform.OS === 'android') {
+            void Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => undefined);
+        }
         if (watchOwners.size > 0) {
             return;
         }

@@ -18,6 +18,7 @@ import {
     listAvoidPoints,
 } from '@services/db/avoidPointRepository';
 import { useSettingsStore } from '@stores/settingsStore';
+import { logger } from '@utils/logger';
 
 export interface ReplayRoute {
     geometry: string;
@@ -27,6 +28,8 @@ export interface ReplayRoute {
 
 export interface NavigationProgress {
     started: boolean;
+    /** when the rider pressed start, to know how long the route took */
+    startedAt: number;
     distanceLeftMeters: number;
     timeLeftSeconds: number;
     distanceToManeuverMeters: number;
@@ -119,6 +122,53 @@ const pointsOfRoute = (geometry: string): { lat: number; lon: number }[] => {
         decodedPoints = decodePolyline(geometry, 6);
     }
     return decodedPoints;
+};
+
+/**
+ * What the route really took. Only a route that is on the list of saved
+ * routes counts, so the history belongs to the routes the rider keeps.
+ */
+const recordCompletion = async (state: MapState): Promise<void> => {
+    const { destination, navigation, route, routeContext } = state;
+    if (!route || !routeContext || !destination || !navigation.startedAt) {
+        return;
+    }
+
+    try {
+        const { listRoutes } = await import('@services/db/routeRepository');
+        const saved = await listRoutes();
+        const isSaved = saved.some(
+            (item) =>
+                item.destinationLat === destination.latitude &&
+                item.destinationLon === destination.longitude &&
+                item.geometry === route.geometry,
+        );
+        if (!isSaved) {
+            return;
+        }
+
+        const observedSeconds = Math.round((Date.now() - navigation.startedAt) / 1000);
+        const { recordObservation } = await import('@services/db/etaRepository');
+        const stored = await recordObservation({
+            context: routeContext,
+            observedMeters: route.distanceMeters,
+            observedSeconds,
+        });
+        if (stored) {
+            logger.info('the time of the route was stored', {
+                service: 'db',
+                event: 'route_observed',
+                count: observedSeconds,
+                durationMs: observedSeconds * 1000,
+            });
+        }
+    } catch (error) {
+        logger.warn('the time of the route could not be stored', {
+            service: 'db',
+            event: 'route_observed',
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+    }
 };
 
 const describeRouteError = (error: unknown): string => {
@@ -334,6 +384,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     routeFailures: 0,
     navigation: {
         started: false,
+        startedAt: 0,
         distanceLeftMeters: 0,
         timeLeftSeconds: 0,
         distanceToManeuverMeters: 0,
@@ -514,6 +565,7 @@ export const useMapStore = create<MapState>((set, get) => ({
             navigation: {
                 ...get().navigation,
                 started: true,
+                startedAt: Date.now(),
                 arrived: false,
             },
         });
@@ -533,6 +585,7 @@ export const useMapStore = create<MapState>((set, get) => ({
         set({
             navigation: {
                 started: false,
+                startedAt: 0,
                 distanceLeftMeters: 0,
                 timeLeftSeconds: 0,
                 distanceToManeuverMeters: 0,
@@ -581,17 +634,24 @@ export const useMapStore = create<MapState>((set, get) => ({
             }
         }
 
+        const arrived = distanceLeftMeters < 25;
+
         set({
             navigation: {
                 started: true,
+                startedAt: navigation.startedAt,
                 distanceLeftMeters,
                 timeLeftSeconds,
                 distanceToManeuverMeters: distanceToManeuver,
                 instruction: next?.instruction ?? '',
                 turnDirection: turnDirectionFromType(next?.type ?? 0),
-                arrived: distanceLeftMeters < 25,
+                arrived,
             },
         });
+
+        if (arrived && !navigation.arrived) {
+            void recordCompletion(get());
+        }
 
     },
 }));

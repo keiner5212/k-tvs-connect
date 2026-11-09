@@ -50,6 +50,12 @@
             ],
             "@maplibre/maplibre-react-native",
             [
+                "expo-location",
+                {
+                    "isAndroidForegroundServiceEnabled": true
+                }
+            ],
+            [
                 "expo-notifications",
                 {
                     "color": "#E4002B"

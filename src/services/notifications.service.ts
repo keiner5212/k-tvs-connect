@@ -5,6 +5,20 @@ import { logger } from '@utils/logger';
 
 const CHANNEL_ID = 'turn-by-turn';
 
+/**
+ * While the app is on the screen the notification is not presented by itself,
+ * the handler decides. The rider watches the map and the phone at the same
+ * time, so the banner has to show up in both cases.
+ */
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+    }),
+});
+
 let channelReady = false;
 
 /**

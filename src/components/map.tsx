@@ -422,7 +422,7 @@ interface RouteSheetProps {
     isSaved: boolean;
     isStarting?: boolean;
     instruction: string;
-    distanceToManeuverLabel: string | null;
+    distanceLeftLabel: string | null;
     variant: RouteVariant;
     hasSafeRoute: boolean;
     onVariantChange: (variant: RouteVariant) => void;
@@ -451,7 +451,7 @@ export const RouteSheet = ({
     isSaved,
     isStarting,
     instruction,
-    distanceToManeuverLabel,
+    distanceLeftLabel,
     variant,
     hasSafeRoute,
     onVariantChange,
@@ -552,9 +552,9 @@ export const RouteSheet = ({
                         <Text style={[styles.instruction, { color: colors.foreground }]}>
                             {instruction || 'Follow the route'}
                         </Text>
-                        {distanceToManeuverLabel ? (
+                        {distanceLeftLabel ? (
                             <Text style={[styles.instructionHint, { color: colors.mutedForeground }]}>
-                                {`in ${distanceToManeuverLabel}`}
+                                {`${distanceLeftLabel} to the destination`}
                             </Text>
                         ) : null}
                     </View>
