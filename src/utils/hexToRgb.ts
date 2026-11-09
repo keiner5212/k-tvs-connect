@@ -1,10 +1,10 @@
-export interface Rgb {
+interface Rgb {
     r: number;
     g: number;
     b: number;
 }
 
-export const hexToRgb = (hex: string): Rgb => {
+const hexToRgb = (hex: string): Rgb => {
     const normalized = hex.replace('#', '');
     const expanded =
         normalized.length === 3

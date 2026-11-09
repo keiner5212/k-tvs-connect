@@ -1,19 +1,6 @@
 import { RouteObservation } from '@services/eta.service';
 import { getDatabase, newId } from './database';
 
-interface ContextRow {
-    id: string;
-    destination_key: string;
-    origin_anchor_id: string;
-    origin_lat: number;
-    origin_lon: number;
-    destination_lat: number;
-    destination_lon: number;
-    router_seconds: number;
-    router_meters: number;
-    computed_at: number;
-}
-
 interface ObservationRow {
     observed_at: number;
     observed_seconds: number;
@@ -111,24 +98,6 @@ export const recordRouteContext = async (input: {
         originAnchorId,
         routerSeconds: input.routerSeconds,
         routerMeters: input.routerMeters,
-    };
-};
-
-export const getRouteContext = async (contextId: string): Promise<RouteContext | null> => {
-    const db = getDatabase();
-    const row = await db.getFirstAsync<ContextRow>(
-        'SELECT * FROM route_contexts WHERE id = ?',
-        contextId,
-    );
-    if (!row) {
-        return null;
-    }
-    return {
-        id: row.id,
-        destinationKey: row.destination_key,
-        originAnchorId: row.origin_anchor_id,
-        routerSeconds: row.router_seconds,
-        routerMeters: row.router_meters,
     };
 };
 

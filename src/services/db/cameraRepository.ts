@@ -68,33 +68,6 @@ export const listAllCameras = async (): Promise<TrafficCamera[]> => {
     return rows.map(toCamera);
 };
 
-export const listCamerasInBox = async (
-    minLat: number,
-    minLon: number,
-    maxLat: number,
-    maxLon: number,
-): Promise<TrafficCamera[]> => {
-    const db = getDatabase();
-    const rows = await db.getAllAsync<CameraRow>(
-        `SELECT * FROM cameras
-         WHERE latitude >= ? AND latitude <= ? AND longitude >= ? AND longitude <= ?`,
-        minLat,
-        maxLat,
-        minLon,
-        maxLon,
-    );
-    return rows.map(toCamera);
-};
-
-export const getCamera = async (cameraId: string): Promise<TrafficCamera | null> => {
-    const db = getDatabase();
-    const row = await db.getFirstAsync<CameraRow>(
-        'SELECT * FROM cameras WHERE camera_id = ?',
-        cameraId,
-    );
-    return row ? toCamera(row) : null;
-};
-
 export const countCameras = async (): Promise<number> => {
     const db = getDatabase();
     const row = await db.getFirstAsync<{ total: number }>('SELECT COUNT(*) AS total FROM cameras');

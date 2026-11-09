@@ -188,7 +188,7 @@ export const parseCameraSense = (address: string): CameraSense | null => {
 };
 
 /** The angle between two bearings, in degrees. */
-export const angleBetween = (a: number, b: number): number =>
+const angleBetween = (a: number, b: number): number =>
     Math.abs(((a - b + 540) % 360) - 180);
 
 /**

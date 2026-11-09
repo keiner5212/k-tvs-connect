@@ -149,7 +149,7 @@ const isValidCoordinate = (latitude: unknown, longitude: unknown): boolean =>
     longitude <= 180 &&
     !(latitude === 0 && longitude === 0);
 
-export const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
+const parseAnsvDataset = (payload: unknown): AnsvDataset | null => {
     if (typeof payload !== 'object' || payload === null) {
         return null;
     }

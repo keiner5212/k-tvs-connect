@@ -50,8 +50,3 @@ export const deleteAvoidPoint = async (id: string): Promise<void> => {
     const db = getDatabase();
     await db.runAsync('DELETE FROM avoid_points WHERE id = ?', id);
 };
-
-export const clearAvoidPoints = async (): Promise<void> => {
-    const db = getDatabase();
-    await db.runAsync('DELETE FROM avoid_points');
-};

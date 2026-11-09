@@ -13,13 +13,6 @@ export interface LogFields {
     requestId?: string;
 }
 
-export interface LogEntry {
-    at: number;
-    level: LogLevel;
-    message: string;
-    fields: LogFields;
-}
-
 const ALLOWED_FIELDS: (keyof LogFields)[] = [
     'service',
     'event',
@@ -32,10 +25,6 @@ const ALLOWED_FIELDS: (keyof LogFields)[] = [
     'errorName',
     'requestId',
 ];
-
-const RING_LIMIT = 500;
-
-const ring: LogEntry[] = [];
 
 const pickAllowed = (fields: LogFields): LogFields => {
     const picked: Record<string, unknown> = {};
@@ -50,12 +39,6 @@ const pickAllowed = (fields: LogFields): LogFields => {
 
 const write = (level: LogLevel, message: string, fields: LogFields) => {
     const safeFields = pickAllowed(fields);
-    const entry: LogEntry = { at: Date.now(), level, message, fields: safeFields };
-
-    ring.push(entry);
-    if (ring.length > RING_LIMIT) {
-        ring.shift();
-    }
 
     if (!__DEV__) {
         return;
@@ -65,21 +48,9 @@ const write = (level: LogLevel, message: string, fields: LogFields) => {
     target(`[${level}] ${message}`, safeFields);
 };
 
-/** the text of an error, short enough for the log */
-export const describeError = (error: unknown): string => {
-    if (error instanceof Error) {
-        return `${error.name}: ${error.message}`.slice(0, 160);
-    }
-    return String(error).slice(0, 160);
-};
-
 export const logger = {
     debug: (message: string, fields: LogFields = {}) => write('debug', message, fields),
     info: (message: string, fields: LogFields = {}) => write('info', message, fields),
     warn: (message: string, fields: LogFields = {}) => write('warn', message, fields),
     error: (message: string, fields: LogFields = {}) => write('error', message, fields),
-    recent: (): LogEntry[] => [...ring].reverse(),
-    clear: () => {
-        ring.length = 0;
-    },
 };

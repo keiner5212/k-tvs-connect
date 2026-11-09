@@ -806,10 +806,9 @@ export const RouteSheet = ({
 interface AvoidPointListProps {
     points: AvoidPoint[];
     onDelete: (id: string) => void;
-    onClearAll?: () => void;
 }
 
-export const AvoidPointList = ({ points, onDelete, onClearAll }: AvoidPointListProps) => {
+export const AvoidPointList = ({ points, onDelete }: AvoidPointListProps) => {
     const { colors } = useTheme();
 
     if (points.length === 0) {
@@ -820,11 +819,6 @@ export const AvoidPointList = ({ points, onDelete, onClearAll }: AvoidPointListP
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.avoidHeader}>
                 <Text style={[styles.avoidTitle, { color: colors.foreground }]}>Points to avoid</Text>
-                {onClearAll ? (
-                    <TouchableOpacity accessibilityRole="button" onPress={onClearAll}>
-                        <Text style={[styles.clearAll, { color: colors.primary }]}>Clear all</Text>
-                    </TouchableOpacity>
-                ) : null}
             </View>
 
             {points.map((point, index) => (
@@ -1014,9 +1008,6 @@ const styles = StyleSheet.create({
         marginHorizontal: layout.screenPadding,
         marginTop: spacing.sm,
         padding: layout.cardPadding,
-    },
-    clearAll: {
-        ...typography.caption,
     },
     countItem: {
         alignItems: 'center',

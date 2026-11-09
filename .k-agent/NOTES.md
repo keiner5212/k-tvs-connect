@@ -18,3 +18,4 @@
 - The rider wants every action on a map object in two taps: one tap opens a small menu with the options and every menu has a Cancel row. The touchable of a marker is the icon alone, not the row, and the name of the focused camera goes in a band and not on the marker.
 - Valhalla maneuver types: 1 start, 4 destination (the arrival), 9/10/11 right, 12/13 u-turn, 14/15/16 left, 20/21 exit, 23/24 stay, 26/27 roundabout. The router sends no distance per maneuver: the distance from the start of the route to a maneuver is the polyline length up to its begin_shape_index.
 - The time of a route is measured from the first movement (40 m from where the navigation started), not from the button press, so the minutes spent getting on the bike are not learned as riding time.
+- The rider wants no dead code: after a change, delete what it leaves unused (unused exports, unused props, unused store actions, unreachable UI) instead of leaving it parked in the tree.

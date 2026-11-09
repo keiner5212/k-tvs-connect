@@ -20,7 +20,6 @@ import {
     RouteContext,
 } from '@services/db/etaRepository';
 import {
-    clearAvoidPoints as clearStoredAvoidPoints,
     deleteAvoidPoint as deleteStoredAvoidPoint,
     insertAvoidPoint,
     listAvoidPoints,
@@ -81,7 +80,6 @@ interface MapState {
     recenter: () => void;
     addAvoidPoint: (latitude: number, longitude: number) => Promise<void>;
     removeAvoidPoint: (id: string) => Promise<void>;
-    clearAvoidPoints: () => Promise<void>;
     compute: (originLat: number, originLon: number) => Promise<void>;
     setVariant: (variant: RouteVariant) => void;
     clearRoute: () => void;
@@ -464,10 +462,6 @@ export const useMapStore = create<MapState>((set, get) => ({
     removeAvoidPoint: async (id) => {
         await deleteStoredAvoidPoint(id);
         set({ avoidPoints: get().avoidPoints.filter((point) => point.id !== id) });
-    },
-    clearAvoidPoints: async () => {
-        await clearStoredAvoidPoints();
-        set({ avoidPoints: [] });
     },
     compute: async (originLat, originLon) => {
         const destination = get().destination;
