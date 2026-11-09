@@ -10,8 +10,8 @@ import { useSettingsStore } from '@stores/settingsStore';
 import { parseSharedLocation } from '@services/sharedLocation';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
-import { notifyTurn } from '@services/notifications.service';
-import { formatDistance } from '@utils/format';
+import { notifyRide } from '@services/notifications.service';
+import { formatDuration } from '@utils/format';
 import '@/config/i18n';
 import { darkTheme, typography } from '@config/theme';
 
@@ -42,41 +42,44 @@ export default function App() {
 
     useEffect(() => {
         /**
-         * Every change of the indication is a notification on the phone: the
-         * rider reads it with the phone in the pocket, not on the screen.
+         * The ride has two alerts: it starts and it ends. The rider reads them
+         * with the phone in the pocket, not on the screen.
          */
-        let lastInstruction: string | null = null;
+        let started = false;
         let arrived = false;
 
         const unsubscribe = useMapStore.subscribe((state) => {
             const navigation = state.navigation;
             if (!navigation.started) {
-                lastInstruction = null;
+                started = false;
                 arrived = false;
                 return;
             }
 
-            if (navigation.arrived && !arrived) {
+            if (!started && navigation.ridingSince) {
+                started = true;
+                const destination = state.destination?.name ?? 'your destination';
+                const seconds = state.estimate?.seconds ?? 0;
+                void notifyRide(
+                    'Route started',
+                    seconds > 0
+                        ? `To ${destination}. ${formatDuration(seconds)} to the destination.`
+                        : `To ${destination}.`,
+                );
+            }
+
+            if (!arrived && navigation.arrived) {
                 arrived = true;
-                void notifyTurn('You have arrived', 'The route ends here.');
-                return;
+                const seconds = navigation.ridingSince
+                    ? Math.round((Date.now() - navigation.ridingSince) / 1000)
+                    : 0;
+                void notifyRide(
+                    'You have arrived',
+                    seconds > 0
+                        ? `End of the route. Park safely. You rode it in ${formatDuration(seconds)}.`
+                        : 'End of the route. Park safely.',
+                );
             }
-
-            const step = navigation.steps[0];
-            if (!step) {
-                return;
-            }
-            const instruction = step.instruction;
-            if (instruction === lastInstruction) {
-                return;
-            }
-            lastInstruction = instruction;
-
-            const distance = step.distanceMeters;
-            void notifyTurn(
-                instruction,
-                distance > 0 ? `in ${formatDistance(distance, 'metric')}` : 'now',
-            );
         });
 
         return unsubscribe;

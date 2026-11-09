@@ -1,149 +1,67 @@
+import { AchievedTime } from '@typings/types';
+
 /**
- * Arrival time estimate. It starts from the router's own estimate and learns
- * from the times this rider actually took on the same route.
- *
- * The learned quantity is a ratio, rider time over router time, so it survives
- * the route length changing between sessions. The blend is geometric, so the
- * router's answer is the limit when there is no history and the rider's history
- * never fully replaces the router.
+ * The estimate of a route. It starts from the time the router gave and, once
+ * the rider has ridden the route, it is the average of the times it took.
  */
 
-export interface RouteObservation {
-    observedAt: number;
-    observedSeconds: number;
-    routerSeconds: number;
-    routerMeters: number;
-    confidence: number;
-}
-
-export interface ArrivalEstimate {
-    minutes: number;
-    arrivalAt: number;
-    factor: number;
+export interface RouteEstimate {
+    /** the seconds the whole route is expected to take */
+    seconds: number;
+    /** the times the route actually took, the newest first */
+    achievedTimes: AchievedTime[];
     source: 'router' | 'history';
-    explanation: string;
 }
 
-const PRIOR_STRENGTH = 2;
-const HALF_LIFE_DAYS = 90;
-const MAX_OBSERVATION_AGE_DAYS = 180;
-const MIN_EFFECTIVE_COUNT = 0.5;
-const MIN_BUCKET_OBSERVATIONS = 2;
-const RATIO_MIN = 0.4;
-const RATIO_MAX = 2;
-const ROUTE_LENGTH_BAND_MIN = 0.8;
-const ROUTE_LENGTH_BAND_MAX = 1.25;
-const FACTOR_MIN = 0.5;
-const FACTOR_MAX = 2;
-const MIN_ROUTER_SECONDS = 60;
-const MAX_ROUTER_SECONDS = 14400;
-const MIN_IMPLIED_SPEED_KMH = 3;
-const MAX_IMPLIED_SPEED_KMH = 90;
+export const estimateRoute = (
+    achievedTimes: AchievedTime[],
+    routerSeconds: number,
+): RouteEstimate => {
+    if (achievedTimes.length === 0) {
+        return { seconds: routerSeconds, achievedTimes, source: 'router' };
+    }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * The clock is split in four buckets, because a commute at rush hour and a
- * ride at midday are two different quantities.
- */
-const timeBucket = (hour: number): number => {
-    if (hour >= 5 && hour < 10) {
-        return 0;
-    }
-    if (hour >= 10 && hour < 17) {
-        return 1;
-    }
-    if (hour >= 17 && hour < 21) {
-        return 2;
-    }
-    return 3;
+    const total = achievedTimes.reduce((sum, time) => sum + time.seconds, 0);
+    return {
+        seconds: Math.round(total / achievedTimes.length),
+        achievedTimes,
+        source: 'history',
+    };
 };
 
-const clamp = (value: number, min: number, max: number): number =>
-    Math.min(max, Math.max(min, value));
+/** a ride shorter than this is a jump of the position, not a ride */
+const MIN_RIDE_SECONDS = 60;
+/** a ride longer than this is a forgotten ride */
+const MAX_RIDE_SECONDS = 21600;
+/** the rider has to have done most of the route for the time to describe it */
+const MIN_DISTANCE_RATIO = 0.85;
+const MAX_DISTANCE_RATIO = 1.15;
+/** the pace of the ride has to be one a scooter can keep */
+const MIN_SPEED_KMH = 8;
+const MAX_SPEED_KMH = 90;
 
-export const destinationKey = (latitude: number, longitude: number): string =>
-    `geo:${Math.round(latitude * 1000)},${Math.round(longitude * 1000)}`;
-
-export const estimateArrival = (
-    routerSeconds: number,
-    routerMeters: number,
-    observations: RouteObservation[],
-    now: Date = new Date(),
-): ArrivalEstimate | null => {
-    if (!Number.isFinite(routerSeconds) || routerSeconds < MIN_ROUTER_SECONDS) {
-        return null;
+/**
+ * A reading is kept only when it can be the time this rider took on this
+ * route: the ride has to last long enough, the rider has to have done most
+ * of the route and the pace has to be one a scooter can keep.
+ */
+export const isRideOfRoute = (
+    seconds: number,
+    travelledMeters: number,
+    routeMeters: number,
+): boolean => {
+    if (seconds < MIN_RIDE_SECONDS || seconds > MAX_RIDE_SECONDS) {
+        return false;
     }
-    if (routerSeconds > MAX_ROUTER_SECONDS) {
-        return null;
-    }
-
-    const impliedSpeedKmh = (routerMeters / routerSeconds) * 3.6;
-    if (
-        !Number.isFinite(impliedSpeedKmh) ||
-        impliedSpeedKmh < MIN_IMPLIED_SPEED_KMH ||
-        impliedSpeedKmh > MAX_IMPLIED_SPEED_KMH
-    ) {
-        return null;
-    }
-
-    const bucket = timeBucket(now.getHours());
-    const fresh = observations.filter(
-        (observation) =>
-            now.getTime() - observation.observedAt <= MAX_OBSERVATION_AGE_DAYS * DAY_MS &&
-            observation.routerMeters >= routerMeters * ROUTE_LENGTH_BAND_MIN &&
-            observation.routerMeters <= routerMeters * ROUTE_LENGTH_BAND_MAX,
-    );
-
-    const inBucket = fresh.filter(
-        (observation) => timeBucket(new Date(observation.observedAt).getHours()) === bucket,
-    );
-    const used = inBucket.length >= MIN_BUCKET_OBSERVATIONS ? inBucket : fresh;
-
-    const weighted: { weight: number; ratio: number }[] = [];
-    for (const observation of used) {
-        if (observation.routerSeconds <= 0) {
-            continue;
-        }
-        const ratio = observation.observedSeconds / observation.routerSeconds;
-        if (!Number.isFinite(ratio) || ratio < RATIO_MIN || ratio > RATIO_MAX) {
-            continue;
-        }
-        const ageDays = Math.max(0, (now.getTime() - observation.observedAt) / DAY_MS);
-        const weight = observation.confidence * Math.pow(0.5, ageDays / HALF_LIFE_DAYS);
-        weighted.push({ weight, ratio });
+    if (routeMeters <= 0) {
+        return false;
     }
 
-    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
-    if (totalWeight < MIN_EFFECTIVE_COUNT) {
-        const minutes = Math.max(1, Math.round(routerSeconds / 60));
-        return {
-            minutes,
-            arrivalAt: now.getTime() + minutes * 60_000,
-            factor: 1,
-            source: 'router',
-            explanation: "Still mostly the map's estimate.",
-        };
+    const distanceRatio = travelledMeters / routeMeters;
+    if (distanceRatio < MIN_DISTANCE_RATIO || distanceRatio > MAX_DISTANCE_RATIO) {
+        return false;
     }
 
-    const logMean =
-        weighted.reduce((sum, entry) => sum + entry.weight * Math.log(entry.ratio), 0) / totalWeight;
-    const geometricMean = Math.exp(logMean);
-    const lambda = totalWeight / (totalWeight + PRIOR_STRENGTH);
-    const factor = clamp(Math.pow(geometricMean, lambda), FACTOR_MIN, FACTOR_MAX);
-
-    const durationSeconds = routerSeconds * factor;
-    const minutes = Math.max(1, Math.round(durationSeconds / 60));
-
-    return {
-        minutes,
-        arrivalAt: now.getTime() + minutes * 60_000,
-        factor,
-        source: lambda > 0.5 ? 'history' : 'router',
-        explanation:
-            lambda > 0.5
-                ? `Based on your last ${weighted.length} trips on this route.`
-                : `Still mostly the map's estimate, nudged by your ${weighted.length} recorded trip${weighted.length === 1 ? '' : 's'
-                }.`,
-    };
+    const speedKmh = (routeMeters / seconds) * 3.6;
+    return speedKmh >= MIN_SPEED_KMH && speedKmh <= MAX_SPEED_KMH;
 };

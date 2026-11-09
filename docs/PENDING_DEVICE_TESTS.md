@@ -36,10 +36,12 @@ Compute a route of a known length.
 
 ### 7. The arrival estimate
 
-Ride the same route three times.
+Save a route, ride it three times and start it again.
 
-- Prove: that the arrival time moves towards the times actually taken, and
-  that the explanation says where the number comes from.
+- Prove: that the estimate becomes the average of the times taken, that the
+  list of the times is on the saved route screens, that the ride starts and
+  ends with one notification each, and that the explanation says where the
+  number comes from.
 
 ### 8. The shared location
 

@@ -1,4 +1,4 @@
-import { AvoidPoint, RouteManeuver, SavedRoute } from '@typings/types';
+import { AchievedTime, AvoidPoint, SavedRoute } from '@typings/types';
 import { getDatabase, newId } from './database';
 
 interface RouteRow {
@@ -14,7 +14,7 @@ interface RouteRow {
     duration_seconds: number;
     geometry: string;
     avoid_points: string;
-    maneuvers: string;
+    achieved_times: string;
     created_at: number;
 }
 
@@ -26,11 +26,11 @@ const toRoute = (row: RouteRow): SavedRoute => {
         avoidPoints = [];
     }
 
-    let maneuvers: RouteManeuver[] = [];
+    let achievedTimes: AchievedTime[] = [];
     try {
-        maneuvers = JSON.parse(row.maneuvers ?? '[]') as RouteManeuver[];
+        achievedTimes = JSON.parse(row.achieved_times ?? '[]') as AchievedTime[];
     } catch {
-        maneuvers = [];
+        achievedTimes = [];
     }
 
     return {
@@ -46,7 +46,7 @@ const toRoute = (row: RouteRow): SavedRoute => {
         durationSeconds: row.duration_seconds,
         geometry: row.geometry,
         avoidPoints,
-        maneuvers,
+        achievedTimes,
         createdAt: row.created_at,
     };
 };
@@ -94,23 +94,6 @@ export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): 
         route.geometry,
     );
     if (existing) {
-        /**
-         * A route that was saved before the app kept the turns has none of
-         * them, and a route that is ridden again needs them. They come with
-         * the route the rider is on now. A list whose distances are all zero
-         * was written by an older version, which read a field the router does
-         * not send.
-         */
-        const stored = toRoute(existing).maneuvers;
-        const usable = stored.some((maneuver) => maneuver.distance > 0);
-        if (!usable && (route.maneuvers ?? []).length > 0) {
-            await db.runAsync(
-                'UPDATE routes SET maneuvers = ? WHERE id = ?;',
-                JSON.stringify(route.maneuvers),
-                existing.id,
-            );
-            return { ...toRoute(existing), maneuvers: route.maneuvers ?? [] };
-        }
         return toRoute(existing);
     }
 
@@ -119,7 +102,7 @@ export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): 
     await db.runAsync(
         `INSERT INTO routes (id, name, origin_name, destination_name, origin_lat, origin_lon,
        destination_lat, destination_lon, distance_meters, duration_seconds, geometry, avoid_points,
-       maneuvers, created_at)
+       achieved_times, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         saved.id,
         saved.name,
@@ -133,11 +116,38 @@ export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): 
         saved.durationSeconds,
         saved.geometry,
         JSON.stringify(saved.avoidPoints),
-        JSON.stringify(saved.maneuvers ?? []),
+        JSON.stringify(saved.achievedTimes ?? []),
         saved.createdAt,
     );
 
     return saved;
+};
+
+/**
+ * The time a ride of this route really took. It joins the times the rider
+ * already made on the same route, the newest first.
+ */
+export const recordAchievedTime = async (
+    id: string,
+    seconds: number,
+): Promise<AchievedTime[] | null> => {
+    const db = getDatabase();
+    const row = await db.getFirstAsync<RouteRow>('SELECT * FROM routes WHERE id = ?', id);
+    if (!row) {
+        return null;
+    }
+
+    const achievedTimes: AchievedTime[] = [
+        { seconds, achievedAt: Date.now() },
+        ...toRoute(row).achievedTimes,
+    ];
+    await db.runAsync(
+        'UPDATE routes SET achieved_times = ? WHERE id = ?;',
+        JSON.stringify(achievedTimes),
+        id,
+    );
+
+    return achievedTimes;
 };
 
 export const renameRoute = async (id: string, name: string): Promise<void> => {

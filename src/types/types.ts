@@ -59,6 +59,12 @@ export interface AvoidPoint {
     source?: 'manual' | 'ansv';
 }
 
+/** one ride of a saved route, with the moment it was ridden */
+export interface AchievedTime {
+    seconds: number;
+    achievedAt: number;
+}
+
 export interface SavedRoute {
     id: string;
     name: string;
@@ -69,11 +75,12 @@ export interface SavedRoute {
     destinationLat: number;
     destinationLon: number;
     distanceMeters: number;
+    /** the time the router gave for the route when it was saved */
     durationSeconds: number;
     geometry: string;
     avoidPoints: AvoidPoint[];
-    /** the turns of the route, so it can be ridden again without the router */
-    maneuvers: RouteManeuver[];
+    /** the times the rider took on this route, the newest first */
+    achievedTimes: AchievedTime[];
     createdAt: number;
 }
 
@@ -87,38 +94,11 @@ export interface Place {
     distanceMeters?: number | null;
 }
 
-export interface RouteLeg {
-    distanceMeters: number;
-    durationSeconds: number;
-    maneuver: string;
-    instruction: string;
-}
-
-export interface RouteManeuver {
-    instruction: string;
-    /** the meters from the start of the route to the point of the maneuver */
-    distance: number;
-    type: number;
-}
-
-/**
- * A step of the route that is still ahead of the rider, with the distance to
- * it measured along the route.
- */
-export interface RouteStep {
-    distanceMeters: number;
-    instruction: string;
-    turnDirection: 'left' | 'right' | null;
-    isArrival: boolean;
-}
-
 export interface RouteResult {
-    maneuvers?: RouteManeuver[];
     avoidOutcome?: { applied: number; relaxed: boolean };
     distanceMeters: number;
     durationSeconds: number;
     geometry: string;
-    legs: RouteLeg[];
 }
 
 export interface AppSettings {

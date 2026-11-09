@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 import { logger } from '@utils/logger';
 
-const CHANNEL_ID = 'turn-by-turn';
+const CHANNEL_ID = 'route-alerts';
 
 /**
  * While the app is on the screen the notification is not presented by itself,
@@ -22,15 +22,15 @@ Notifications.setNotificationHandler({
 let channelReady = false;
 
 /**
- * The channel of the turn by turn notifications. The rider reads them with the
- * phone in the pocket, so they have to make a sound.
+ * The channel of the ride notifications. The rider reads them with the phone
+ * in the pocket, so they have to make a sound.
  */
 const ensureChannel = async (): Promise<void> => {
     if (channelReady || Platform.OS !== 'android') {
         return;
     }
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-        name: 'Turn by turn',
+        name: 'Route alerts',
         importance: Notifications.AndroidImportance.HIGH,
         sound: 'default',
         vibrationPattern: [0, 300, 200, 300],
@@ -43,7 +43,7 @@ const ensureChannel = async (): Promise<void> => {
  * Android asks for the permission to post notifications. The rider only needs
  * it while the route is running.
  */
-export const requestTurnPermission = async (): Promise<boolean> => {
+export const requestNotificationPermission = async (): Promise<boolean> => {
     if (Platform.OS !== 'android') {
         return true;
     }
@@ -56,9 +56,9 @@ export const requestTurnPermission = async (): Promise<boolean> => {
 };
 
 /**
- * Posts the indication of the next turn on the phone.
+ * Posts an alert of the ride on the phone.
  */
-export const notifyTurn = async (title: string, body: string): Promise<void> => {
+export const notifyRide = async (title: string, body: string): Promise<void> => {
     try {
         await ensureChannel();
         await Notifications.scheduleNotificationAsync({
@@ -70,7 +70,7 @@ export const notifyTurn = async (title: string, body: string): Promise<void> => 
             trigger: null,
         });
     } catch (error) {
-        logger.warn('the turn notification could not be posted', {
+        logger.warn('the ride notification could not be posted', {
             service: 'notifications',
             event: 'notify_failed',
             errorName: error instanceof Error ? error.name : 'UnknownError',

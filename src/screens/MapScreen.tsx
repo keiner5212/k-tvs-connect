@@ -85,8 +85,9 @@ export const MapScreen = () => {
     const now = useNow();
     const insets = useSafeAreaInsets();
     const {
+        activeRouteId,
         addAvoidPoint,
-        arrival,
+        estimate,
         routes,
         setVariant,
         variant,
@@ -102,7 +103,6 @@ export const MapScreen = () => {
         recenter,
         removeAvoidPoint,
         route,
-        routeSource,
         setDestination,
     } = useMapStore();
 
@@ -227,7 +227,7 @@ export const MapScreen = () => {
         if (!destination || !position) {
             return;
         }
-        if (routeSource === 'saved') {
+        if (activeRouteId) {
             return;
         }
         const last = lastComputed.current;
@@ -246,7 +246,7 @@ export const MapScreen = () => {
             longitude: position[1],
         };
         void compute(position[0], position[1]);
-    }, [destination, position, compute, routeSource]);
+    }, [destination, position, compute, activeRouteId]);
 
     /**
      * A new destination puts the camera back on the rider. The maplibre
@@ -401,8 +401,6 @@ export const MapScreen = () => {
     const startNavigation = async () => {
         setStartingNavigation(true);
         try {
-            const { requestTurnPermission } = await import('@services/notifications.service');
-            await requestTurnPermission();
             await startNavigationAction();
         } finally {
             setStartingNavigation(false);
@@ -427,7 +425,7 @@ export const MapScreen = () => {
             durationSeconds: result.durationSeconds,
             geometry: result.geometry,
             avoidPoints,
-            maneuvers: result.maneuvers ?? [],
+            achievedTimes: [],
         });
         setRouteSaved(true);
         logger.info('the route was saved', {
@@ -574,8 +572,8 @@ export const MapScreen = () => {
                     arrivalLabel={
                         progress.started
                             ? formatClockTime(now + progress.timeLeftSeconds * 1000)
-                            : arrival
-                                ? formatClockTime(arrival.arrivalAt)
+                            : estimate
+                                ? formatClockTime(now + estimate.seconds * 1000)
                                 : null
                     }
                     avoidPointCount={avoidPoints.length}
@@ -587,10 +585,10 @@ export const MapScreen = () => {
                         settings.unitSystem,
                     )}
                     arrived={progress.arrived}
-                    steps={progress.steps}
-                    unitSystem={settings.unitSystem}
                     durationLabel={formatDuration(
-                        progress.started ? progress.timeLeftSeconds : route?.durationSeconds ?? 0,
+                        progress.started
+                            ? progress.timeLeftSeconds
+                            : estimate?.seconds ?? route?.durationSeconds ?? 0,
                     )}
                     isComputing={computing}
                     isNavigating={progress.started}

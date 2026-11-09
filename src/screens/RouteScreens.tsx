@@ -12,19 +12,60 @@ import { AvoidPointList, PlaceSearchList } from '@components/map';
 import { EmptyState } from '@components/feedback';
 import { PrimaryButton, TextField, showConfirm } from '@components/controls';
 import ScreenContainer from '@components/ScreenContainer';
+import { useNow } from '@hooks/useNow';
 import { useTheme } from '@hooks/useTheme';
 import { useCameraStore } from '@stores/cameraStore';
 import { useLocationStore } from '@stores/locationStore';
 import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
-import { Place, RootStackParamList, SavedRoute } from '@typings/types';
+import { Place, RootStackParamList, SavedRoute, AchievedTime } from '@typings/types';
 import { searchPlaces } from '@services/geocoding.service';
 import { MIN_QUERY_LENGTH } from '@config/geocoding';
 import { deleteRoute, getRoute, listRoutes, renameRoute } from '@services/db/routeRepository';
-import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
+import { estimateRoute } from '@services/eta.service';
+import { formatClockTime, formatDay, formatDistance, formatDuration } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
+
+/** the time a saved route is expected to take */
+const estimateOf = (route: SavedRoute) =>
+    estimateRoute(route.achievedTimes, route.durationSeconds);
+
+/**
+ * The times the rider took on a route, the newest first.
+ */
+const AchievedTimesList = ({ times }: { times: AchievedTime[] }) => {
+    const { colors } = useTheme();
+
+    if (times.length === 0) {
+        return null;
+    }
+
+    return (
+        <>
+            <View style={styles.sectionHeader}>
+                <MaterialIcons color={colors.mutedForeground} name="timer" size={18} />
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Times you rode it</Text>
+            </View>
+            {times.map((time, index) => (
+                <View
+                    accessible
+                    accessibilityLabel={`${formatDuration(time.seconds)}, ${formatDay(time.achievedAt)}`}
+                    key={`${time.achievedAt}-${index}`}
+                    style={styles.timeRow}
+                >
+                    <Text style={[styles.timeValue, { color: colors.foreground }]}>
+                        {formatDuration(time.seconds)}
+                    </Text>
+                    <Text style={[styles.timeDay, { color: colors.mutedForeground }]}>
+                        {formatDay(time.achievedAt)}
+                    </Text>
+                </View>
+            ))}
+        </>
+    );
+};
 
 export const PlaceSearchScreen = () => {
     const navigation = useNavigation<Navigation>();
@@ -183,6 +224,7 @@ export const SavedRoutesScreen = () => {
                         ) : (
                             <>
                                 <TouchableOpacity
+                                    accessibilityLabel={`${route.name}. ${formatDistance(route.distanceMeters, 'metric')}. ${formatDuration(estimateOf(route).seconds)}. ${route.avoidPoints.length} avoided${route.achievedTimes.length > 0 ? `. Ridden ${route.achievedTimes.length} time${route.achievedTimes.length === 1 ? '' : 's'}, last ${formatDuration(route.achievedTimes[0].seconds)}` : ''}`}
                                     accessibilityRole="button"
                                     onPress={() => navigation.navigate('RoutePreview', { routeId: route.id })}
                                     style={styles.routeMain}
@@ -210,8 +252,16 @@ export const SavedRoutesScreen = () => {
                                             numberOfLines={1}
                                             style={[styles.routeMeta, { color: colors.mutedForeground }]}
                                         >
-                                            {`${formatDistance(route.distanceMeters, 'metric')} · ${formatDuration(route.durationSeconds)} · ${route.avoidPoints.length} avoided`}
+                                            {`${formatDistance(route.distanceMeters, 'metric')} · ${formatDuration(estimateOf(route).seconds)} · ${route.avoidPoints.length} avoided`}
                                         </Text>
+                                        {route.achievedTimes.length > 0 ? (
+                                            <Text
+                                                numberOfLines={1}
+                                                style={[styles.routeMeta, { color: colors.mutedForeground }]}
+                                            >
+                                                {`Ridden ${route.achievedTimes.length} time${route.achievedTimes.length === 1 ? '' : 's'} · last ${formatDuration(route.achievedTimes[0].seconds)}`}
+                                            </Text>
+                                        ) : null}
                                     </View>
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -280,12 +330,39 @@ export const RoutePreviewScreen = () => {
                 {saved ? (
                     <>
                         <Text style={[styles.title, { color: colors.foreground }]}>{saved.name}</Text>
-                        <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                            {`${formatDistance(saved.distanceMeters, 'metric')} · ${formatDuration(saved.durationSeconds)}`}
+
+                        <View style={styles.metricRow}>
+                            <View style={styles.metric}>
+                                <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
+                                    Distance
+                                </Text>
+                                <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                                    {formatDistance(saved.distanceMeters, 'metric')}
+                                </Text>
+                            </View>
+                            <View style={styles.metric}>
+                                <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>
+                                    Estimate
+                                </Text>
+                                <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                                    {formatDuration(
+                                        estimateRoute(saved.achievedTimes, saved.durationSeconds).seconds,
+                                    )}
+                                </Text>
+                            </View>
+                        </View>
+
+                        <Text style={[styles.note, { color: colors.mutedForeground }]}>
+                            {saved.achievedTimes.length > 0
+                                ? `Your average of ${saved.achievedTimes.length} ride${saved.achievedTimes.length === 1 ? '' : 's'}.`
+                                : "The map's estimate."}
                         </Text>
+
                         <Text style={[styles.meta, { color: colors.mutedForeground }]}>
-                            {`${saved.avoidPoints.length} points to avoid`}
+                            {`${saved.avoidPoints.length} point${saved.avoidPoints.length === 1 ? '' : 's'} to avoid`}
                         </Text>
+
+                        <AchievedTimesList times={saved.achievedTimes} />
 
                         <View style={styles.footer}>
                             <PrimaryButton
@@ -405,6 +482,21 @@ const styles = StyleSheet.create({
         ...typography.body,
         marginTop: spacing.xs,
     },
+    timeDay: {
+        ...typography.caption,
+    },
+    timeRow: {
+        alignItems: 'center',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        flexDirection: 'row',
+        gap: spacing.sm,
+        justifyContent: 'space-between',
+        paddingVertical: spacing.sm,
+    },
+    timeValue: {
+        ...typography.subheading,
+        flex: 1,
+    },
     title: {
         ...typography.title,
         marginBottom: spacing.sm,
@@ -422,7 +514,8 @@ export const RouteDetailsScreen = () => {
     const { settings } = useSettingsStore();
     const { routeCameras, routeSplit, publishedAt, stale } = useCameraStore();
     const { navigation: progress, startNavigation, stopNavigation } = useMapStore();
-    const { arrival, avoidPoints, destination, route } = useMapStore();
+    const { estimate, avoidPoints, destination, route } = useMapStore();
+    const now = useNow();
 
     const staleCameraData = stale;
 
@@ -462,7 +555,7 @@ export const RouteDetailsScreen = () => {
                         Duration
                     </Text>
                     <Text style={[styles.metricValue, { color: colors.foreground }]}>
-                        {formatDuration(route.durationSeconds)}
+                        {formatDuration(estimate?.seconds ?? route.durationSeconds)}
                     </Text>
                 </View>
                 <View style={styles.metric}>
@@ -470,16 +563,22 @@ export const RouteDetailsScreen = () => {
                         Arrival
                     </Text>
                     <Text style={[styles.metricValue, { color: colors.foreground }]}>
-                        {arrival ? formatClockTime(arrival.arrivalAt) : 'Unknown'}
+                        {estimate
+                            ? formatClockTime(now + estimate.seconds * 1000)
+                            : 'Unknown'}
                     </Text>
                 </View>
             </View>
 
-            {arrival ? (
+            {estimate ? (
                 <Text style={[styles.note, { color: colors.mutedForeground }]}>
-                    {arrival.explanation}
+                    {estimate.source === 'history'
+                        ? `Your average of ${estimate.achievedTimes.length} ride${estimate.achievedTimes.length === 1 ? '' : 's'}.`
+                        : "The map's estimate."}
                 </Text>
             ) : null}
+
+            <AchievedTimesList times={estimate?.achievedTimes ?? []} />
 
             <View style={styles.sectionHeader}>
                 <MaterialIcons color={colors.mutedForeground} name="navigation" size={18} />
@@ -488,8 +587,8 @@ export const RouteDetailsScreen = () => {
                 </Text>
             </View>
             <Text style={[styles.note, { color: colors.mutedForeground }]}>
-                The app follows your position along the route and shows the next turn, the
-                distance that is left and the time of arrival.
+                The app follows your position along the route and shows the distance that is
+                left and the time of arrival.
             </Text>
             <View style={styles.actionRow}>
                 <PrimaryButton

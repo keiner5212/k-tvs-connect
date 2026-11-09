@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS routes (
   duration_seconds REAL NOT NULL,
   geometry TEXT NOT NULL,
   avoid_points TEXT NOT NULL,
-  maneuvers TEXT NOT NULL DEFAULT '[]',
+  achieved_times TEXT NOT NULL DEFAULT '[]',
   created_at INTEGER NOT NULL
 );
 
@@ -59,42 +59,6 @@ CREATE TABLE IF NOT EXISTS camera_preferences (
   avoid_enabled INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE TABLE IF NOT EXISTS route_origins (
-  id TEXT PRIMARY KEY NOT NULL,
-  latitude REAL NOT NULL,
-  longitude REAL NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS route_contexts (
-  id TEXT PRIMARY KEY NOT NULL,
-  destination_key TEXT NOT NULL,
-  origin_anchor_id TEXT NOT NULL,
-  origin_lat REAL NOT NULL,
-  origin_lon REAL NOT NULL,
-  destination_lat REAL NOT NULL,
-  destination_lon REAL NOT NULL,
-  router_seconds REAL NOT NULL,
-  router_meters REAL NOT NULL,
-  computed_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS route_observations (
-  id TEXT PRIMARY KEY NOT NULL,
-  destination_key TEXT NOT NULL,
-  origin_anchor_id TEXT NOT NULL,
-  observed_at INTEGER NOT NULL,
-  observed_seconds REAL NOT NULL,
-  router_seconds REAL NOT NULL,
-  observed_meters REAL NOT NULL,
-  router_meters REAL NOT NULL,
-  confidence REAL NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_route_observations_key
-  ON route_observations (destination_key, origin_anchor_id, observed_at);
-
 CREATE TABLE IF NOT EXISTS geocode_cache (
   cache_key TEXT PRIMARY KEY NOT NULL,
   query TEXT NOT NULL,
@@ -116,7 +80,7 @@ CREATE TABLE IF NOT EXISTS settings (
  * The schema of the app has a version, so a table that changes shape can be
  * rebuilt on the phones that already have the old one.
  */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 const MIGRATIONS: { version: number; statements: string[] }[] = [
     {
@@ -124,9 +88,35 @@ const MIGRATIONS: { version: number; statements: string[] }[] = [
         statements: ['DROP TABLE IF EXISTS bikes;', 'DROP TABLE IF EXISTS rides;'],
     },
     {
-        version: 5,
+        version: 6,
         statements: [
-            "ALTER TABLE routes ADD COLUMN maneuvers TEXT NOT NULL DEFAULT '[]';",
+            'DROP TABLE IF EXISTS routes_v6;',
+            `CREATE TABLE routes_v6 (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  origin_name TEXT NOT NULL,
+  destination_name TEXT NOT NULL,
+  origin_lat REAL NOT NULL,
+  origin_lon REAL NOT NULL,
+  destination_lat REAL NOT NULL,
+  destination_lon REAL NOT NULL,
+  distance_meters REAL NOT NULL,
+  duration_seconds REAL NOT NULL,
+  geometry TEXT NOT NULL,
+  avoid_points TEXT NOT NULL,
+  achieved_times TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL
+);`,
+            `INSERT INTO routes_v6 (id, name, origin_name, destination_name, origin_lat, origin_lon,
+  destination_lat, destination_lon, distance_meters, duration_seconds, geometry, avoid_points, created_at)
+SELECT id, name, origin_name, destination_name, origin_lat, origin_lon,
+  destination_lat, destination_lon, distance_meters, duration_seconds, geometry, avoid_points, created_at
+FROM routes;`,
+            'DROP TABLE routes;',
+            'ALTER TABLE routes_v6 RENAME TO routes;',
+            'DROP TABLE IF EXISTS route_origins;',
+            'DROP TABLE IF EXISTS route_contexts;',
+            'DROP TABLE IF EXISTS route_observations;',
         ],
     },
 ];

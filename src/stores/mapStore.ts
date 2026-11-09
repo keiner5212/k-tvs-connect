@@ -3,22 +3,15 @@ import { create } from 'zustand';
 import {
     AvoidPoint,
     Place,
-    RouteManeuver,
     RouteResult,
-    RouteStep,
     SavedRoute,
     TrafficCamera,
 } from '@typings/types';
-import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
+import { estimateRoute, isRideOfRoute, RouteEstimate } from '@services/eta.service';
 import { CAMERA_AVOID_RADIUS_METERS } from '@services/ansv.service';
 import { Costing, computeRoute, DirectedAvoid } from '@services/valhalla.service';
 import { CameraPassage, ROUTE_CORRIDOR_METERS, useCameraStore } from '@stores/cameraStore';
 import { decodePolyline, distanceBetween, projectOntoPath } from '@utils/polyline';
-import {
-    listObservations,
-    recordRouteContext,
-    RouteContext,
-} from '@services/db/etaRepository';
 import {
     deleteAvoidPoint as deleteStoredAvoidPoint,
     insertAvoidPoint,
@@ -36,8 +29,6 @@ export interface NavigationProgress {
     startLongitude: number;
     distanceLeftMeters: number;
     timeLeftSeconds: number;
-    /** the turns that are still ahead, with the distance to each one */
-    steps: RouteStep[];
     arrived: boolean;
 }
 
@@ -62,12 +53,11 @@ interface MapState {
     destination: Place | null;
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
-    /** a route that comes from the saved list is not asked to the router again */
-    routeSource: 'computed' | 'saved';
+    /** the saved route that is on screen, a computed one has none */
+    activeRouteId: string | null;
     routes: RouteVariants;
     variant: RouteVariant;
-    arrival: ArrivalEstimate | null;
-    routeContext: RouteContext | null;
+    estimate: RouteEstimate | null;
     computing: boolean;
     error: string | null;
     routeFailures: number;
@@ -87,65 +77,14 @@ interface MapState {
     startNavigation: () => Promise<boolean>;
     stopNavigation: () => void;
     updateNavigation: (latitude: number, longitude: number) => void;
+    recordRide: (travelledMeters: number) => Promise<void>;
 }
 
-/**
- * The pictogram the cluster draws. The original sends the id of the arrow of
- * the manoeuvre, and 34 when there is no manoeuvre left.
- */
-/**
- * The direction of a valhalla manoeuvre, which is what the cluster uses to show
- * a left or a right arrow when the turn is close.
- */
-/**
- * The types of the router: 1 start, 4 destination, 5 destination right, 6
- * destination left, 9 slight right, 10 right, 11 sharp right, 12 u-turn
- * right, 13 u-turn left, 14 sharp left, 15 left, 16 slight left, 20 exit
- * right, 21 exit left, 23 stay right, 24 stay left, 37 merge right, 38 merge
- * left.
- */
-const START_MANEUVER_TYPE = 1;
-const ARRIVAL_MANEUVER_TYPES = [4, 5, 6];
-
 /** how far the rider has to move before the ride counts as started */
-const RIDE_START_METERS = 40;
+const RIDE_START_METERS = 10;
 
-const turnDirectionFromType = (type: number): 'left' | 'right' | null => {
-    if (type < 0) {
-        return null;
-    }
-    if ([9, 10, 11, 12, 20, 23, 37].includes(type)) {
-        return 'right';
-    }
-    if ([13, 14, 15, 16, 21, 24, 38].includes(type)) {
-        return 'left';
-    }
-    return null;
-};
-
-/**
- * The steps that are still ahead of the rider, with the distance to each one.
- * The arrival is the last step of the list.
- */
-const buildSteps = (maneuvers: RouteManeuver[], travelled: number): RouteStep[] => {
-    const steps: RouteStep[] = [];
-    for (const maneuver of maneuvers) {
-        if (maneuver.type === START_MANEUVER_TYPE) {
-            continue;
-        }
-        const distance = maneuver.distance - travelled;
-        if (distance < -15) {
-            continue;
-        }
-        steps.push({
-            distanceMeters: Math.max(0, distance),
-            instruction: maneuver.instruction,
-            turnDirection: turnDirectionFromType(maneuver.type),
-            isArrival: ARRIVAL_MANEUVER_TYPES.includes(maneuver.type),
-        });
-    }
-    return steps;
-};
+/** the ride ends when the rider is this close to the destination */
+const ARRIVAL_METERS = 10;
 
 /**
  * The shape of the route is decoded once and kept, because the navigation reads
@@ -160,53 +99,6 @@ const pointsOfRoute = (geometry: string): { lat: number; lon: number }[] => {
         decodedPoints = decodePolyline(geometry, 6);
     }
     return decodedPoints;
-};
-
-/**
- * What the route really took. Only a route that is on the list of saved
- * routes counts, so the history belongs to the routes the rider keeps.
- */
-const recordCompletion = async (state: MapState): Promise<void> => {
-    const { destination, navigation, route, routeContext } = state;
-    if (!route || !routeContext || !destination || !navigation.ridingSince) {
-        return;
-    }
-
-    try {
-        const { listRoutes } = await import('@services/db/routeRepository');
-        const saved = await listRoutes();
-        const isSaved = saved.some(
-            (item) =>
-                item.destinationLat === destination.latitude &&
-                item.destinationLon === destination.longitude &&
-                item.geometry === route.geometry,
-        );
-        if (!isSaved) {
-            return;
-        }
-
-        const observedSeconds = Math.round((Date.now() - navigation.ridingSince) / 1000);
-        const { recordObservation } = await import('@services/db/etaRepository');
-        const stored = await recordObservation({
-            context: routeContext,
-            observedMeters: route.distanceMeters,
-            observedSeconds,
-        });
-        if (stored) {
-            logger.info('the time of the route was stored', {
-                service: 'db',
-                event: 'route_observed',
-                count: observedSeconds,
-                durationMs: observedSeconds * 1000,
-            });
-        }
-    } catch (error) {
-        logger.warn('the time of the route could not be stored', {
-            service: 'db',
-            event: 'route_observed',
-            errorName: error instanceof Error ? error.name : 'UnknownError',
-        });
-    }
 };
 
 const describeRouteError = (error: unknown): string => {
@@ -412,11 +304,10 @@ export const useMapStore = create<MapState>((set, get) => ({
     destination: null,
     avoidPoints: [],
     route: null,
-    routeSource: 'computed',
+    activeRouteId: null,
     routes: { short: null, safe: null },
     variant: 'short',
-    arrival: null,
-    routeContext: null,
+    estimate: null,
     computing: false,
     error: null,
     routeFailures: 0,
@@ -427,7 +318,6 @@ export const useMapStore = create<MapState>((set, get) => ({
         startLongitude: 0,
         distanceLeftMeters: 0,
         timeLeftSeconds: 0,
-        steps: [],
         arrived: false,
     },
     focus: null,
@@ -504,34 +394,13 @@ export const useMapStore = create<MapState>((set, get) => ({
             const variant = get().variant;
             const chosen = variant === 'safe' && safe ? safe : short;
 
-            const context = await recordRouteContext({
-                destinationKey: destinationKey(destination.latitude, destination.longitude),
-                originLat,
-                originLon,
-                destinationLat: destination.latitude,
-                destinationLon: destination.longitude,
-                routerSeconds: chosen.route.durationSeconds,
-                routerMeters: chosen.route.distanceMeters,
-            });
-
-            const observations = await listObservations(
-                context.destinationKey,
-                context.originAnchorId,
-            );
-            const arrival = estimateArrival(
-                chosen.route.durationSeconds,
-                chosen.route.distanceMeters,
-                observations,
-            );
-
             publishPlan(chosen.plan);
 
             set({
                 route: chosen.route,
-                routeSource: 'computed',
+                activeRouteId: null,
                 routes: { short: short.route, safe: safe?.route ?? null },
-                arrival,
-                routeContext: context,
+                estimate: estimateRoute([], chosen.route.durationSeconds),
                 computing: false,
                 routeFailures: 0,
             });
@@ -553,14 +422,14 @@ export const useMapStore = create<MapState>((set, get) => ({
         set({
             route: null,
             routes: { short: null, safe: null },
-            arrival: null,
-            routeContext: null,
+            activeRouteId: null,
+            estimate: null,
             destination: null,
             error: null,
         });
     },
     setVariant: (variant) => {
-        const { routes, routeContext, variant: current } = get();
+        const { estimate, routes, variant: current } = get();
         if (variant === current) {
             return;
         }
@@ -569,22 +438,11 @@ export const useMapStore = create<MapState>((set, get) => ({
             return;
         }
         publishPlan(cameraPlans[variant]);
-        set({ variant, route: next });
-
-        if (!routeContext) {
-            return;
-        }
-        void listObservations(routeContext.destinationKey, routeContext.originAnchorId).then(
-            (observations) => {
-                set({
-                    arrival: estimateArrival(
-                        next.durationSeconds,
-                        next.distanceMeters,
-                        observations,
-                    ),
-                });
-            },
-        );
+        set({
+            variant,
+            route: next,
+            estimate: estimateRoute(estimate?.achievedTimes ?? [], next.durationSeconds),
+        });
     },
 
     /**
@@ -605,38 +463,14 @@ export const useMapStore = create<MapState>((set, get) => ({
             distanceMeters: saved.distanceMeters,
             durationSeconds: saved.durationSeconds,
             geometry: saved.geometry,
-            legs: [],
-            maneuvers: saved.maneuvers ?? [],
         };
 
-        const { useLocationStore } = await import('@stores/locationStore');
-        const position = useLocationStore.getState().position;
-        const context = await recordRouteContext({
-            destinationKey: destinationKey(destination.latitude, destination.longitude),
-            originLat: position?.[0] ?? saved.originLat,
-            originLon: position?.[1] ?? saved.originLon,
-            destinationLat: destination.latitude,
-            destinationLon: destination.longitude,
-            routerSeconds: saved.durationSeconds,
-            routerMeters: saved.distanceMeters,
-        });
-        const observations = await listObservations(
-            context.destinationKey,
-            context.originAnchorId,
-        );
-        const arrival = estimateArrival(
-            saved.durationSeconds,
-            saved.distanceMeters,
-            observations,
-        );
-
         set({
-            arrival,
+            activeRouteId: saved.id,
             destination,
             error: null,
+            estimate: estimateRoute(saved.achievedTimes, saved.durationSeconds),
             route,
-            routeSource: 'saved',
-            routeContext: context,
             routes: { short: route, safe: null },
             variant: 'short',
         });
@@ -650,6 +484,9 @@ export const useMapStore = create<MapState>((set, get) => ({
         if (!destination || !route) {
             return false;
         }
+
+        const { requestNotificationPermission } = await import('@services/notifications.service');
+        await requestNotificationPermission();
 
         const { useLocationStore } = await import('@stores/locationStore');
         const position = useLocationStore.getState().position;
@@ -683,7 +520,6 @@ export const useMapStore = create<MapState>((set, get) => ({
                 startLongitude: 0,
                 distanceLeftMeters: 0,
                 timeLeftSeconds: 0,
-                steps: [],
                 arrived: false,
             },
         });
@@ -694,8 +530,8 @@ export const useMapStore = create<MapState>((set, get) => ({
     },
 
     updateNavigation: (latitude, longitude) => {
-        const { route, navigation, arrival } = get();
-        if (!route || !navigation.started || !route.geometry) {
+        const { destination, estimate, navigation, route } = get();
+        if (!route || !navigation.started || !route.geometry || !destination) {
             return;
         }
 
@@ -707,13 +543,11 @@ export const useMapStore = create<MapState>((set, get) => ({
 
         const travelled = projection.distance;
         const distanceLeftMeters = Math.max(0, route.distanceMeters - travelled);
-        const factor = arrival?.factor ?? 1;
+        const total = estimate?.seconds ?? route.durationSeconds;
         const timeLeftSeconds = Math.max(
             0,
-            Math.round((route.durationSeconds * distanceLeftMeters) / Math.max(1, route.distanceMeters) * factor),
+            Math.round((total * distanceLeftMeters) / Math.max(1, route.distanceMeters)),
         );
-
-        const steps = buildSteps(route.maneuvers ?? [], travelled);
 
         /**
          * The time of the route starts when the rider moves, not when the
@@ -730,7 +564,17 @@ export const useMapStore = create<MapState>((set, get) => ({
                 ? Date.now()
                 : 0);
 
-        const arrived = distanceLeftMeters < 25;
+        /**
+         * The ride ends when the rider is on the destination. The place can be
+         * a few metres off the road, so the end of the route counts too.
+         */
+        const arrived =
+            navigation.arrived ||
+            distanceLeftMeters <= ARRIVAL_METERS ||
+            distanceBetween(
+                { lat: latitude, lon: longitude },
+                { lat: destination.latitude, lon: destination.longitude },
+            ) <= ARRIVAL_METERS;
 
         set({
             navigation: {
@@ -740,14 +584,50 @@ export const useMapStore = create<MapState>((set, get) => ({
                 startLongitude: navigation.startLongitude,
                 distanceLeftMeters,
                 timeLeftSeconds,
-                steps,
                 arrived,
             },
         });
 
         if (arrived && !navigation.arrived) {
-            void recordCompletion(get());
+            void get().recordRide(travelled);
+        }
+    },
+
+    /**
+     * What the route really took. Only a saved route keeps the time, so the
+     * history belongs to the routes the rider keeps.
+     */
+    recordRide: async (travelledMeters) => {
+        const { activeRouteId, navigation, route } = get();
+        if (!activeRouteId || !navigation.ridingSince || !route) {
+            return;
         }
 
+        const seconds = Math.round((Date.now() - navigation.ridingSince) / 1000);
+        if (!isRideOfRoute(seconds, travelledMeters, route.distanceMeters)) {
+            return;
+        }
+
+        try {
+            const { recordAchievedTime } = await import('@services/db/routeRepository');
+            const achievedTimes = await recordAchievedTime(activeRouteId, seconds);
+            if (!achievedTimes) {
+                return;
+            }
+
+            set({ estimate: estimateRoute(achievedTimes, route.durationSeconds) });
+            logger.info('the time of the route was stored', {
+                service: 'db',
+                event: 'route_observed',
+                count: seconds,
+                durationMs: seconds * 1000,
+            });
+        } catch (error) {
+            logger.warn('the time of the route could not be stored', {
+                service: 'db',
+                event: 'route_observed',
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+        }
     },
 }));

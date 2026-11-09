@@ -1,4 +1,4 @@
-import { AvoidPoint, RouteLeg, RouteManeuver, RouteResult } from '@typings/types';
+import { AvoidPoint, RouteResult } from '@typings/types';
 import { decodePolyline, distanceAlongPath, encodePolyline, LatLon } from '@utils/polyline';
 import { httpPostJson } from './http.service';
 
@@ -18,16 +18,9 @@ const pathLengthMeters = (shape: string): number => {
 
 export type Costing = 'motor_scooter' | 'motorcycle' | 'bicycle' | 'auto';
 
-interface ValhallaManeuver {
-    instruction: string;
-    begin_shape_index?: number;
-    type?: number;
-}
-
 interface ValhallaLeg {
     summary: { length: number; time: number };
     shape: string;
-    maneuvers: ValhallaManeuver[];
 }
 
 interface ValhallaTrip {
@@ -192,31 +185,6 @@ const tripPoints = (trip: ValhallaTrip): LatLon[] =>
  * the first one.
  */
 const tripShape = (trip: ValhallaTrip): string => encodePolyline(tripPoints(trip), 6);
-
-/**
- * The distance from the start of the route to each maneuver. The router gives
- * the length of every stretch, but those lengths do not add up to the route,
- * so the distance comes from the shape: a maneuver sits at its
- * begin_shape_index.
- */
-const routeManeuvers = (legs: ValhallaLeg[]): RouteManeuver[] => {
-    const maneuvers: RouteManeuver[] = [];
-    let offset = 0;
-    for (const leg of legs) {
-        const points = decodePolyline(leg.shape ?? '', 6);
-        const cumulative = distanceAlongPath(points);
-        for (const maneuver of leg.maneuvers ?? []) {
-            const index = maneuver.begin_shape_index ?? 0;
-            maneuvers.push({
-                instruction: maneuver.instruction ?? '',
-                distance: offset + (cumulative[index] ?? 0),
-                type: maneuver.type ?? 0,
-            });
-        }
-        offset += cumulative[cumulative.length - 1] ?? 0;
-    }
-    return maneuvers;
-};
 
 const roadShares = async (
     baseUrl: string,
@@ -397,18 +365,6 @@ export const computeRoute = async (
     const trip =
         costing === 'auto' ? await preferMainRoads(baseUrl, body, options) : body.trip;
 
-    const maneuvers = routeManeuvers(trip?.legs ?? []);
-
-    const legs: RouteLeg[] = (trip?.legs ?? []).map((leg) => {
-        const legMeters = pathLengthMeters(leg.shape);
-        return {
-            distanceMeters: legMeters > 0 ? legMeters : (leg.summary?.length ?? 0) * 1000,
-            durationSeconds: leg.summary?.time ?? 0,
-            maneuver: leg.maneuvers?.[0]?.instruction ?? '',
-            instruction: leg.maneuvers?.map((maneuver) => maneuver.instruction).join(' ') ?? '',
-        };
-    });
-
     const geometry = tripShape(trip);
     const routeMeters = pathLengthMeters(geometry);
 
@@ -416,8 +372,6 @@ export const computeRoute = async (
         distanceMeters: routeMeters > 0 ? routeMeters : (trip?.summary?.length ?? 0) * 1000,
         durationSeconds: trip?.summary?.time ?? 0,
         geometry,
-        legs,
-        maneuvers,
         avoidOutcome: { applied, relaxed },
     };
 };
