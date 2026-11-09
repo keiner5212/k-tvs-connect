@@ -649,14 +649,14 @@ export const MapScreen = () => {
                         isStarting={startingNavigation}
                         destinationName={destination?.name ?? null}
                         distanceLabel={formatDistance(
-                            progress.started
-                                ? progress.distanceToManeuverMeters
-                                : route?.distanceMeters ?? 0,
+                            progress.started ? progress.distanceLeftMeters : route?.distanceMeters ?? 0,
                             settings.unitSystem,
                         )}
-                        distanceLeftLabel={
+                        arrived={progress.arrived}
+                        turnDirection={progress.turnDirection}
+                        turnDistanceLabel={
                             progress.started
-                                ? formatDistance(progress.distanceLeftMeters, settings.unitSystem)
+                                ? formatDistance(progress.distanceToManeuverMeters, settings.unitSystem)
                                 : null
                         }
                         durationLabel={formatDuration(

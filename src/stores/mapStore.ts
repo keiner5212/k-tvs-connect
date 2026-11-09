@@ -97,7 +97,14 @@ interface MapState {
  * The direction of a valhalla manoeuvre, which is what the cluster uses to show
  * a left or a right arrow when the turn is close.
  */
+/** the last maneuver of a route is the arrival, the one before it the finish */
+const ARRIVAL_MANEUVER_TYPE = 25;
+const FINISH_MANEUVER_TYPE = 11;
+
 const turnDirectionFromType = (type: number): 'left' | 'right' | null => {
+    if (type < 0) {
+        return null;
+    }
     /**
      * The types of the router: 0 keep left, 1 left, 2 slight left, 3 sharp
      * left, 4 right, 5 slight right, 6 sharp right, 23 start right, 24 start
@@ -684,11 +691,18 @@ export const useMapStore = create<MapState>((set, get) => ({
 
         const maneuvers = route.maneuvers ?? [];
         const travelled = route.distanceMeters - distanceLeftMeters;
+        /**
+         * The last maneuver of a route is the arrival, not a turn, so it never
+         * becomes the next instruction.
+         */
+        const turns = maneuvers.filter(
+            (maneuver) => maneuver.type !== ARRIVAL_MANEUVER_TYPE && maneuver.type !== FINISH_MANEUVER_TYPE,
+        );
         let accumulated = 0;
-        let next = maneuvers[maneuvers.length - 1];
+        let next = turns.length > 0 ? turns[turns.length - 1] : undefined;
         let distanceToManeuver = distanceLeftMeters;
 
-        for (const maneuver of maneuvers) {
+        for (const maneuver of turns) {
             accumulated += maneuver.distance;
             if (accumulated > travelled) {
                 next = maneuver;
@@ -707,7 +721,7 @@ export const useMapStore = create<MapState>((set, get) => ({
                 timeLeftSeconds,
                 distanceToManeuverMeters: distanceToManeuver,
                 instruction: next?.instruction ?? '',
-                turnDirection: turnDirectionFromType(next?.type ?? 0),
+                turnDirection: next ? turnDirectionFromType(next.type) : null,
                 arrived,
             },
         });

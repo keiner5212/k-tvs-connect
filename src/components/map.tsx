@@ -422,7 +422,9 @@ interface RouteSheetProps {
     isSaved: boolean;
     isStarting?: boolean;
     instruction: string;
-    distanceLeftLabel: string | null;
+    turnDistanceLabel: string | null;
+    turnDirection: 'left' | 'right' | null;
+    arrived: boolean;
     variant: RouteVariant;
     hasSafeRoute: boolean;
     onVariantChange: (variant: RouteVariant) => void;
@@ -451,7 +453,9 @@ export const RouteSheet = ({
     isSaved,
     isStarting,
     instruction,
-    distanceLeftLabel,
+    turnDistanceLabel,
+    turnDirection,
+    arrived,
     variant,
     hasSafeRoute,
     onVariantChange,
@@ -518,48 +522,127 @@ export const RouteSheet = ({
                 </Text>
             </View>
 
+            {isNavigating ? (
+                <View
+                    accessible
+                    accessibilityLabel={
+                        arrived
+                            ? 'You have arrived. End of the route.'
+                            : instruction.trim() === ''
+                                ? 'No turn information. Follow the highlighted line and the road signs.'
+                                : `In ${turnDistanceLabel ?? ''} to the turn, ${instruction}.`
+                    }
+                    style={[styles.indicationBand, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                >
+                    <View
+                        style={[
+                            styles.indicationDisc,
+                            {
+                                backgroundColor: arrived
+                                    ? colors.success
+                                    : instruction.trim() === ''
+                                        ? colors.secondary
+                                        : colors.primary,
+                            },
+                        ]}
+                    >
+                        <MaterialIcons
+                            color={
+                                arrived
+                                    ? colors.successForeground
+                                    : instruction.trim() === ''
+                                        ? colors.secondaryForeground
+                                        : colors.primaryForeground
+                            }
+                            name={
+                                arrived
+                                    ? 'place'
+                                    : turnDirection === 'left'
+                                        ? 'turn-left'
+                                        : turnDirection === 'right'
+                                            ? 'turn-right'
+                                            : 'arrow-upward'
+                            }
+                            size={28}
+                        />
+                    </View>
+                    <View style={styles.indicationText}>
+                        {arrived ? (
+                            <>
+                                <Text style={[styles.indicationTitle, { color: colors.foreground }]}>
+                                    You have arrived
+                                </Text>
+                                <Text style={[styles.indicationBody, { color: colors.mutedForeground }]}>
+                                    End of the route. Park safely.
+                                </Text>
+                            </>
+                        ) : instruction.trim() === '' ? (
+                            <>
+                                <Text style={[styles.indicationTitle, { color: colors.foreground }]}>
+                                    No turn information
+                                </Text>
+                                <Text style={[styles.indicationBody, { color: colors.mutedForeground }]}>
+                                    Follow the highlighted line and the road signs.
+                                </Text>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={[styles.indicationValue, { color: colors.foreground }]}>
+                                    {turnDistanceLabel}
+                                </Text>
+                                <Text style={[styles.indicationBody, { color: colors.foreground }]}>
+                                    {instruction}
+                                </Text>
+                            </>
+                        )}
+                    </View>
+                </View>
+            ) : null}
+
             {isComputing ? (
                 <Text style={[styles.sheetHint, { color: colors.mutedForeground }]}>
                     Computing route...
                 </Text>
             ) : (
                 <View style={styles.metricsRow}>
-                    <View style={styles.metric}>
-                        <MaterialIcons color={colors.mutedForeground} name="straighten" size={16} />
+                    <View
+                        accessible
+                        accessibilityLabel={`${isNavigating ? 'To the destination' : 'Distance'}, ${distanceLabel}`}
+                        style={styles.metric}
+                    >
+                        <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
+                            {isNavigating ? 'to destination' : 'distance'}
+                        </Text>
                         <Text style={[styles.metricValue, { color: colors.foreground }]}>
                             {distanceLabel}
                         </Text>
                     </View>
-                    <View style={styles.metric}>
-                        <MaterialIcons color={colors.mutedForeground} name="schedule" size={16} />
+                    <View
+                        accessible
+                        accessibilityLabel={`${isNavigating ? 'Time left' : 'Duration'}, ${durationLabel}`}
+                        style={styles.metric}
+                    >
+                        <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
+                            {isNavigating ? 'time left' : 'duration'}
+                        </Text>
                         <Text style={[styles.metricValue, { color: colors.foreground }]}>
                             {durationLabel}
                         </Text>
                     </View>
-                    <View style={styles.metric}>
-                        <MaterialIcons color={colors.mutedForeground} name="flag" size={16} />
+                    <View
+                        accessible
+                        accessibilityLabel={`Arrival, ${arrivalLabel ?? 'unknown'}`}
+                        style={styles.metric}
+                    >
+                        <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
+                            arrival
+                        </Text>
                         <Text style={[styles.metricValue, { color: colors.foreground }]}>
-                            {arrivalLabel ? `Arrives ${arrivalLabel}` : 'Arrival unknown'}
+                            {arrivalLabel ?? 'Unknown'}
                         </Text>
                     </View>
                 </View>
             )}
-
-            {isNavigating ? (
-                <View style={styles.instructionBox}>
-                    <MaterialIcons color={colors.primary} name="turn-right" size={20} />
-                    <View style={styles.instructionText}>
-                        <Text style={[styles.instruction, { color: colors.foreground }]}>
-                            {instruction || 'Follow the route'}
-                        </Text>
-                        {distanceLeftLabel ? (
-                            <Text style={[styles.instructionHint, { color: colors.mutedForeground }]}>
-                                {`${distanceLeftLabel} to the destination`}
-                            </Text>
-                        ) : null}
-                    </View>
-                </View>
-            ) : null}
 
             {hasSafeRoute ? (
                 <View style={styles.variantRow}>
@@ -871,21 +954,35 @@ const styles = StyleSheet.create({
         minHeight: 44,
         paddingHorizontal: layout.cardPadding,
     },
-    instruction: {
+    indicationBand: {
+        alignItems: 'center',
+        borderRadius: radii.lg,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.md,
+        padding: spacing.md,
+    },
+    indicationBody: {
         ...typography.body,
     },
-    instructionBox: {
+    indicationDisc: {
         alignItems: 'center',
-        flexDirection: 'row',
-        gap: spacing.sm,
-        marginTop: spacing.md,
+        borderRadius: radii.full,
+        height: 44,
+        justifyContent: 'center',
+        width: 44,
     },
-    instructionHint: {
-        ...typography.caption,
-        marginTop: 2,
-    },
-    instructionText: {
+    indicationText: {
         flex: 1,
+        gap: spacing.xs,
+        minWidth: 0,
+    },
+    indicationTitle: {
+        ...typography.heading,
+    },
+    indicationValue: {
+        ...typography.readout,
     },
     map: {
         flex: 1,
@@ -894,6 +991,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         flexDirection: 'row',
         gap: spacing.xs,
+    },
+    metricCaption: {
+        ...typography.caption,
     },
     metricValue: {
         ...typography.readout,
