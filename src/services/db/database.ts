@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS routes (
   duration_seconds REAL NOT NULL,
   geometry TEXT NOT NULL,
   avoid_points TEXT NOT NULL,
+  maneuvers TEXT NOT NULL DEFAULT '[]',
   created_at INTEGER NOT NULL
 );
 
@@ -115,12 +116,18 @@ CREATE TABLE IF NOT EXISTS settings (
  * The schema of the app has a version, so a table that changes shape can be
  * rebuilt on the phones that already have the old one.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const MIGRATIONS: { version: number; statements: string[] }[] = [
     {
         version: 4,
         statements: ['DROP TABLE IF EXISTS bikes;', 'DROP TABLE IF EXISTS rides;'],
+    },
+    {
+        version: 5,
+        statements: [
+            "ALTER TABLE routes ADD COLUMN maneuvers TEXT NOT NULL DEFAULT '[]';",
+        ],
     },
 ];
 

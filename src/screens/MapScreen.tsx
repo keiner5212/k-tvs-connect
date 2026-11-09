@@ -107,6 +107,7 @@ export const MapScreen = () => {
         replayRoute,
         setReplayRoute,
         route,
+        routeSource,
         setDestination,
     } = useMapStore();
 
@@ -237,6 +238,9 @@ export const MapScreen = () => {
         if (!destination || !position) {
             return;
         }
+        if (routeSource === 'saved') {
+            return;
+        }
         const last = lastComputed.current;
         if (last && last.destinationId === destination.id) {
             const moved = distanceMeters(
@@ -253,7 +257,7 @@ export const MapScreen = () => {
             longitude: position[1],
         };
         void compute(position[0], position[1]);
-    }, [destination, position, compute]);
+    }, [destination, position, compute, routeSource]);
 
     /**
      * A new destination puts the camera back on the rider. The maplibre
@@ -434,6 +438,7 @@ export const MapScreen = () => {
             durationSeconds: result.durationSeconds,
             geometry: result.geometry,
             avoidPoints,
+            maneuvers: result.maneuvers ?? [],
         });
         setRouteSaved(true);
         logger.info('the route was saved', {

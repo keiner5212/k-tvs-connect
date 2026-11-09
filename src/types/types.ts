@@ -72,6 +72,8 @@ export interface SavedRoute {
     durationSeconds: number;
     geometry: string;
     avoidPoints: AvoidPoint[];
+    /** the turns of the route, so it can be ridden again without the router */
+    maneuvers: RouteManeuver[];
     createdAt: number;
 }
 

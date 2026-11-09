@@ -1,4 +1,4 @@
-import { AvoidPoint, SavedRoute } from '@typings/types';
+import { AvoidPoint, RouteManeuver, SavedRoute } from '@typings/types';
 import { getDatabase, newId } from './database';
 
 interface RouteRow {
@@ -14,6 +14,7 @@ interface RouteRow {
     duration_seconds: number;
     geometry: string;
     avoid_points: string;
+    maneuvers: string;
     created_at: number;
 }
 
@@ -23,6 +24,13 @@ const toRoute = (row: RouteRow): SavedRoute => {
         avoidPoints = JSON.parse(row.avoid_points) as AvoidPoint[];
     } catch {
         avoidPoints = [];
+    }
+
+    let maneuvers: RouteManeuver[] = [];
+    try {
+        maneuvers = JSON.parse(row.maneuvers ?? '[]') as RouteManeuver[];
+    } catch {
+        maneuvers = [];
     }
 
     return {
@@ -38,6 +46,7 @@ const toRoute = (row: RouteRow): SavedRoute => {
         durationSeconds: row.duration_seconds,
         geometry: row.geometry,
         avoidPoints,
+        maneuvers,
         createdAt: row.created_at,
     };
 };
@@ -85,6 +94,19 @@ export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): 
         route.geometry,
     );
     if (existing) {
+        /**
+         * A route that was saved before the app kept the turns has none of
+         * them, and a route that is ridden again needs them. They come with
+         * the route the rider is on now.
+         */
+        if (toRoute(existing).maneuvers.length === 0 && (route.maneuvers ?? []).length > 0) {
+            await db.runAsync(
+                'UPDATE routes SET maneuvers = ? WHERE id = ?;',
+                JSON.stringify(route.maneuvers),
+                existing.id,
+            );
+            return { ...toRoute(existing), maneuvers: route.maneuvers ?? [] };
+        }
         return toRoute(existing);
     }
 
@@ -92,8 +114,9 @@ export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): 
 
     await db.runAsync(
         `INSERT INTO routes (id, name, origin_name, destination_name, origin_lat, origin_lon,
-       destination_lat, destination_lon, distance_meters, duration_seconds, geometry, avoid_points, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       destination_lat, destination_lon, distance_meters, duration_seconds, geometry, avoid_points,
+       maneuvers, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         saved.id,
         saved.name,
         saved.originName,
@@ -106,6 +129,7 @@ export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): 
         saved.durationSeconds,
         saved.geometry,
         JSON.stringify(saved.avoidPoints),
+        JSON.stringify(saved.maneuvers ?? []),
         saved.createdAt,
     );
 

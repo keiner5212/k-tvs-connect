@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { AvoidPoint, Place, RouteResult, TrafficCamera } from '@typings/types';
+import { AvoidPoint, Place, RouteResult, SavedRoute, TrafficCamera } from '@typings/types';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { CAMERA_AVOID_RADIUS_METERS } from '@services/ansv.service';
 import { Costing, computeRoute, DirectedAvoid } from '@services/valhalla.service';
@@ -60,6 +60,8 @@ interface MapState {
     replayRoute: ReplayRoute | null;
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
+    /** a route that comes from the saved list is not asked to the router again */
+    routeSource: 'computed' | 'saved';
     routes: RouteVariants;
     variant: RouteVariant;
     arrival: ArrivalEstimate | null;
@@ -81,6 +83,7 @@ interface MapState {
     setVariant: (variant: RouteVariant) => void;
     clearRoute: () => void;
     setReplayRoute: (route: ReplayRoute | null) => void;
+    startSavedRoute: (saved: SavedRoute) => Promise<boolean>;
     startNavigation: () => Promise<boolean>;
     stopNavigation: () => void;
     updateNavigation: (latitude: number, longitude: number) => void;
@@ -375,6 +378,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     replayRoute: null,
     avoidPoints: [],
     route: null,
+    routeSource: 'computed',
     routes: { short: null, safe: null },
     variant: 'short',
     arrival: null,
@@ -494,6 +498,7 @@ export const useMapStore = create<MapState>((set, get) => ({
 
             set({
                 route: chosen.route,
+                routeSource: 'computed',
                 routes: { short: short.route, safe: safe?.route ?? null },
                 arrival,
                 routeContext: context,
@@ -553,6 +558,64 @@ export const useMapStore = create<MapState>((set, get) => ({
     },
     setReplayRoute: (route) => {
         set({ replayRoute: route });
+    },
+
+    /**
+     * Doing a saved route again: the destination is set again and the route
+     * is the one that was saved, the router is not asked. From here the ride
+     * counts the time it takes and the estimate moves with it.
+     */
+    startSavedRoute: async (saved: SavedRoute) => {
+        const destination: Place = {
+            id: `saved-${saved.id}`,
+            name: saved.destinationName,
+            address: saved.destinationName,
+            latitude: saved.destinationLat,
+            longitude: saved.destinationLon,
+        };
+
+        const route: RouteResult = {
+            distanceMeters: saved.distanceMeters,
+            durationSeconds: saved.durationSeconds,
+            geometry: saved.geometry,
+            legs: [],
+            maneuvers: saved.maneuvers ?? [],
+        };
+
+        const { useLocationStore } = await import('@stores/locationStore');
+        const position = useLocationStore.getState().position;
+        const context = await recordRouteContext({
+            destinationKey: destinationKey(destination.latitude, destination.longitude),
+            originLat: position?.[0] ?? saved.originLat,
+            originLon: position?.[1] ?? saved.originLon,
+            destinationLat: destination.latitude,
+            destinationLon: destination.longitude,
+            routerSeconds: saved.durationSeconds,
+            routerMeters: saved.distanceMeters,
+        });
+        const observations = await listObservations(
+            context.destinationKey,
+            context.originAnchorId,
+        );
+        const arrival = estimateArrival(
+            saved.durationSeconds,
+            saved.distanceMeters,
+            observations,
+        );
+
+        set({
+            arrival,
+            destination,
+            error: null,
+            route,
+            routeSource: 'saved',
+            routeContext: context,
+            routes: { short: route, safe: null },
+            variant: 'short',
+        });
+
+        await get().startNavigation();
+        return true;
     },
 
     startNavigation: async () => {

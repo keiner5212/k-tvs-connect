@@ -263,7 +263,7 @@ export const RoutePreviewScreen = () => {
     const navigation = useNavigation<Navigation>();
     const route = useRoute<RouteProp<RootStackParamList, 'RoutePreview'>>();
     const { colors } = useTheme();
-    const setReplayRoute = useMapStore((state) => state.setReplayRoute);
+    const startSavedRoute = useMapStore((state) => state.startSavedRoute);
     const [saved, setSaved] = useState<SavedRoute | null>(null);
 
     useEffect(() => {
@@ -289,13 +289,9 @@ export const RoutePreviewScreen = () => {
 
                         <View style={styles.footer}>
                             <PrimaryButton
-                                label="Replay this route"
+                                label="Start this route"
                                 onPress={() => {
-                                    setReplayRoute({
-                                        geometry: saved.geometry,
-                                        distanceMeters: saved.distanceMeters,
-                                        durationSeconds: saved.durationSeconds,
-                                    });
+                                    void startSavedRoute(saved);
                                     navigation.navigate('Main', { screen: 'Map' });
                                 }}
                             />
