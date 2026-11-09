@@ -89,72 +89,65 @@ export const distanceAlongPath = (points: LatLon[]): number[] => {
     return cumulative;
 };
 
-export const pointAtDistance = (
+/**
+ * The meters between two points.
+ */
+export const distanceBetween = (a: LatLon, b: LatLon): number => {
+    const toRadians = Math.PI / 180;
+    const lat1 = a.lat * toRadians;
+    const lat2 = b.lat * toRadians;
+    const deltaLat = (b.lat - a.lat) * toRadians;
+    const deltaLon = (b.lon - a.lon) * toRadians;
+    const h =
+        Math.sin(deltaLat / 2) ** 2 +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) ** 2;
+    return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+};
+
+/**
+ * Where the target sits on the path: the distance along it from the start, the
+ * index of the vertex before it, and how far it is from the path. The point is
+ * projected on the segment it falls between, so the distance does not jump
+ * with the spacing of the vertices.
+ */
+export const projectOntoPath = (
     points: LatLon[],
-    cumulative: number[],
-    meters: number,
-): LatLon | null => {
+    target: LatLon,
+): { index: number; distance: number; offset: number } | null => {
     if (points.length === 0) {
         return null;
     }
-    if (meters <= 0) {
-        return points[0];
-    }
-    const total = cumulative[cumulative.length - 1];
-    if (meters >= total) {
-        return points[points.length - 1];
-    }
+    const cumulative = distanceAlongPath(points);
+    const latScale = 111320;
+    const lonScale = 111320 * Math.max(0.1, Math.cos((target.lat * Math.PI) / 180));
+    let bestIndex = 0;
+    let bestRatio = 0;
+    let bestOffset = Number.POSITIVE_INFINITY;
 
-    for (let index = 1; index < cumulative.length; index += 1) {
-        if (cumulative[index] >= meters) {
-            const span = cumulative[index] - cumulative[index - 1];
-            const ratio = span === 0 ? 0 : (meters - cumulative[index - 1]) / span;
-            const previous = points[index - 1];
-            const current = points[index];
-            return {
-                lat: previous.lat + (current.lat - previous.lat) * ratio,
-                lon: previous.lon + (current.lon - previous.lon) * ratio,
-            };
+    for (let index = 0; index < points.length - 1; index += 1) {
+        const start = points[index];
+        const end = points[index + 1];
+        const ax = (start.lon - target.lon) * lonScale;
+        const ay = (start.lat - target.lat) * latScale;
+        const dx = (end.lon - start.lon) * lonScale;
+        const dy = (end.lat - start.lat) * latScale;
+        const span = dx * dx + dy * dy;
+        const ratio =
+            span === 0 ? 0 : Math.min(1, Math.max(0, -(ax * dx + ay * dy) / span));
+        const px = ax + ratio * dx;
+        const py = ay + ratio * dy;
+        const offset = Math.sqrt(px * px + py * py);
+        if (offset < bestOffset) {
+            bestOffset = offset;
+            bestIndex = index;
+            bestRatio = ratio;
         }
     }
 
-    return points[points.length - 1];
-};
-
-/**
- * The index of the point of the path that is closest to the target.
- */
-export const nearestPointIndex = (points: LatLon[], target: LatLon): number => {
-    if (points.length === 0) {
-        return -1;
-    }
-
-    let best = 0;
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    for (let index = 0; index < points.length; index += 1) {
-        const latScale = 111320;
-        const lonScale = 111320 * Math.max(0.1, Math.cos((target.lat * Math.PI) / 180));
-        const dx = (points[index].lon - target.lon) * lonScale;
-        const dy = (points[index].lat - target.lat) * latScale;
-        const distance = dx * dx + dy * dy;
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            best = index;
-        }
-    }
-
-    return best;
-};
-
-/**
- * The meters left on the path from a point to the end.
- */
-export const remainingDistanceMeters = (points: LatLon[], fromIndex: number): number => {
-    if (fromIndex < 0 || fromIndex >= points.length - 1) {
-        return 0;
-    }
-    const distances = distanceAlongPath(points);
-    const total = distances[distances.length - 1];
-    return Math.max(0, total - distances[fromIndex]);
+    const segment = cumulative[bestIndex + 1] - cumulative[bestIndex];
+    return {
+        index: bestIndex,
+        distance: cumulative[bestIndex] + segment * bestRatio,
+        offset: bestOffset,
+    };
 };

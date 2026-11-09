@@ -60,73 +60,10 @@ export const Banner = ({ tone, message, actionLabel, onAction }: BannerProps) =>
     );
 };
 
-interface StaleNoticeProps {
-    ageSeconds: number;
-    onRetry?: () => void;
-}
-
-export const StaleNotice = ({ ageSeconds, onRetry }: StaleNoticeProps) => {
-    const { colors } = useTheme();
-
-    return (
-        <View style={[styles.banner, { backgroundColor: colors.card, borderLeftColor: colors.warning }]}>
-            <Text style={[styles.bannerText, { color: colors.foreground }]}>
-                {`Showing older data. The last values arrived ${ageSeconds} seconds ago.`}
-            </Text>
-            {onRetry ? (
-                <Text accessibilityRole="button" onPress={onRetry} style={[styles.action, { color: colors.primary }]}>
-                    Reconnect
-                </Text>
-            ) : null}
-        </View>
-    );
-};
-
-interface VehicleAlertItem {
-    id: string;
-    title: string;
-    body: string;
-}
-
-interface AlertBannerProps {
-    alerts: VehicleAlertItem[];
-}
-
-export const AlertBanner = ({ alerts }: AlertBannerProps) => {
-    const { colors } = useTheme();
-
-    if (alerts.length === 0) {
-        return null;
-    }
-
-    return (
-        <View style={styles.alertList}>
-            {alerts.map((alert) => (
-                <View
-                    key={alert.id}
-                    style={[styles.banner, { backgroundColor: colors.card, borderLeftColor: colors.error }]}
-                >
-                    <Text style={[styles.alertTitle, { color: colors.foreground }]}>{alert.title}</Text>
-                    {alert.body ? (
-                        <Text style={[styles.bannerText, { color: colors.mutedForeground }]}>{alert.body}</Text>
-                    ) : null}
-                </View>
-            ))}
-        </View>
-    );
-};
-
 const styles = StyleSheet.create({
     action: {
         ...typography.label,
         marginTop: spacing.md,
-    },
-    alertList: {
-        marginBottom: spacing.md,
-    },
-    alertTitle: {
-        ...typography.label,
-        marginBottom: spacing.xs,
     },
     banner: {
         borderLeftWidth: 3,

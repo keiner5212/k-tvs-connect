@@ -97,9 +97,13 @@ export const insertRoute = async (route: Omit<SavedRoute, 'id' | 'createdAt'>): 
         /**
          * A route that was saved before the app kept the turns has none of
          * them, and a route that is ridden again needs them. They come with
-         * the route the rider is on now.
+         * the route the rider is on now. A list whose distances are all zero
+         * was written by an older version, which read a field the router does
+         * not send.
          */
-        if (toRoute(existing).maneuvers.length === 0 && (route.maneuvers ?? []).length > 0) {
+        const stored = toRoute(existing).maneuvers;
+        const usable = stored.some((maneuver) => maneuver.distance > 0);
+        if (!usable && (route.maneuvers ?? []).length > 0) {
             await db.runAsync(
                 'UPDATE routes SET maneuvers = ? WHERE id = ?;',
                 JSON.stringify(route.maneuvers),

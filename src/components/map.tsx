@@ -17,11 +17,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconLabelButton } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
-import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
+import { AvoidPoint, CameraMarkerData, Place, RouteStep } from '@typings/types';
 import { SegmentedControl } from '@components/controls';
 import { RouteVariant } from '@stores/mapStore';
 import { compassName } from '@utils/cameraSense';
 import { decodePolyline } from '@utils/polyline';
+import { formatDistance, UnitSystem } from '@utils/format';
 import { rgba } from '@utils/hexToRgb';
 import { layout, radii, spacing, typography } from '@config/theme';
 
@@ -81,7 +82,6 @@ export interface MapCanvasProps {
     destination?: Place | null;
     followUser: boolean;
     followKey: number;
-    replayPosition?: [number, number] | null;
     cameras?: CameraMarkerData[];
     mapRef?: Ref<MapViewRef>;
     pinnedPoint?: [number, number] | null;
@@ -102,7 +102,6 @@ export const MapCanvas = ({
     destination,
     followUser,
     followKey,
-    replayPosition,
     cameras = [],
     mapRef,
     pinnedPoint,
@@ -219,14 +218,6 @@ export const MapCanvas = ({
                         }}
                     />
                 </ShapeSource>
-            ) : null}
-
-            {replayPosition ? (
-                <MarkerView allowOverlap coordinate={[replayPosition[1], replayPosition[0]]}>
-                    <View style={[styles.replayPin, { backgroundColor: colors.accent }]}>
-                        <Text style={[styles.replayLabel, { color: colors.primaryForeground }]}>R</Text>
-                    </View>
-                </MarkerView>
             ) : null}
 
             {destination ? (
@@ -410,6 +401,18 @@ export const RecenterButton = ({ disabled, onPress }: RecenterButtonProps) => {
     );
 };
 
+/** how many turns after the next one are shown in the band */
+const MAX_COMPACT_STEPS = 2;
+
+const stepIcon = (step: RouteStep): 'place' | 'turn-left' | 'turn-right' | 'arrow-upward' =>
+    step.isArrival
+        ? 'place'
+        : step.turnDirection === 'left'
+            ? 'turn-left'
+            : step.turnDirection === 'right'
+                ? 'turn-right'
+                : 'arrow-upward';
+
 interface RouteSheetProps {
     distanceLabel: string;
     durationLabel: string;
@@ -421,9 +424,8 @@ interface RouteSheetProps {
     isNavigating: boolean;
     isSaved: boolean;
     isStarting?: boolean;
-    instruction: string;
-    turnDistanceLabel: string | null;
-    turnDirection: 'left' | 'right' | null;
+    steps: RouteStep[];
+    unitSystem: UnitSystem;
     arrived: boolean;
     variant: RouteVariant;
     hasSafeRoute: boolean;
@@ -452,9 +454,8 @@ export const RouteSheet = ({
     isNavigating,
     isSaved,
     isStarting,
-    instruction,
-    turnDistanceLabel,
-    turnDirection,
+    steps,
+    unitSystem,
     arrived,
     variant,
     hasSafeRoute,
@@ -467,6 +468,11 @@ export const RouteSheet = ({
     onChooseDestination,
 }: RouteSheetProps) => {
     const { colors } = useTheme();
+
+    const following = steps.slice(1).filter((step) => !step.isArrival);
+    const arrivalStep = steps.slice(1).find((step) => step.isArrival) ?? null;
+    const visible = following.slice(0, MAX_COMPACT_STEPS);
+    const hidden = following.length - visible.length;
 
     if (!destinationName) {
         return (
@@ -524,78 +530,172 @@ export const RouteSheet = ({
 
             {isNavigating ? (
                 <View
-                    accessible
-                    accessibilityLabel={
-                        arrived
-                            ? 'You have arrived. End of the route.'
-                            : instruction.trim() === ''
-                                ? 'No turn information. Follow the highlighted line and the road signs.'
-                                : `In ${turnDistanceLabel ?? ''} to the turn, ${instruction}.`
-                    }
                     style={[styles.indicationBand, { backgroundColor: colors.muted, borderColor: colors.border }]}
                 >
-                    <View
-                        style={[
-                            styles.indicationDisc,
-                            {
-                                backgroundColor: arrived
-                                    ? colors.success
-                                    : instruction.trim() === ''
-                                        ? colors.secondary
-                                        : colors.primary,
-                            },
-                        ]}
-                    >
-                        <MaterialIcons
-                            color={
-                                arrived
-                                    ? colors.successForeground
-                                    : instruction.trim() === ''
-                                        ? colors.secondaryForeground
-                                        : colors.primaryForeground
-                            }
-                            name={
-                                arrived
-                                    ? 'place'
-                                    : turnDirection === 'left'
-                                        ? 'turn-left'
-                                        : turnDirection === 'right'
-                                            ? 'turn-right'
-                                            : 'arrow-upward'
-                            }
-                            size={28}
-                        />
-                    </View>
-                    <View style={styles.indicationText}>
-                        {arrived ? (
-                            <>
+                    {arrived ? (
+                        <View
+                            accessible
+                            accessibilityLabel="You have arrived at your destination. End of the route. Park safely."
+                            style={styles.indicationHero}
+                        >
+                            <View style={[styles.indicationDisc, { backgroundColor: colors.success }]}>
+                                <MaterialIcons color={colors.successForeground} name="place" size={28} />
+                            </View>
+                            <View style={styles.indicationText}>
                                 <Text style={[styles.indicationTitle, { color: colors.foreground }]}>
-                                    You have arrived
+                                    You have arrived at your destination.
                                 </Text>
                                 <Text style={[styles.indicationBody, { color: colors.mutedForeground }]}>
                                     End of the route. Park safely.
                                 </Text>
-                            </>
-                        ) : instruction.trim() === '' ? (
-                            <>
+                            </View>
+                        </View>
+                    ) : steps.length === 0 ? (
+                        <View
+                            accessible
+                            accessibilityLabel="No turn information. Follow the highlighted line and the road signs."
+                            style={styles.indicationHero}
+                        >
+                            <View style={[styles.indicationDisc, { backgroundColor: colors.secondary }]}>
+                                <MaterialIcons
+                                    color={colors.secondaryForeground}
+                                    name="arrow-upward"
+                                    size={28}
+                                />
+                            </View>
+                            <View style={styles.indicationText}>
                                 <Text style={[styles.indicationTitle, { color: colors.foreground }]}>
                                     No turn information
                                 </Text>
                                 <Text style={[styles.indicationBody, { color: colors.mutedForeground }]}>
                                     Follow the highlighted line and the road signs.
                                 </Text>
-                            </>
-                        ) : (
-                            <>
-                                <Text style={[styles.indicationValue, { color: colors.foreground }]}>
-                                    {turnDistanceLabel}
-                                </Text>
-                                <Text style={[styles.indicationBody, { color: colors.foreground }]}>
-                                    {instruction}
-                                </Text>
-                            </>
-                        )}
-                    </View>
+                            </View>
+                        </View>
+                    ) : (
+                        <>
+                            <View
+                                accessible
+                                accessibilityLabel={`In ${formatDistance(
+                                    steps[0].distanceMeters,
+                                    unitSystem,
+                                )}. ${steps[0].instruction}`}
+                                style={styles.indicationHero}
+                            >
+                                <View style={[styles.indicationDisc, { backgroundColor: colors.primary }]}>
+                                    <MaterialIcons
+                                        color={colors.primaryForeground}
+                                        name={stepIcon(steps[0])}
+                                        size={28}
+                                    />
+                                </View>
+                                <View style={styles.indicationText}>
+                                    <Text style={[styles.indicationValue, { color: colors.foreground }]}>
+                                        <Text
+                                            style={[styles.indicationIn, { color: colors.mutedForeground }]}
+                                        >
+                                            in{' '}
+                                        </Text>
+                                        {formatDistance(steps[0].distanceMeters, unitSystem)}
+                                    </Text>
+                                    <Text style={[styles.indicationBody, { color: colors.foreground }]}>
+                                        {steps[0].instruction}
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {following.length > 0 ? (
+                                <View style={[styles.indicationSteps, { borderTopColor: colors.border }]}>
+                                    {visible.map((step, index) => (
+                                        <View
+                                            accessible
+                                            accessibilityLabel={`In ${formatDistance(
+                                                step.distanceMeters,
+                                                unitSystem,
+                                            )}. ${step.instruction}`}
+                                            key={`${step.instruction}-${index}`}
+                                            style={styles.indicationStep}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.indicationStepDistance,
+                                                    { color: colors.foreground },
+                                                ]}
+                                            >
+                                                {formatDistance(step.distanceMeters, unitSystem)}
+                                            </Text>
+                                            <MaterialIcons
+                                                color={colors.mutedForeground}
+                                                name={stepIcon(step)}
+                                                size={18}
+                                            />
+                                            <Text
+                                                numberOfLines={2}
+                                                style={[
+                                                    styles.indicationStepText,
+                                                    { color: colors.foreground },
+                                                ]}
+                                            >
+                                                {step.instruction}
+                                            </Text>
+                                        </View>
+                                    ))}
+
+                                    {hidden > 0 ? (
+                                        <View
+                                            accessible
+                                            accessibilityLabel={`${hidden} more turn${hidden === 1 ? '' : 's'
+                                                } ahead`}
+                                            style={styles.indicationStep}
+                                        >
+                                            <Text style={styles.indicationStepDistance}>{''}</Text>
+                                            <MaterialIcons
+                                                color={colors.mutedForeground}
+                                                name="more-horiz"
+                                                size={18}
+                                            />
+                                            <Text
+                                                style={[
+                                                    styles.indicationMore,
+                                                    { color: colors.mutedForeground },
+                                                ]}
+                                            >
+                                                {`${hidden} more turn${hidden === 1 ? '' : 's'} ahead`}
+                                            </Text>
+                                        </View>
+                                    ) : null}
+
+                                    {arrivalStep ? (
+                                        <View
+                                            accessible
+                                            accessibilityLabel={`${arrivalStep.instruction} Last step.`}
+                                            style={[
+                                                styles.indicationStep,
+                                                styles.indicationStepArrival,
+                                                { borderTopColor: colors.border },
+                                            ]}
+                                        >
+                                            <Text style={styles.indicationStepDistance}>{''}</Text>
+                                            <MaterialIcons
+                                                color={colors.mutedForeground}
+                                                name="place"
+                                                size={18}
+                                            />
+                                            <Text
+                                                numberOfLines={2}
+                                                style={[
+                                                    styles.indicationStepText,
+                                                    { color: colors.foreground },
+                                                ]}
+                                            >
+                                                {arrivalStep.instruction}
+                                            </Text>
+                                        </View>
+                                    ) : null}
+                                </View>
+                            ) : null}
+                        </>
+                    )}
                 </View>
             ) : null}
 
@@ -955,10 +1055,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: layout.cardPadding,
     },
     indicationBand: {
-        alignItems: 'center',
         borderRadius: radii.lg,
         borderWidth: 1,
-        flexDirection: 'row',
         gap: spacing.md,
         marginTop: spacing.md,
         padding: spacing.md,
@@ -972,6 +1070,44 @@ const styles = StyleSheet.create({
         height: 44,
         justifyContent: 'center',
         width: 44,
+    },
+    indicationHero: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+    },
+    indicationIn: {
+        ...typography.caption,
+        fontWeight: '700',
+    },
+    indicationMore: {
+        ...typography.caption,
+    },
+    indicationStep: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    indicationStepArrival: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        paddingTop: spacing.sm,
+    },
+    indicationStepDistance: {
+        ...typography.label,
+        fontVariant: ['tabular-nums'] as ('tabular-nums')[],
+        textAlign: 'right',
+        width: 52,
+    },
+    indicationStepText: {
+        ...typography.body,
+        flex: 1,
+        minWidth: 0,
+    },
+    indicationSteps: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        gap: spacing.xs,
+        marginTop: spacing.md,
+        paddingTop: spacing.md,
     },
     indicationText: {
         flex: 1,
@@ -1056,17 +1192,6 @@ const styles = StyleSheet.create({
     },
     removeLabel: {
         ...typography.caption,
-    },
-    replayLabel: {
-        ...typography.caption,
-        fontWeight: '700',
-    },
-    replayPin: {
-        alignItems: 'center',
-        borderRadius: radii.full,
-        height: 28,
-        justifyContent: 'center',
-        width: 28,
     },
     searching: {
         ...typography.body,

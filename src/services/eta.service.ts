@@ -20,7 +20,6 @@ export interface ArrivalEstimate {
     minutes: number;
     arrivalAt: number;
     factor: number;
-    observationCount: number;
     source: 'router' | 'history';
     explanation: string;
 }
@@ -122,7 +121,6 @@ export const estimateArrival = (
             minutes,
             arrivalAt: now.getTime() + minutes * 60_000,
             factor: 1,
-            observationCount: 0,
             source: 'router',
             explanation: "Still mostly the map's estimate.",
         };
@@ -141,7 +139,6 @@ export const estimateArrival = (
         minutes,
         arrivalAt: now.getTime() + minutes * 60_000,
         factor,
-        observationCount: weighted.length,
         source: lambda > 0.5 ? 'history' : 'router',
         explanation:
             lambda > 0.5

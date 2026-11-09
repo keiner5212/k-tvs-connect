@@ -62,13 +62,17 @@ export default function App() {
                 return;
             }
 
-            const instruction = navigation.instruction;
-            if (!instruction || instruction === lastInstruction) {
+            const step = navigation.steps[0];
+            if (!step) {
+                return;
+            }
+            const instruction = step.instruction;
+            if (instruction === lastInstruction) {
                 return;
             }
             lastInstruction = instruction;
 
-            const distance = navigation.distanceToManeuverMeters;
+            const distance = step.distanceMeters;
             void notifyTurn(
                 instruction,
                 distance > 0 ? `in ${formatDistance(distance, 'metric')}` : 'now',

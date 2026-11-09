@@ -2,7 +2,6 @@ import React from 'react';
 import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import { useTheme } from '@hooks/useTheme';
-import { UnitSystem } from '@utils/format';
 import { layout, radii, spacing, typography } from '@config/theme';
 
 interface SettingsSectionProps {
@@ -167,8 +166,6 @@ export const NumberStepper = ({
         </View>
     );
 };
-
-export const unitLabel = (unit: UnitSystem): string => (unit === 'imperial' ? 'Miles' : 'Kilometres');
 
 const styles = StyleSheet.create({
     body: {

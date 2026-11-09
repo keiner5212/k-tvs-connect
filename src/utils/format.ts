@@ -1,7 +1,5 @@
 export type UnitSystem = 'metric' | 'imperial';
 
-export const speedUnit = (unit: UnitSystem): string => (unit === 'imperial' ? 'mph' : 'km/h');
-
 export const formatDistance = (meters: number, unit: UnitSystem): string => {
     if (unit === 'imperial') {
         const feet = meters * 3.28084;
@@ -32,25 +30,3 @@ export const formatClockTime = (timestamp: number): string => {
     const minutes = date.getMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
 };
-
-export const formatAge = (timestamp: number | null, now = Date.now()): string => {
-    if (timestamp === null) {
-        return 'never';
-    }
-    const seconds = Math.max(0, Math.round((now - timestamp) / 1000));
-    if (seconds < 5) {
-        return 'just now';
-    }
-    if (seconds < 60) {
-        return `${seconds} s ago`;
-    }
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) {
-        return `${minutes} min ago`;
-    }
-    const hours = Math.round(minutes / 60);
-    return `${hours} h ago`;
-};
-
-export const isStale = (timestamp: number | null, now = Date.now(), limitMs = 60000): boolean =>
-    timestamp === null || now - timestamp > limitMs;

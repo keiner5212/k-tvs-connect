@@ -2,8 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     BackHandler,
     StyleSheet,
-    Text,
-    TouchableOpacity,
     useWindowDimensions,
     View,
 } from 'react-native';
@@ -31,13 +29,12 @@ import { useMapStore } from '@stores/mapStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { useTilesStore } from '@stores/tilesStore';
 import { AvoidPoint, Place, RootStackParamList, TrafficCamera } from '@typings/types';
-import { distanceAlongPath, decodePolyline, pointAtDistance } from '@utils/polyline';
 import { distanceMeters } from '@utils/geo';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
 import { compassName } from '@utils/cameraSense';
 import { logger } from '@utils/logger';
 import { GEOCODE_COUNTRY } from '@config/geocoding';
-import { layout, radii, spacing, typography } from '@config/theme';
+import { layout, spacing } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
@@ -104,8 +101,6 @@ export const MapScreen = () => {
         loadAvoidPoints,
         recenter,
         removeAvoidPoint,
-        replayRoute,
-        setReplayRoute,
         route,
         routeSource,
         setDestination,
@@ -184,12 +179,6 @@ export const MapScreen = () => {
     );
     const [menuHeight, setMenuHeight] = useState(0);
     const [bottomStackTop, setBottomStackTop] = useState(screenHeight);
-    const [replay, setReplay] = useState<{
-        points: { lat: number; lon: number }[];
-        distance: number;
-        duration: number;
-        startedAt: number;
-    } | null>(null);
 
     useEffect(() => {
         const load = async () => {
@@ -448,37 +437,6 @@ export const MapScreen = () => {
         });
     };
 
-    const replayState = useMemo(() => {
-        if (!replay || replay.points.length < 2) {
-            return null;
-        }
-        const cumulative = distanceAlongPath(replay.points);
-        const total = cumulative[cumulative.length - 1];
-        const speed = replay.duration > 0 ? total / replay.duration : 0;
-        const elapsed = (now - (replay.startedAt ?? now)) / 1000;
-        const travelled = Math.min(total, elapsed * speed);
-        const point = pointAtDistance(replay.points, cumulative, travelled);
-
-        return {
-            position: point ? ([point.lat, point.lon] as [number, number]) : null,
-            remaining: Math.max(0, total - travelled),
-            etaSeconds: speed > 0 ? Math.max(0, (total - travelled) / speed) : 0,
-        };
-    }, [replay, now]);
-
-    useEffect(() => {
-        if (!replayRoute) {
-            return;
-        }
-        setReplay({
-            points: decodePolyline(replayRoute.geometry),
-            distance: replayRoute.distanceMeters,
-            duration: replayRoute.durationSeconds,
-            startedAt: Date.now(),
-        });
-        setReplayRoute(null);
-    }, [replayRoute, setReplayRoute]);
-
     return (
         <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <MapCanvas
@@ -495,7 +453,6 @@ export const MapScreen = () => {
                 onCameraPress={(cameraId) => void openCameraMenu(cameraId)}
                 onMapPress={onMapPress}
                 onTilesFail={useOpenFreeMap}
-                replayPosition={replayState?.position ?? null}
                 alternateGeometry={
                     variant === 'safe' ? routes.short?.geometry : routes.safe?.geometry
                 }
@@ -613,78 +570,49 @@ export const MapScreen = () => {
                     <RecenterButton disabled={!position} onPress={recenter} />
                 </View>
 
-                {replayState && replay ? (
-                    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <Text style={[styles.replayTitle, { color: colors.mutedForeground }]}>REPLAY</Text>
-                        <Text style={[styles.replayDistance, { color: colors.foreground }]}>
-                            {formatDistance(replayState.remaining, settings.unitSystem)}
-                        </Text>
-                        <Text style={[styles.replayEta, { color: colors.mutedForeground }]}>
-                            {`${formatDuration(replayState.etaSeconds)} left`}
-                        </Text>
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            onPress={() => {
-                                setReplay(null);
-                                recenter();
-                            }}
-                            style={[styles.replayStop, { backgroundColor: colors.secondary }]}
-                        >
-                            <Text style={[styles.replayStopLabel, { color: colors.secondaryForeground }]}>
-                                Stop
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : (
-                    <RouteSheet
-                        arrivalLabel={
-                            progress.started
-                                ? formatClockTime(now + progress.timeLeftSeconds * 1000)
-                                : arrival
-                                    ? formatClockTime(arrival.arrivalAt)
-                                    : null
-                        }
-                        avoidPointCount={avoidPoints.length}
-                        cameraCount={routeSplit.sent}
-                        isStarting={startingNavigation}
-                        destinationName={destination?.name ?? null}
-                        distanceLabel={formatDistance(
-                            progress.started ? progress.distanceLeftMeters : route?.distanceMeters ?? 0,
-                            settings.unitSystem,
-                        )}
-                        arrived={progress.arrived}
-                        turnDirection={progress.turnDirection}
-                        turnDistanceLabel={
-                            progress.started
-                                ? formatDistance(progress.distanceToManeuverMeters, settings.unitSystem)
+                <RouteSheet
+                    arrivalLabel={
+                        progress.started
+                            ? formatClockTime(now + progress.timeLeftSeconds * 1000)
+                            : arrival
+                                ? formatClockTime(arrival.arrivalAt)
                                 : null
+                    }
+                    avoidPointCount={avoidPoints.length}
+                    cameraCount={routeSplit.sent}
+                    isStarting={startingNavigation}
+                    destinationName={destination?.name ?? null}
+                    distanceLabel={formatDistance(
+                        progress.started ? progress.distanceLeftMeters : route?.distanceMeters ?? 0,
+                        settings.unitSystem,
+                    )}
+                    arrived={progress.arrived}
+                    steps={progress.steps}
+                    unitSystem={settings.unitSystem}
+                    durationLabel={formatDuration(
+                        progress.started ? progress.timeLeftSeconds : route?.durationSeconds ?? 0,
+                    )}
+                    isComputing={computing}
+                    isNavigating={progress.started}
+                    onChooseDestination={() => navigation.navigate('PlaceSearch')}
+                    onClear={() => {
+                        clearRoute();
+                        setDestination(null);
+                        stopNavigation();
+                    }}
+                    onOpenDetails={() => navigation.navigate('RouteDetails')}
+                    isSaved={routeSaved}
+                    onSave={() => {
+                        if (route && destination) {
+                            void saveRoute(route, destination);
                         }
-                        durationLabel={formatDuration(
-                            progress.started ? progress.timeLeftSeconds : route?.durationSeconds ?? 0,
-                        )}
-                        instruction={progress.instruction}
-                        isComputing={computing}
-                        isNavigating={progress.started}
-                        onChooseDestination={() => navigation.navigate('PlaceSearch')}
-                        onClear={() => {
-                            clearRoute();
-                            setDestination(null);
-                            stopNavigation();
-                        }}
-                        onOpenDetails={() => navigation.navigate('RouteDetails')}
-                        isSaved={routeSaved}
-                        onSave={() => {
-                            if (route && destination) {
-                                void saveRoute(route, destination);
-                            }
-                        }}
-                        hasSafeRoute={routes.safe !== null}
-                        onStart={startNavigation}
-                        onStop={stopNavigation}
-                        onVariantChange={(next) => setVariant(next)}
-                        variant={variant}
-                    />
-                )}
+                    }}
+                    hasSafeRoute={routes.safe !== null}
+                    onStart={startNavigation}
+                    onStop={stopNavigation}
+                    onVariantChange={(next) => setVariant(next)}
+                    variant={variant}
+                />
 
                 {routeSaved ? (
                     <Banner message="The route is saved on this device." tone="info" />
@@ -707,13 +635,6 @@ const styles = StyleSheet.create({
         position: 'absolute',
         right: 0,
     },
-    card: {
-        borderRadius: radii.lg,
-        borderWidth: 1,
-        marginHorizontal: layout.screenPadding,
-        marginTop: spacing.sm,
-        padding: layout.cardPadding,
-    },
     mapControlsRow: {
         alignItems: 'center',
         flexDirection: 'row',
@@ -724,27 +645,6 @@ const styles = StyleSheet.create({
     mapControlsSlot: {
         flex: 1,
         pointerEvents: 'box-none',
-    },
-    replayDistance: {
-        ...typography.readout,
-        marginTop: spacing.xs,
-    },
-    replayEta: {
-        ...typography.body,
-    },
-    replayStop: {
-        alignItems: 'center',
-        borderRadius: radii.md,
-        justifyContent: 'center',
-        marginTop: spacing.md,
-        minHeight: layout.buttonHeight,
-    },
-    replayStopLabel: {
-        ...typography.button,
-    },
-    replayTitle: {
-        ...typography.caption,
-        letterSpacing: 0.08,
     },
     screen: {
         flex: 1,

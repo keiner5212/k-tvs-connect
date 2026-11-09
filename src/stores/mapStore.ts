@@ -1,11 +1,19 @@
 import { create } from 'zustand';
 
-import { AvoidPoint, Place, RouteResult, SavedRoute, TrafficCamera } from '@typings/types';
+import {
+    AvoidPoint,
+    Place,
+    RouteManeuver,
+    RouteResult,
+    RouteStep,
+    SavedRoute,
+    TrafficCamera,
+} from '@typings/types';
 import { ArrivalEstimate, destinationKey, estimateArrival } from '@services/eta.service';
 import { CAMERA_AVOID_RADIUS_METERS } from '@services/ansv.service';
 import { Costing, computeRoute, DirectedAvoid } from '@services/valhalla.service';
 import { CameraPassage, ROUTE_CORRIDOR_METERS, useCameraStore } from '@stores/cameraStore';
-import { decodePolyline, nearestPointIndex, remainingDistanceMeters } from '@utils/polyline';
+import { decodePolyline, distanceBetween, projectOntoPath } from '@utils/polyline';
 import {
     listObservations,
     recordRouteContext,
@@ -20,21 +28,17 @@ import {
 import { useSettingsStore } from '@stores/settingsStore';
 import { logger } from '@utils/logger';
 
-export interface ReplayRoute {
-    geometry: string;
-    distanceMeters: number;
-    durationSeconds: number;
-}
-
 export interface NavigationProgress {
     started: boolean;
-    /** when the rider pressed start, to know how long the route took */
-    startedAt: number;
+    /** when the rider actually moved, the time of the route starts here */
+    ridingSince: number;
+    /** where the rider was when the route started, to know when it begins */
+    startLatitude: number;
+    startLongitude: number;
     distanceLeftMeters: number;
     timeLeftSeconds: number;
-    distanceToManeuverMeters: number;
-    instruction: string;
-    turnDirection: 'left' | 'right' | null;
+    /** the turns that are still ahead, with the distance to each one */
+    steps: RouteStep[];
     arrived: boolean;
 }
 
@@ -57,7 +61,6 @@ export interface RouteVariants {
 
 interface MapState {
     destination: Place | null;
-    replayRoute: ReplayRoute | null;
     avoidPoints: AvoidPoint[];
     route: RouteResult | null;
     /** a route that comes from the saved list is not asked to the router again */
@@ -82,7 +85,6 @@ interface MapState {
     compute: (originLat: number, originLon: number) => Promise<void>;
     setVariant: (variant: RouteVariant) => void;
     clearRoute: () => void;
-    setReplayRoute: (route: ReplayRoute | null) => void;
     startSavedRoute: (saved: SavedRoute) => Promise<boolean>;
     startNavigation: () => Promise<boolean>;
     stopNavigation: () => void;
@@ -97,26 +99,54 @@ interface MapState {
  * The direction of a valhalla manoeuvre, which is what the cluster uses to show
  * a left or a right arrow when the turn is close.
  */
-/** the last maneuver of a route is the arrival, the one before it the finish */
-const ARRIVAL_MANEUVER_TYPE = 25;
-const FINISH_MANEUVER_TYPE = 11;
+/**
+ * The types of the router: 1 start, 4 destination, 5 destination right, 6
+ * destination left, 9 slight right, 10 right, 11 sharp right, 12 u-turn
+ * right, 13 u-turn left, 14 sharp left, 15 left, 16 slight left, 20 exit
+ * right, 21 exit left, 23 stay right, 24 stay left, 37 merge right, 38 merge
+ * left.
+ */
+const START_MANEUVER_TYPE = 1;
+const ARRIVAL_MANEUVER_TYPES = [4, 5, 6];
+
+/** how far the rider has to move before the ride counts as started */
+const RIDE_START_METERS = 40;
 
 const turnDirectionFromType = (type: number): 'left' | 'right' | null => {
     if (type < 0) {
         return null;
     }
-    /**
-     * The types of the router: 0 keep left, 1 left, 2 slight left, 3 sharp
-     * left, 4 right, 5 slight right, 6 sharp right, 23 start right, 24 start
-     * left, 32 slight right, 33 slight left, 34 right, 35 left, 36 uturn.
-     */
-    if ([4, 5, 6, 23, 32, 34].includes(type)) {
+    if ([9, 10, 11, 12, 20, 23, 37].includes(type)) {
         return 'right';
     }
-    if ([0, 1, 2, 3, 24, 33, 35].includes(type)) {
+    if ([13, 14, 15, 16, 21, 24, 38].includes(type)) {
         return 'left';
     }
     return null;
+};
+
+/**
+ * The steps that are still ahead of the rider, with the distance to each one.
+ * The arrival is the last step of the list.
+ */
+const buildSteps = (maneuvers: RouteManeuver[], travelled: number): RouteStep[] => {
+    const steps: RouteStep[] = [];
+    for (const maneuver of maneuvers) {
+        if (maneuver.type === START_MANEUVER_TYPE) {
+            continue;
+        }
+        const distance = maneuver.distance - travelled;
+        if (distance < -15) {
+            continue;
+        }
+        steps.push({
+            distanceMeters: Math.max(0, distance),
+            instruction: maneuver.instruction,
+            turnDirection: turnDirectionFromType(maneuver.type),
+            isArrival: ARRIVAL_MANEUVER_TYPES.includes(maneuver.type),
+        });
+    }
+    return steps;
 };
 
 /**
@@ -140,7 +170,7 @@ const pointsOfRoute = (geometry: string): { lat: number; lon: number }[] => {
  */
 const recordCompletion = async (state: MapState): Promise<void> => {
     const { destination, navigation, route, routeContext } = state;
-    if (!route || !routeContext || !destination || !navigation.startedAt) {
+    if (!route || !routeContext || !destination || !navigation.ridingSince) {
         return;
     }
 
@@ -157,7 +187,7 @@ const recordCompletion = async (state: MapState): Promise<void> => {
             return;
         }
 
-        const observedSeconds = Math.round((Date.now() - navigation.startedAt) / 1000);
+        const observedSeconds = Math.round((Date.now() - navigation.ridingSince) / 1000);
         const { recordObservation } = await import('@services/db/etaRepository');
         const stored = await recordObservation({
             context: routeContext,
@@ -382,7 +412,6 @@ const routeAroundCameras = async (
 
 export const useMapStore = create<MapState>((set, get) => ({
     destination: null,
-    replayRoute: null,
     avoidPoints: [],
     route: null,
     routeSource: 'computed',
@@ -395,12 +424,12 @@ export const useMapStore = create<MapState>((set, get) => ({
     routeFailures: 0,
     navigation: {
         started: false,
-        startedAt: 0,
+        ridingSince: 0,
+        startLatitude: 0,
+        startLongitude: 0,
         distanceLeftMeters: 0,
         timeLeftSeconds: 0,
-        distanceToManeuverMeters: 0,
-        instruction: '',
-        turnDirection: null,
+        steps: [],
         arrived: false,
     },
     focus: null,
@@ -563,9 +592,6 @@ export const useMapStore = create<MapState>((set, get) => ({
             },
         );
     },
-    setReplayRoute: (route) => {
-        set({ replayRoute: route });
-    },
 
     /**
      * Doing a saved route again: the destination is set again and the route
@@ -631,19 +657,22 @@ export const useMapStore = create<MapState>((set, get) => ({
             return false;
         }
 
+        const { useLocationStore } = await import('@stores/locationStore');
+        const position = useLocationStore.getState().position;
+
         set({
             navigation: {
                 ...get().navigation,
                 started: true,
-                startedAt: Date.now(),
+                ridingSince: 0,
+                startLatitude: position?.[0] ?? 0,
+                startLongitude: position?.[1] ?? 0,
                 arrived: false,
             },
         });
 
-        const { useLocationStore } = await import('@stores/locationStore');
         await useLocationStore.getState().startWatching('navigation');
 
-        const position = useLocationStore.getState().position;
         if (position) {
             get().updateNavigation(position[0], position[1]);
         }
@@ -655,12 +684,12 @@ export const useMapStore = create<MapState>((set, get) => ({
         set({
             navigation: {
                 started: false,
-                startedAt: 0,
+                ridingSince: 0,
+                startLatitude: 0,
+                startLongitude: 0,
                 distanceLeftMeters: 0,
                 timeLeftSeconds: 0,
-                distanceToManeuverMeters: 0,
-                instruction: '',
-                turnDirection: null,
+                steps: [],
                 arrived: false,
             },
         });
@@ -677,51 +706,47 @@ export const useMapStore = create<MapState>((set, get) => ({
         }
 
         const points = pointsOfRoute(route.geometry);
-        const index = nearestPointIndex(points, { lat: latitude, lon: longitude });
-        if (index < 0) {
+        const projection = projectOntoPath(points, { lat: latitude, lon: longitude });
+        if (!projection) {
             return;
         }
 
-        const distanceLeftMeters = remainingDistanceMeters(points, index);
+        const travelled = projection.distance;
+        const distanceLeftMeters = Math.max(0, route.distanceMeters - travelled);
         const factor = arrival?.factor ?? 1;
         const timeLeftSeconds = Math.max(
             0,
             Math.round((route.durationSeconds * distanceLeftMeters) / Math.max(1, route.distanceMeters) * factor),
         );
 
-        const maneuvers = route.maneuvers ?? [];
-        const travelled = route.distanceMeters - distanceLeftMeters;
-        /**
-         * The last maneuver of a route is the arrival, not a turn, so it never
-         * becomes the next instruction.
-         */
-        const turns = maneuvers.filter(
-            (maneuver) => maneuver.type !== ARRIVAL_MANEUVER_TYPE && maneuver.type !== FINISH_MANEUVER_TYPE,
-        );
-        let accumulated = 0;
-        let next = turns.length > 0 ? turns[turns.length - 1] : undefined;
-        let distanceToManeuver = distanceLeftMeters;
+        const steps = buildSteps(route.maneuvers ?? [], travelled);
 
-        for (const maneuver of turns) {
-            accumulated += maneuver.distance;
-            if (accumulated > travelled) {
-                next = maneuver;
-                distanceToManeuver = Math.max(0, accumulated - travelled);
-                break;
-            }
-        }
+        /**
+         * The time of the route starts when the rider moves, not when the
+         * button is pressed, otherwise the minutes spent getting on the bike
+         * would be learned as riding time.
+         */
+        const ridingSince =
+            navigation.ridingSince ||
+            (navigation.startLatitude !== 0 &&
+                distanceBetween(
+                    { lat: navigation.startLatitude, lon: navigation.startLongitude },
+                    { lat: latitude, lon: longitude },
+                ) > RIDE_START_METERS
+                ? Date.now()
+                : 0);
 
         const arrived = distanceLeftMeters < 25;
 
         set({
             navigation: {
                 started: true,
-                startedAt: navigation.startedAt,
+                ridingSince,
+                startLatitude: navigation.startLatitude,
+                startLongitude: navigation.startLongitude,
                 distanceLeftMeters,
                 timeLeftSeconds,
-                distanceToManeuverMeters: distanceToManeuver,
-                instruction: next?.instruction ?? '',
-                turnDirection: next ? turnDirectionFromType(next.type) : null,
+                steps,
                 arrived,
             },
         });

@@ -77,30 +77,6 @@ export interface SavedRoute {
     createdAt: number;
 }
 
-export interface RideSummary {
-    id: string;
-    bikeId: string;
-    startedAt: number;
-    endedAt: number;
-    distanceMeters: number;
-    maxSpeedKmh: number;
-    averageSpeedKmh: number;
-    durationSeconds: number;
-}
-
-export interface VehicleAlert {
-    id: string;
-    kind: 'low_fuel' | 'side_stand' | 'turn_signal' | 'overspeed' | 'weak_signal' | 'info';
-    title: string;
-    body: string;
-    raisedAt: number;
-}
-
-/**
- * The values the cluster sends. A value is null until the bike sends it, so
- * the app never shows a zero that the bike did not say.
- */
-
 export interface Place {
     id: string;
     name: string;
@@ -120,9 +96,20 @@ export interface RouteLeg {
 
 export interface RouteManeuver {
     instruction: string;
+    /** the meters from the start of the route to the point of the maneuver */
     distance: number;
     type: number;
-    index: number;
+}
+
+/**
+ * A step of the route that is still ahead of the rider, with the distance to
+ * it measured along the route.
+ */
+export interface RouteStep {
+    distanceMeters: number;
+    instruction: string;
+    turnDirection: 'left' | 'right' | null;
+    isArrival: boolean;
 }
 
 export interface RouteResult {

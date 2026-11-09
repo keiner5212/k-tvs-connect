@@ -81,46 +81,6 @@ export const IconLabelButton = ({
     );
 };
 
-/**
- * An icon only control. It always carries a label for the screen reader and it
- * always keeps the 44 by 44 touch target.
- */
-export const IconButton = ({
-    icon,
-    accessibilityLabel,
-    onPress,
-    selected = false,
-    disabled = false,
-    size = 22,
-}: IconButtonProps) => {
-    const { colors } = useTheme();
-
-    return (
-        <TouchableOpacity
-            accessibilityLabel={accessibilityLabel}
-            accessibilityRole="button"
-            accessibilityState={{ selected, disabled }}
-            activeOpacity={0.8}
-            disabled={disabled}
-            hitSlop={6}
-            onPress={onPress}
-            style={[
-                styles.iconButton,
-                {
-                    backgroundColor: selected ? colors.primary : colors.card,
-                    borderColor: selected ? colors.primary : colors.border,
-                },
-            ]}
-        >
-            <MaterialIcons
-                color={selected ? colors.primaryForeground : colors.foreground}
-                name={icon}
-                size={size}
-            />
-        </TouchableOpacity>
-    );
-};
-
 export const PrimaryButton = ({
     label,
     onPress,
@@ -279,48 +239,6 @@ export const SegmentedControl = ({ options, value, onChange }: SegmentedControlP
     );
 };
 
-interface ChipGroupProps {
-    options: { value: string; label: string }[];
-    value: string;
-    onChange: (value: string) => void;
-}
-
-export const ChipGroup = ({ options, value, onChange }: ChipGroupProps) => {
-    const { colors } = useTheme();
-
-    return (
-        <View style={styles.chipRow}>
-            {options.map((option) => {
-                const selected = option.value === value;
-                return (
-                    <TouchableOpacity
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                        key={option.value}
-                        onPress={() => onChange(option.value)}
-                        style={[
-                            styles.chip,
-                            {
-                                backgroundColor: selected ? colors.primary : colors.card,
-                                borderColor: selected ? colors.primary : colors.border,
-                            },
-                        ]}
-                    >
-                        <Text
-                            style={[
-                                styles.chipLabel,
-                                { color: selected ? colors.primaryForeground : colors.foreground },
-                            ]}
-                        >
-                            {option.label}
-                        </Text>
-                    </TouchableOpacity>
-                );
-            })}
-        </View>
-    );
-};
-
 interface PinDotsProps {
     length: number;
     filled: number;
@@ -361,11 +279,6 @@ export const showConfirm = (
     ]);
 };
 
-/** A message with a single button, for the things that need no answer. */
-export const showMessage = (title: string, message: string, label = 'OK') => {
-    Alert.alert(title, message, [{ text: label, style: 'default' }]);
-};
-
 const styles = StyleSheet.create({
     button: {
         alignItems: 'center',
@@ -379,22 +292,6 @@ const styles = StyleSheet.create({
     },
     buttonLabel: {
         ...typography.button,
-    },
-    chip: {
-        alignItems: 'center',
-        borderRadius: radii.full,
-        borderWidth: 1,
-        justifyContent: 'center',
-        minHeight: 40,
-        paddingHorizontal: spacing.lg,
-    },
-    chipLabel: {
-        ...typography.label,
-    },
-    chipRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: spacing.sm,
     },
     disabled: {
         opacity: 0.5,
