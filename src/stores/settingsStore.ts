@@ -21,6 +21,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
         valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
         pinEnabled: false,
+        licencePlate: '',
     },
     loading: false,
     load: async () => {

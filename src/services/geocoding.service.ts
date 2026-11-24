@@ -17,6 +17,7 @@ import {
 } from '@config/geocoding';
 import { readCachedPlaces, writeCachedPlaces } from './db/geocodeCacheRepository';
 import { getSetting, setSetting } from './db/settingsRepository';
+import { canUseGoogle, chargeGoogleUsage } from './googleUsage.service';
 import { HttpError, httpGetJson, httpPostJson } from './http.service';
 
 export type GeocodeFailure =
@@ -266,6 +267,8 @@ const requestPlaces = async (query: string, bias: Bias | null): Promise<Place[]>
             maxBytes: 1024 * 1024,
         });
 
+        await chargeGoogleUsage('places');
+
         const places: Place[] = [];
         for (const place of body.places ?? []) {
             const latitude = place.location?.latitude;
@@ -325,6 +328,8 @@ const requestGeocode = async (query: string, bias: Bias | null): Promise<Place[]
         const failure = failureFromStatus(body.status);
         throw new GeocodeFailureError(failure, FAILURE_MESSAGES[failure]);
     }
+
+    await chargeGoogleUsage('geocode');
 
     const places: Place[] = [];
     for (const result of body.results ?? []) {
@@ -407,10 +412,13 @@ export const searchPlaces = async (
 
     let placesDenied = false;
     try {
-        const places = await requestPlaces(trimmed, bias);
-        if (places.length > 0) {
-            await writeCachedPlaces(cacheKey, trimmed, 'google_places', places, now, GEOCODE_CACHE_TTL_MS);
-            return { ok: true, places: withDistance(places, position), fromCache: false };
+        /** the places sku is the expensive one, it stops before the free cap */
+        if (await canUseGoogle('places')) {
+            const places = await requestPlaces(trimmed, bias);
+            if (places.length > 0) {
+                await writeCachedPlaces(cacheKey, trimmed, 'google_places', places, now, GEOCODE_CACHE_TTL_MS);
+                return { ok: true, places: withDistance(places, position), fromCache: false };
+            }
         }
     } catch (error) {
         const failure = describeFailure(error);
@@ -426,6 +434,9 @@ export const searchPlaces = async (
     }
 
     try {
+        if (!(await canUseGoogle('geocode'))) {
+            return { ok: false, failure: 'quota', message: FAILURE_MESSAGES.quota };
+        }
         const places = await requestGeocode(trimmed, bias);
         if (places.length > 0) {
             await writeCachedPlaces(cacheKey, trimmed, 'google_geocode', places, now, GEOCODE_CACHE_TTL_MS);

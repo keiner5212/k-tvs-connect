@@ -99,6 +99,8 @@ export interface RouteResult {
     distanceMeters: number;
     durationSeconds: number;
     geometry: string;
+    /** the engine that answered, google cannot avoid a point */
+    engine?: 'valhalla' | 'google';
 }
 
 export interface AppSettings {
@@ -112,6 +114,8 @@ export interface AppSettings {
     mapStyleUrl: string;
     valhallaBaseUrl: string;
     pinEnabled: boolean;
+    /** the plate of the bike, it never leaves the device */
+    licencePlate: string;
 }
 
 export type RootStackParamList = {

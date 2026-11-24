@@ -22,6 +22,7 @@ export interface ThemeColors {
     warningForeground: string;
     info: string;
     infoForeground: string;
+    meterWarning: string;
     border: string;
     destructive: string;
     overlay: string;
@@ -50,6 +51,7 @@ export const lightTheme: ThemeColors = {
     warningForeground: '#121214',
     info: '#6B6B78',
     infoForeground: '#FFFFFF',
+    meterWarning: '#B54708',
     border: '#E2E2E6',
     destructive: '#E4002B',
     overlay: 'rgba(18,18,20,0.85)',
@@ -78,6 +80,7 @@ export const darkTheme: ThemeColors = {
     warningForeground: '#0B0B0D',
     info: '#98A2B3',
     infoForeground: '#0B0B0D',
+    meterWarning: '#FDB022',
     border: '#26262C',
     destructive: '#FF2743',
     overlay: 'rgba(11,11,13,0.9)',

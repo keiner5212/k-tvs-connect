@@ -1,16 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { SegmentedControl, TextField, showConfirm } from '@components/controls';
-import { NumberStepper, SettingsBody, SettingsChoice, SettingsRow, SettingsSection } from '@components/settings';
+import {
+    NumberStepper,
+    SettingsBody,
+    SettingsChoice,
+    SettingsRow,
+    SettingsSection,
+    SettingsUsageRow,
+} from '@components/settings';
 import { useTheme } from '@hooks/useTheme';
 import { useCameraStore } from '@stores/cameraStore';
 import { useSettingsStore } from '@stores/settingsStore';
 import { RootStackParamList } from '@typings/types';
 import { isAllowedBaseUrl } from '@services/http.service';
+import { googleUsage } from '@services/googleUsage.service';
+import { formatPlate, isValidPlate, normalizePlate } from '@utils/picoYPlaca';
+import { formatMonth } from '@utils/format';
+import {
+    GOOGLE_CAP_SHARE,
+    GOOGLE_FREE_MONTHLY,
+    GOOGLE_SERVICES,
+    googleMonthKey,
+    GoogleSku,
+} from '@config/quota';
 import { layout, spacing, typography } from '@config/theme';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -33,8 +50,34 @@ export const SettingsScreen = () => {
 
     const [valhallaUrl, setValhallaUrl] = useState(settings.valhallaBaseUrl);
     const [styleUrl, setStyleUrl] = useState(settings.mapStyleUrl);
+    const [plate, setPlate] = useState(settings.licencePlate);
+    const [plateError, setPlateError] = useState<string | null>(null);
     const [routingError, setRoutingError] = useState<string | null>(null);
     const [styleError, setStyleError] = useState<string | null>(null);
+    const [usage, setUsage] = useState<Record<GoogleSku, number> | null>(null);
+    const [usageFailed, setUsageFailed] = useState(false);
+
+    const readUsage = useCallback(async () => {
+        try {
+            const skus = Object.keys(GOOGLE_SERVICES) as GoogleSku[];
+            const values = await Promise.all(skus.map((sku) => googleUsage(sku)));
+            setUsage(
+                Object.fromEntries(skus.map((sku, index) => [sku, values[index]])) as Record<
+                    GoogleSku,
+                    number
+                >,
+            );
+            setUsageFailed(false);
+        } catch {
+            setUsageFailed(true);
+        }
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            void readUsage();
+        }, [readUsage]),
+    );
 
     useEffect(() => {
         void load();
@@ -43,6 +86,7 @@ export const SettingsScreen = () => {
     useEffect(() => {
         setValhallaUrl(settings.valhallaBaseUrl);
         setStyleUrl(settings.mapStyleUrl);
+        setPlate(settings.licencePlate);
     }, [settings]);
 
     const normalizeUrl = (value: string): string => value.trim().replace(/\/+$/, '');
@@ -66,6 +110,20 @@ export const SettingsScreen = () => {
             mapProvider: 'openfreemap',
             mapStyleUrl: normalizeUrl(styleUrl),
         });
+    };
+
+    const onPlateChange = (value: string) => {
+        setPlate(formatPlate(value));
+    };
+
+    const savePlate = () => {
+        const clean = normalizePlate(plate);
+        if (clean.length > 0 && !isValidPlate(clean)) {
+            setPlateError('A Colombian plate has 3 letters, 2 numbers and a letter, like ABC 12D.');
+            return;
+        }
+        setPlateError(null);
+        void update({ licencePlate: formatPlate(plate) });
     };
 
     return (
@@ -155,6 +213,25 @@ export const SettingsScreen = () => {
                 </SettingsSection>
 
                 <SettingsSection
+                    title="Pico y placa"
+                    footer="The plate stays on this device. It is only used to warn you when the plate cannot circulate."
+                >
+                    <SettingsBody>
+                        <TextField
+                            autoCapitalize="characters"
+                            errorText={plateError ?? undefined}
+                            helperText="Three letters, two numbers and a letter, like ABC 12D."
+                            label="Licence plate"
+                            maxLength={7}
+                            onBlur={savePlate}
+                            onChangeText={onPlateChange}
+                            returnKeyType="done"
+                            value={plate}
+                        />
+                    </SettingsBody>
+                </SettingsSection>
+
+                <SettingsSection
                     title="Routing"
                     footer="Valhalla answers the route. Point this to your own instance to leave the public service completely."
                 >
@@ -168,6 +245,29 @@ export const SettingsScreen = () => {
                         />
                     </SettingsBody>
                     <SettingsRow label="Save routing url" onPress={saveRoutingUrl} />
+                </SettingsSection>
+
+                <SettingsSection
+                    title="Google usage"
+                    footer={`Counted for ${formatMonth(googleMonthKey())}. The counters reset on the first of the month, midnight Pacific time. The app stops at 95% of each cap: Valhalla answers the routes and OpenFreeMap draws the map. The search also stops at 100 requests a day.`}
+                >
+                    {(Object.keys(GOOGLE_SERVICES) as GoogleSku[]).map((sku) => {
+                        const service = GOOGLE_SERVICES[sku];
+                        const cap = GOOGLE_FREE_MONTHLY[sku];
+                        return (
+                            <SettingsUsageRow
+                                cap={cap}
+                                estimated={service.estimated}
+                                failed={usageFailed}
+                                fallback={service.fallback}
+                                key={sku}
+                                label={service.label}
+                                loading={usage === null}
+                                stopAt={Math.floor(cap * GOOGLE_CAP_SHARE)}
+                                used={usage ? usage[sku] : 0}
+                            />
+                        );
+                    })}
                 </SettingsSection>
 
                 <SettingsSection title="Privacy">

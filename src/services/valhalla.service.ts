@@ -1,5 +1,6 @@
 import { AvoidPoint, RouteResult } from '@typings/types';
 import { decodePolyline, distanceAlongPath, encodePolyline, LatLon } from '@utils/polyline';
+import { motoSeconds } from '@services/eta.service';
 import { httpPostJson } from './http.service';
 
 /**
@@ -103,10 +104,10 @@ const costingOptionsFor = (costing: Costing): Record<string, unknown> | null => 
                 top_speed: 70,
                 use_highways: 0.15,
                 use_primary: 0.45,
-                use_distance: 0.55,
+                use_distance: 0.8,
                 use_living_streets: 0,
                 use_tracks: 0,
-                service_penalty: 200,
+                service_penalty: 50,
                 service_factor: 40,
                 maneuver_penalty: 5,
                 disable_hierarchy_pruning: true,
@@ -147,8 +148,7 @@ export interface AvoidOutcome {
  * The ring is a circle of the radius of the point. The router removes every
  * road that crosses the ring, so the route keeps at least that distance from
  * the point.
- */
-const buildPolygon = (point: AvoidPoint): number[][] => {
+ */const buildPolygon = (point: AvoidPoint): number[][] => {
     const radiusLat = point.radiusMeters / 111320;
     const radiusLon =
         point.radiusMeters / (111320 * Math.max(0.1, Math.cos((point.latitude * Math.PI) / 180)));
@@ -367,11 +367,18 @@ export const computeRoute = async (
 
     const geometry = tripShape(trip);
     const routeMeters = pathLengthMeters(geometry);
+    const distanceMeters = routeMeters > 0 ? routeMeters : (trip?.summary?.length ?? 0) * 1000;
 
     return {
-        distanceMeters: routeMeters > 0 ? routeMeters : (trip?.summary?.length ?? 0) * 1000,
-        durationSeconds: trip?.summary?.time ?? 0,
+        distanceMeters,
+        durationSeconds: motoSeconds(
+            trip?.summary?.time ?? 0,
+            costing === 'motor_scooter' ? 'moto' : 'car',
+            false,
+            distanceMeters,
+        ),
         geometry,
         avoidOutcome: { applied, relaxed },
+        engine: 'valhalla',
     };
 };

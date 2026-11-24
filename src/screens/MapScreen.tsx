@@ -32,6 +32,7 @@ import { AvoidPoint, Place, RootStackParamList, TrafficCamera } from '@typings/t
 import { distanceMeters } from '@utils/geo';
 import { formatClockTime, formatDistance, formatDuration } from '@utils/format';
 import { compassName } from '@utils/cameraSense';
+import { picoYPlacaState } from '@utils/picoYPlaca';
 import { logger } from '@utils/logger';
 import { GEOCODE_COUNTRY } from '@config/geocoding';
 import { layout, spacing } from '@config/theme';
@@ -106,7 +107,15 @@ export const MapScreen = () => {
         setDestination,
     } = useMapStore();
 
-    const { cameras: allCameras, nearby: nearbyCameras, routeSplit } = useCameraStore();
+    const {
+        cameras: allCameras,
+        nearby: nearbyCameras,
+        routeCameras,
+        routeSplit,
+    } = useCameraStore();
+
+    /** the engine that answered the route on screen */
+    const routeEngine = route?.engine ?? null;
 
     /**
      * The save button answers until the route changes, so the rider knows the
@@ -119,8 +128,10 @@ export const MapScreen = () => {
     const {
         googleStyle,
         unavailable: tilesUnavailable,
+        quotaReached: tilesQuotaReached,
         load: loadTiles,
         useOpenFreeMap,
+        chargeTiles,
     } = useTilesStore();
     const {
         navigation: progress,
@@ -136,25 +147,45 @@ export const MapScreen = () => {
     }, [allCameras, focus?.cameraId]);
 
     const cameraMarkers = useMemo(() => {
+        /** a route that is not the valhalla one does not avoid anything */
+        const dodging = routeEngine !== 'google';
         const markers = nearbyCameras.map((camera) => ({
             id: camera.cameraId,
             latitude: camera.latitude,
             longitude: camera.longitude,
             maxSpeedKmh: camera.maxSpeedKmh,
-            isAvoided: camera.avoidEnabled,
+            isAvoided: camera.avoidEnabled && dodging,
             isExpired: camera.operatingState === 'Expired',
             watchBearing: camera.sense?.riskyBearing ?? null,
             bothWays: camera.sense?.bothWays ?? false,
             axisBearing: camera.sense?.axisBearing ?? null,
             label: camera.address || 'ANSV camera',
         }));
+        /** the cameras of the route are shown even when they are far from here */
+        for (const camera of routeCameras) {
+            if (markers.some((marker) => marker.id === camera.cameraId)) {
+                continue;
+            }
+            markers.push({
+                id: camera.cameraId,
+                latitude: camera.latitude,
+                longitude: camera.longitude,
+                maxSpeedKmh: camera.maxSpeedKmh,
+                isAvoided: camera.avoidEnabled && dodging,
+                isExpired: camera.operatingState === 'Expired',
+                watchBearing: camera.sense?.riskyBearing ?? null,
+                bothWays: camera.sense?.bothWays ?? false,
+                axisBearing: camera.sense?.axisBearing ?? null,
+                label: camera.address || 'ANSV camera',
+            });
+        }
         if (focusedCamera && !markers.some((marker) => marker.id === focusedCamera.cameraId)) {
             markers.push({
                 id: focusedCamera.cameraId,
                 latitude: focusedCamera.latitude,
                 longitude: focusedCamera.longitude,
                 maxSpeedKmh: focusedCamera.maxSpeedKmh,
-                isAvoided: focusedCamera.avoidEnabled,
+                isAvoided: focusedCamera.avoidEnabled && dodging,
                 isExpired: focusedCamera.operatingState === 'Expired',
                 watchBearing: focusedCamera.sense?.riskyBearing ?? null,
                 bothWays: focusedCamera.sense?.bothWays ?? false,
@@ -163,8 +194,17 @@ export const MapScreen = () => {
             });
         }
         return markers;
-    }, [focusedCamera, nearbyCameras]);
+    }, [focusedCamera, nearbyCameras, routeCameras, routeEngine]);
     const position = useLocationStore((state) => state.position);
+    const picoYPlaca = useMemo(
+        () =>
+            picoYPlacaState(
+                settings.licencePlate,
+                `${destination?.name ?? ''} ${destination?.address ?? ''}`,
+                new Date(now),
+            ),
+        [destination, now, settings.licencePlate],
+    );
     const [startingNavigation, setStartingNavigation] = useState(false);
     const [routeSaved, setRouteSaved] = useState(false);
     const [locationError, setLocationError] = useState<string | null>(null);
@@ -451,9 +491,13 @@ export const MapScreen = () => {
                 onCameraPress={(cameraId) => void openCameraMenu(cameraId)}
                 onMapPress={onMapPress}
                 onTilesFail={useOpenFreeMap}
+                onViewportChange={() => void chargeTiles()}
                 alternateGeometry={
-                    variant === 'safe' ? routes.short?.geometry : routes.safe?.geometry
+                    variant === 'mainRoads'
+                        ? routes.avoiding?.geometry
+                        : routes.mainRoads?.geometry
                 }
+                remainingGeometry={progress.started ? progress.remainingGeometry : null}
                 routeGeometry={route?.geometry}
                 style={
                     settings.mapProvider === 'google' && googleStyle
@@ -545,6 +589,20 @@ export const MapScreen = () => {
                 {tilesUnavailable ? (
                     <Banner message="Google map unavailable, using OpenFreeMap instead." tone="info" />
                 ) : null}
+                {tilesQuotaReached ? (
+                    <Banner
+                        message="The free Google map quota for this month is used up, using OpenFreeMap instead."
+                        tone="warning"
+                    />
+                ) : null}
+                {progress.offRoute ? (
+                    <Banner
+                        actionLabel="Retry"
+                        message="You left the route. Recalculate."
+                        onAction={recompute}
+                        tone="warning"
+                    />
+                ) : null}
                 {locationError ? <Banner tone="warning" message={locationError} /> : null}
                 {error ? (
                     <Banner
@@ -578,6 +636,7 @@ export const MapScreen = () => {
                     }
                     avoidPointCount={avoidPoints.length}
                     cameraCount={routeSplit.sent}
+                    camerasOnRoute={routeSplit.onRoute}
                     isStarting={startingNavigation}
                     destinationName={destination?.name ?? null}
                     distanceLabel={formatDistance(
@@ -593,19 +652,21 @@ export const MapScreen = () => {
                     isComputing={computing}
                     isNavigating={progress.started}
                     onChooseDestination={() => navigation.navigate('PlaceSearch')}
+                    routeEngine={routeEngine}
                     onClear={() => {
                         clearRoute();
                         setDestination(null);
                         stopNavigation();
                     }}
                     onOpenDetails={() => navigation.navigate('RouteDetails')}
+                    picoYPlaca={picoYPlaca}
                     isSaved={routeSaved}
                     onSave={() => {
                         if (route && destination) {
                             void saveRoute(route, destination);
                         }
                     }}
-                    hasSafeRoute={routes.safe !== null}
+                    hasMainRoadsRoute={routes.mainRoads !== null}
                     onStart={startNavigation}
                     onStop={stopNavigation}
                     onVariantChange={(next) => setVariant(next)}

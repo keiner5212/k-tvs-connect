@@ -611,9 +611,13 @@ export const RouteDetailsScreen = () => {
                 </Text>
             </View>
             <Text style={[styles.note, { color: colors.mutedForeground }]}>
-                {routeSplit.leftOut > 0
-                    ? `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} avoided. ${routeSplit.leftOut} nearby camera${routeSplit.leftOut === 1 ? '' : 's'} watch the other way and do not need avoiding.`
-                    : `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} avoided.`}
+                {routeSplit.onRoute > 0
+                    ? `${routeSplit.onRoute} camera${routeSplit.onRoute === 1 ? '' : 's'
+                    } on the route. This trip does not avoid them.`
+                    : routeSplit.leftOut > 0
+                        ? `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} avoided. ${routeSplit.leftOut} nearby camera${routeSplit.leftOut === 1 ? '' : 's'
+                        } watch the other way and do not need avoiding.`
+                        : `${routeSplit.sent} camera${routeSplit.sent === 1 ? '' : 's'} avoided.`}
             </Text>
             {cameras.length === 0 ? (
                 <Text style={[styles.note, { color: colors.mutedForeground }]}>

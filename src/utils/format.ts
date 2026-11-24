@@ -40,6 +40,17 @@ const MONTHS = [
     'Dec',
 ];
 
+/** a count with the thousands separated, the app copy is english */
+export const formatCount = (value: number): string =>
+    Math.max(0, Math.round(value)).toLocaleString('en-US');
+
+/** the month of a google usage key, as "Nov 2026" */
+export const formatMonth = (key: string): string => {
+    const [year, month] = key.split('-');
+    const name = MONTHS[Number(month) - 1];
+    return name ? `${name} ${year}` : key;
+};
+
 const startOfDay = (date: Date): number =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 

@@ -9,9 +9,11 @@ import {
 } from '@typings/types';
 import { estimateRoute, isRideOfRoute, RouteEstimate } from '@services/eta.service';
 import { CAMERA_AVOID_RADIUS_METERS } from '@services/ansv.service';
+import { computeGoogleRoute } from '@services/googleRoutes.service';
+import { canUseGoogle } from '@services/googleUsage.service';
 import { Costing, computeRoute, DirectedAvoid } from '@services/valhalla.service';
 import { CameraPassage, ROUTE_CORRIDOR_METERS, useCameraStore } from '@stores/cameraStore';
-import { decodePolyline, distanceBetween, projectOntoPath } from '@utils/polyline';
+import { decodePolyline, distanceBetween, encodePolyline, projectOntoPath } from '@utils/polyline';
 import {
     deleteAvoidPoint as deleteStoredAvoidPoint,
     insertAvoidPoint,
@@ -30,6 +32,10 @@ export interface NavigationProgress {
     distanceLeftMeters: number;
     timeLeftSeconds: number;
     arrived: boolean;
+    /** the part of the route that is left, from the rider to the destination */
+    remainingGeometry: string | null;
+    /** the rider left the route */
+    offRoute: boolean;
 }
 
 export interface FocusPoint {
@@ -38,15 +44,18 @@ export interface FocusPoint {
     cameraId: string | null;
 }
 
-export type RouteVariant = 'short' | 'safe';
+export type RouteVariant = 'avoiding' | 'mainRoads';
 
 const REPAIR_PASSES = 4;
 
+/** the rider is off the route when the position is this far from it */
+const OFF_ROUTE_METERS = 40;
+
 export interface RouteVariants {
-    /** the shortest way, it can cut between neighbourhoods */
-    short: RouteResult | null;
-    /** the way that stays on the main roads */
-    safe: RouteResult | null;
+    /** the valhalla route, it goes around the cameras and the marked points */
+    avoiding: RouteResult | null;
+    /** the google route, it stays on the main roads */
+    mainRoads: RouteResult | null;
 }
 
 interface MapState {
@@ -116,8 +125,12 @@ const describeRouteError = (error: unknown): string => {
 };
 
 interface CameraPlan {
+    /** the cameras the route goes around */
     sent: number;
+    /** the cameras that watch the rider and stay */
     leftOut: number;
+    /** the cameras the route goes through, when the trip does not dodge them */
+    onRoute: number;
     cameras: TrafficCamera[];
 }
 
@@ -128,11 +141,11 @@ interface CameraBans {
     cameras: Map<string, TrafficCamera>;
 }
 
-const EMPTY_PLAN: CameraPlan = { sent: 0, leftOut: 0, cameras: [] };
+const EMPTY_PLAN: CameraPlan = { sent: 0, leftOut: 0, onRoute: 0, cameras: [] };
 
-let cameraPlans: { short: CameraPlan; safe: CameraPlan } = {
-    short: EMPTY_PLAN,
-    safe: EMPTY_PLAN,
+let cameraPlans: { avoiding: CameraPlan; mainRoads: CameraPlan } = {
+    avoiding: EMPTY_PLAN,
+    mainRoads: EMPTY_PLAN,
 };
 
 const emptyBans = (): CameraBans => ({
@@ -206,14 +219,24 @@ const planOf = (
     bans: CameraBans,
     facing: TrafficCamera[],
     behind: TrafficCamera[] = [],
+    dodging = true,
 ): CameraPlan => {
     const skip = new Set([...facing, ...behind].map((camera) => camera.cameraId));
     const avoided = [...bans.cameras.values()].filter((camera) => !skip.has(camera.cameraId));
-    return { sent: avoided.length, leftOut: facing.length, cameras: avoided };
+    return {
+        sent: dodging ? avoided.length : 0,
+        leftOut: facing.length,
+        onRoute: dodging ? 0 : behind.length,
+        cameras: dodging ? avoided : behind,
+    };
 };
 
 const publishPlan = (plan: CameraPlan): void => {
-    useCameraStore.getState().setRouteSplit({ sent: plan.sent, leftOut: plan.leftOut });
+    useCameraStore.getState().setRouteSplit({
+        sent: plan.sent,
+        leftOut: plan.leftOut,
+        onRoute: plan.onRoute,
+    });
     useCameraStore.getState().setRouteCameras(plan.cameras);
 };
 
@@ -230,6 +253,7 @@ const routeAroundCameras = async (
     destinationLon: number,
     manual: AvoidPoint[],
     costing: Costing,
+    dodging: boolean,
 ): Promise<{ route: RouteResult; plan: CameraPlan }> => {
     const bans = emptyBans();
     const ask = () =>
@@ -268,6 +292,13 @@ const routeAroundCameras = async (
         if (back.length === 0) {
             return { route, plan: planOf(bans, facing) };
         }
+        if (!dodging) {
+            /** the cameras stay on the route, they are only counted */
+            return {
+                route,
+                plan: planOf(bans, facing, back.map((passage) => passage.camera), false),
+            };
+        }
         let added = false;
         for (const passage of back) {
             if (addPassage(bans, passage)) {
@@ -297,7 +328,104 @@ const routeAroundCameras = async (
     if (last.back.length === 0) {
         return { route, plan: planOf(bans, last.facing) };
     }
-    return { route: best, plan: planOf(bans, bestFacing, bestBehind) };
+    return { route: best, plan: planOf(bans, bestFacing, bestBehind, dodging) };
+};
+
+/**
+ * The main roads route. Google answers it with the traffic of the moment and
+ * it never avoids a point, because it cannot. Without google the valhalla auto
+ * profile answers, and valhalla always goes around the cameras.
+ */
+const mainRoadsRoute = async (
+    baseUrl: string,
+    originLat: number,
+    originLon: number,
+    destinationLat: number,
+    destinationLon: number,
+    manual: AvoidPoint[],
+    dodging: boolean,
+): Promise<{ route: RouteResult; plan: CameraPlan }> => {
+    if (await canUseGoogle('routes')) {
+        try {
+            const route = await computeGoogleRoute({
+                originLat,
+                originLon,
+                destinationLat,
+                destinationLon,
+            });
+            return { route, plan: await camerasOnRoute(route.geometry) };
+        } catch (error) {
+            logger.warn('the google route did not answer', {
+                service: 'google_routes',
+                event: 'route',
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+            });
+        }
+    }
+
+    return routeAroundCameras(
+        baseUrl,
+        originLat,
+        originLon,
+        destinationLat,
+        destinationLon,
+        manual,
+        'auto',
+        dodging,
+    );
+};
+
+/** the cameras the route goes through, for a route that does not avoid them */
+const camerasOnRoute = async (geometry: string): Promise<CameraPlan> => {
+    const { back, facing } = await useCameraStore.getState().classifyRoute(geometry);
+    return planOf(emptyBans(), facing, back.map((passage) => passage.camera), false);
+};
+
+/** the route that goes around the cameras and the points of the rider */
+const avoidingRoute = async (
+    baseUrl: string,
+    originLat: number,
+    originLon: number,
+    destinationLat: number,
+    destinationLon: number,
+    manual: AvoidPoint[],
+    dodging: boolean,
+    googleFallback: RouteResult | null,
+): Promise<{ route: RouteResult; plan: CameraPlan }> => {
+    try {
+        return await routeAroundCameras(
+            baseUrl,
+            originLat,
+            originLon,
+            destinationLat,
+            destinationLon,
+            manual,
+            'motor_scooter',
+            dodging,
+        );
+    } catch (error) {
+        if (googleFallback) {
+            return { route: googleFallback, plan: EMPTY_PLAN };
+        }
+        if (await canUseGoogle('routes')) {
+            const route = await computeGoogleRoute({
+                originLat,
+                originLon,
+                destinationLat,
+                destinationLon,
+            });
+            return { route, plan: await camerasOnRoute(route.geometry) };
+        }
+        throw error;
+    }
+};
+
+/** the cameras of the whole country come once, a long trip needs all of them */
+const ensureCameraData = async (): Promise<void> => {
+    const store = useCameraStore.getState();
+    if (store.cameras.length === 0) {
+        await store.refresh();
+    }
 };
 
 export const useMapStore = create<MapState>((set, get) => ({
@@ -305,8 +433,8 @@ export const useMapStore = create<MapState>((set, get) => ({
     avoidPoints: [],
     route: null,
     activeRouteId: null,
-    routes: { short: null, safe: null },
-    variant: 'short',
+    routes: { avoiding: null, mainRoads: null },
+    variant: 'avoiding',
     estimate: null,
     computing: false,
     error: null,
@@ -319,6 +447,8 @@ export const useMapStore = create<MapState>((set, get) => ({
         distanceLeftMeters: 0,
         timeLeftSeconds: 0,
         arrived: false,
+        remainingGeometry: null,
+        offRoute: false,
     },
     focus: null,
     cameraKey: 0,
@@ -361,45 +491,50 @@ export const useMapStore = create<MapState>((set, get) => ({
 
         const { valhallaBaseUrl } = useSettingsStore.getState().settings;
         const manualPoints = get().avoidPoints;
+        const dodging = useCameraStore.getState().avoidEnabled;
 
         set({ computing: true, error: null });
 
         try {
-            /**
-             * The short route cuts between neighbourhoods, the safe one stays
-             * on the main roads. Each one is repaired until it no longer leaves
-             * a camera behind the rider. Facing a camera stays allowed.
-             */
-            const short = await routeAroundCameras(
-                valhallaBaseUrl,
-                originLat,
-                originLon,
-                destination.latitude,
-                destination.longitude,
-                manualPoints,
-                'motor_scooter',
-            );
-            const safe = await routeAroundCameras(
-                valhallaBaseUrl,
-                originLat,
-                originLon,
-                destination.latitude,
-                destination.longitude,
-                manualPoints,
-                'auto',
-            ).catch(() => null);
+            await ensureCameraData();
 
-            cameraPlans = { short: short.plan, safe: safe?.plan ?? EMPTY_PLAN };
+            const mainRoads = await mainRoadsRoute(
+                valhallaBaseUrl,
+                originLat,
+                originLon,
+                destination.latitude,
+                destination.longitude,
+                manualPoints,
+                dodging,
+            ).catch(() => null);
+            const avoiding = await avoidingRoute(
+                valhallaBaseUrl,
+                originLat,
+                originLon,
+                destination.latitude,
+                destination.longitude,
+                manualPoints,
+                dodging,
+                mainRoads?.route ?? null,
+            );
+
+            cameraPlans = {
+                avoiding: avoiding.plan,
+                mainRoads: mainRoads?.plan ?? EMPTY_PLAN,
+            };
 
             const variant = get().variant;
-            const chosen = variant === 'safe' && safe ? safe : short;
+            const chosen = variant === 'mainRoads' && mainRoads ? mainRoads : avoiding;
 
             publishPlan(chosen.plan);
 
             set({
                 route: chosen.route,
                 activeRouteId: null,
-                routes: { short: short.route, safe: safe?.route ?? null },
+                routes: {
+                    avoiding: avoiding.route,
+                    mainRoads: mainRoads?.route ?? null,
+                },
                 estimate: estimateRoute([], chosen.route.durationSeconds),
                 computing: false,
                 routeFailures: 0,
@@ -417,11 +552,11 @@ export const useMapStore = create<MapState>((set, get) => ({
         }
     },
     clearRoute: () => {
-        cameraPlans = { short: EMPTY_PLAN, safe: EMPTY_PLAN };
+        cameraPlans = { avoiding: EMPTY_PLAN, mainRoads: EMPTY_PLAN };
         publishPlan(EMPTY_PLAN);
         set({
             route: null,
-            routes: { short: null, safe: null },
+            routes: { avoiding: null, mainRoads: null },
             activeRouteId: null,
             estimate: null,
             destination: null,
@@ -471,8 +606,8 @@ export const useMapStore = create<MapState>((set, get) => ({
             error: null,
             estimate: estimateRoute(saved.achievedTimes, saved.durationSeconds),
             route,
-            routes: { short: route, safe: null },
-            variant: 'short',
+            routes: { avoiding: route, mainRoads: null },
+            variant: 'avoiding',
         });
 
         await get().startNavigation();
@@ -499,6 +634,8 @@ export const useMapStore = create<MapState>((set, get) => ({
                 startLatitude: position?.[0] ?? 0,
                 startLongitude: position?.[1] ?? 0,
                 arrived: false,
+                remainingGeometry: null,
+                offRoute: false,
             },
         });
 
@@ -521,6 +658,8 @@ export const useMapStore = create<MapState>((set, get) => ({
                 distanceLeftMeters: 0,
                 timeLeftSeconds: 0,
                 arrived: false,
+                remainingGeometry: null,
+                offRoute: false,
             },
         });
 
@@ -576,6 +715,13 @@ export const useMapStore = create<MapState>((set, get) => ({
                 { lat: destination.latitude, lon: destination.longitude },
             ) <= ARRIVAL_METERS;
 
+        /** the part of the route that is left, and the flag for the rider off it */
+        const remainingGeometry = encodePolyline(
+            [projection.point, ...points.slice(projection.index + 1)],
+            6,
+        );
+        const offRoute = projection.offset > OFF_ROUTE_METERS;
+
         set({
             navigation: {
                 started: true,
@@ -585,6 +731,8 @@ export const useMapStore = create<MapState>((set, get) => ({
                 distanceLeftMeters,
                 timeLeftSeconds,
                 arrived,
+                remainingGeometry,
+                offRoute,
             },
         });
 

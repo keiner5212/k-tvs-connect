@@ -21,6 +21,7 @@ import { AvoidPoint, CameraMarkerData, Place } from '@typings/types';
 import { SegmentedControl } from '@components/controls';
 import { RouteVariant } from '@stores/mapStore';
 import { compassName } from '@utils/cameraSense';
+import { PicoYPlacaResult, picoYPlacaText } from '@utils/picoYPlaca';
 import { decodePolyline } from '@utils/polyline';
 import { rgba } from '@utils/hexToRgb';
 import { layout, radii, spacing, typography } from '@config/theme';
@@ -77,6 +78,8 @@ export interface MapCanvasProps {
     routeGeometry?: string | null;
     /** the other way, drawn behind the one that is selected */
     alternateGeometry?: string | null;
+    /** the part of the route that is left, it is drawn over the whole one */
+    remainingGeometry?: string | null;
     avoidPoints: AvoidPoint[];
     destination?: Place | null;
     followUser: boolean;
@@ -89,6 +92,7 @@ export interface MapCanvasProps {
     onAvoidPointPress?: (point: AvoidPoint) => void;
     onMapPress?: (latitude: number, longitude: number) => void;
     onTilesFail?: () => void;
+    onViewportChange?: () => void;
 }
 
 export const MapCanvas = ({
@@ -97,6 +101,7 @@ export const MapCanvas = ({
     zoom,
     routeGeometry,
     alternateGeometry,
+    remainingGeometry,
     avoidPoints,
     destination,
     followUser,
@@ -109,6 +114,7 @@ export const MapCanvas = ({
     onAvoidPointPress,
     onMapPress,
     onTilesFail,
+    onViewportChange,
 }: MapCanvasProps) => {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -140,6 +146,7 @@ export const MapCanvas = ({
 
     const routePoints = routeGeometry ? decodePolyline(routeGeometry) : [];
     const alternatePoints = alternateGeometry ? decodePolyline(alternateGeometry) : [];
+    const remainingPoints = remainingGeometry ? decodePolyline(remainingGeometry) : [];
     const alternateShape =
         alternatePoints.length > 1
             ? {
@@ -154,6 +161,15 @@ export const MapCanvas = ({
                 coordinates: routePoints.map((point) => [point.lon, point.lat]),
             }
             : null;
+    const remainingShape =
+        remainingPoints.length > 1
+            ? {
+                type: 'LineString' as const,
+                coordinates: remainingPoints.map((point) => [point.lon, point.lat]),
+            }
+            : null;
+    /** the part that is left, or the whole route when the ride did not start */
+    const drawnShape = remainingShape ?? routeShape;
 
     return (
         <MapView
@@ -163,7 +179,10 @@ export const MapCanvas = ({
             attributionEnabled
             attributionPosition={{ top: insets.top + spacing.sm, left: layout.screenPadding }}
             onDidFailLoadingMap={onTilesFail}
-            onRegionDidChange={rememberHeading}
+            onRegionDidChange={(event) => {
+                rememberHeading(event);
+                onViewportChange?.();
+            }}
             onRegionIsChanging={rememberHeading}
             compassViewPosition={1}
             compassViewMargins={{
@@ -206,14 +225,31 @@ export const MapCanvas = ({
                 </ShapeSource>
             ) : null}
 
-            {routeShape ? (
+            {routeShape && remainingShape ? (
                 <ShapeSource id="route-source" shape={routeShape}>
                     <LineLayer
                         id="route-line"
                         style={{
-                            lineColor: colors.primary,
-                            lineOpacity: 0.95,
+                            lineColor: colors.mutedForeground,
+                            lineOpacity: 0.35,
                             lineWidth: 4,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                        }}
+                    />
+                </ShapeSource>
+            ) : null}
+
+            {drawnShape ? (
+                <ShapeSource id="route-remaining-source" shape={drawnShape}>
+                    <LineLayer
+                        id="route-remaining-line"
+                        style={{
+                            lineColor: colors.primary,
+                            lineOpacity: 1,
+                            lineWidth: 4,
+                            lineCap: 'round',
+                            lineJoin: 'round',
                         }}
                     />
                 </ShapeSource>
@@ -406,6 +442,7 @@ interface RouteSheetProps {
     arrivalLabel: string | null;
     destinationName: string | null;
     cameraCount: number;
+    camerasOnRoute: number;
     avoidPointCount: number;
     isComputing: boolean;
     isNavigating: boolean;
@@ -413,7 +450,9 @@ interface RouteSheetProps {
     isStarting?: boolean;
     arrived: boolean;
     variant: RouteVariant;
-    hasSafeRoute: boolean;
+    hasMainRoadsRoute: boolean;
+    /** the engine that answered the route */
+    routeEngine?: 'valhalla' | 'google' | null; picoYPlaca: PicoYPlacaResult | null;
     onVariantChange: (variant: RouteVariant) => void;
     onStart: () => void;
     onStop: () => void;
@@ -422,6 +461,11 @@ interface RouteSheetProps {
     onOpenDetails: () => void;
     onChooseDestination: () => void;
 }
+
+const VARIANT_LABELS: Record<RouteVariant, string> = {
+    avoiding: 'Around cameras',
+    mainRoads: 'Main roads',
+};
 
 /**
  * The sheet at the bottom of the map. It reads from the top down, so the least
@@ -434,6 +478,7 @@ export const RouteSheet = ({
     arrivalLabel,
     destinationName,
     cameraCount,
+    camerasOnRoute,
     avoidPointCount,
     isComputing,
     isNavigating,
@@ -441,7 +486,9 @@ export const RouteSheet = ({
     isStarting,
     arrived,
     variant,
-    hasSafeRoute,
+    hasMainRoadsRoute,
+    routeEngine,
+    picoYPlaca,
     onVariantChange,
     onStart,
     onStop,
@@ -451,6 +498,37 @@ export const RouteSheet = ({
     onChooseDestination,
 }: RouteSheetProps) => {
     const { colors } = useTheme();
+    const [collapsed, setCollapsed] = useState(false);
+
+    const pico = picoYPlaca ? picoYPlacaText(picoYPlaca) : null;
+    const picoTone = pico
+        ? {
+            restricted: {
+                disc: colors.error,
+                icon: colors.errorForeground,
+                surface: colors.primarySubtle,
+                glyph: 'report-problem' as const,
+            },
+            upcoming: {
+                disc: colors.warning,
+                icon: colors.warningForeground,
+                surface: colors.muted,
+                glyph: 'schedule' as const,
+            },
+            clear: {
+                disc: colors.success,
+                icon: colors.successForeground,
+                surface: colors.muted,
+                glyph: 'check-circle-outline' as const,
+            },
+            unknown: {
+                disc: colors.border,
+                icon: colors.mutedForeground,
+                surface: colors.muted,
+                glyph: 'help-outline' as const,
+            },
+        }[pico.tone]
+        : null;
 
     if (!destinationName) {
         return (
@@ -474,121 +552,196 @@ export const RouteSheet = ({
 
     return (
         <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            {cameraCount > 0 || avoidPointCount > 0 ? (
-                <View style={styles.countsRow}>
-                    {cameraCount > 0 ? (
-                        <View style={styles.countItem}>
-                            <MaterialIcons color={colors.mutedForeground} name="videocam" size={14} />
-                            <Text style={[styles.countLabel, { color: colors.mutedForeground }]}>
-                                {`${cameraCount} camera${cameraCount === 1 ? '' : 's'} avoided`}
-                            </Text>
-                        </View>
-                    ) : null}
-                    {avoidPointCount > 0 ? (
-                        <View style={styles.countItem}>
-                            <MaterialIcons
-                                color={colors.mutedForeground}
-                                name="add-location-alt"
-                                size={14}
-                            />
-                            <Text style={[styles.countLabel, { color: colors.mutedForeground }]}>
-                                {`${avoidPointCount} point${avoidPointCount === 1 ? '' : 's'} to avoid`}
-                            </Text>
-                        </View>
-                    ) : null}
-                </View>
-            ) : null}
-
-            <View style={styles.destinationRow}>
-                <MaterialIcons color={colors.mutedForeground} name="place" size={20} />
-                <Text style={[styles.destinationName, { color: colors.foreground }]} numberOfLines={1}>
-                    {destinationName}
-                </Text>
-            </View>
-
-            {isNavigating && arrived ? (
-                <View
-                    accessible
-                    accessibilityLabel="You have arrived at your destination. End of the route. Park safely."
-                    accessibilityLiveRegion="polite"
-                    style={[styles.arrivalRow, { backgroundColor: colors.muted, borderColor: colors.border }]}
-                >
-                    <View style={[styles.arrivalDisc, { backgroundColor: colors.success }]}>
-                        <MaterialIcons color={colors.successForeground} name="place" size={20} />
-                    </View>
-                    <View style={styles.arrivalText}>
-                        <Text style={[styles.arrivalTitle, { color: colors.foreground }]}>
-                            You have arrived
+            <View style={styles.sheetHeader}>
+                {collapsed ? (
+                    <>
+                        <Text
+                            style={[styles.sheetHeaderTitle, { color: colors.foreground }]}
+                            numberOfLines={1}
+                        >
+                            {VARIANT_LABELS[variant]}
                         </Text>
-                        <Text style={[styles.arrivalBody, { color: colors.mutedForeground }]}>
-                            End of the route. Park safely.
-                        </Text>
-                    </View>
-                </View>
-            ) : null}
-
-            {isComputing ? (
-                <Text style={[styles.sheetHint, { color: colors.mutedForeground }]}>
-                    Computing route...
-                </Text>
-            ) : (
-                <View style={styles.metricsRow}>
-                    <View
-                        accessible
-                        accessibilityLabel={`${isNavigating ? 'To the destination' : 'Distance'}, ${distanceLabel}`}
-                        style={styles.metric}
-                    >
-                        <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
-                            {isNavigating ? 'to destination' : 'distance'}
-                        </Text>
-                        <Text style={[styles.metricValue, { color: colors.foreground }]}>
-                            {distanceLabel}
-                        </Text>
-                    </View>
-                    <View
-                        accessible
-                        accessibilityLabel={`${isNavigating ? 'Time left' : 'Duration'}, ${durationLabel}`}
-                        style={styles.metric}
-                    >
-                        <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
-                            {isNavigating ? 'time left' : 'duration'}
-                        </Text>
-                        <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                        <Text style={[styles.sheetHeaderValue, { color: colors.foreground }]}>
                             {durationLabel}
                         </Text>
-                    </View>
-                    <View
-                        accessible
-                        accessibilityLabel={`Arrival, ${arrivalLabel ?? 'unknown'}`}
-                        style={styles.metric}
-                    >
-                        <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
-                            arrival
-                        </Text>
-                        <Text style={[styles.metricValue, { color: colors.foreground }]}>
-                            {arrivalLabel ?? 'Unknown'}
-                        </Text>
-                    </View>
-                </View>
-            )}
-
-            {hasSafeRoute ? (
-                <View style={styles.variantRow}>
-                    <SegmentedControl
-                        onChange={(value) => onVariantChange(value as RouteVariant)}
-                        options={[
-                            { value: 'short', label: 'Shortest' },
-                            { value: 'safe', label: 'Safest' },
-                        ]}
-                        value={variant}
+                    </>
+                ) : null}
+                <TouchableOpacity
+                    accessibilityLabel={collapsed ? 'Expand the panel' : 'Collapse the panel'}
+                    accessibilityRole="button"
+                    onPress={() => setCollapsed((value) => !value)}
+                    style={styles.sheetToggle}
+                >
+                    <MaterialIcons
+                        color={colors.mutedForeground}
+                        name={collapsed ? 'expand-less' : 'expand-more'}
+                        size={22}
                     />
-                    <Text style={[styles.variantHint, { color: colors.mutedForeground }]}>
-                        {variant === 'safe'
-                            ? 'Stays on the main roads.'
-                            : 'Cuts between neighbourhoods when it can.'}
-                    </Text>
-                </View>
-            ) : null}
+                </TouchableOpacity>
+            </View>
+
+            {collapsed ? null : (
+                <>
+                    {cameraCount > 0 || camerasOnRoute > 0 || avoidPointCount > 0 ? (
+                        <View style={styles.countsRow}>
+                            {cameraCount > 0 ? (
+                                <View style={styles.countItem}>
+                                    <MaterialIcons color={colors.mutedForeground} name="videocam" size={14} />
+                                    <Text style={[styles.countLabel, { color: colors.mutedForeground }]}>
+                                        {`${cameraCount} camera${cameraCount === 1 ? '' : 's'} avoided`}
+                                    </Text>
+                                </View>
+                            ) : null}
+                            {camerasOnRoute > 0 ? (
+                                <View style={styles.countItem}>
+                                    <MaterialIcons color={colors.mutedForeground} name="videocam" size={14} />
+                                    <Text style={[styles.countLabel, { color: colors.mutedForeground }]}>
+                                        {`${camerasOnRoute} camera${camerasOnRoute === 1 ? '' : 's'
+                                            } on the route`}
+                                    </Text>
+                                </View>
+                            ) : null}
+                            {avoidPointCount > 0 ? (
+                                <View style={styles.countItem}>
+                                    <MaterialIcons
+                                        color={colors.mutedForeground}
+                                        name="add-location-alt"
+                                        size={14}
+                                    />
+                                    <Text style={[styles.countLabel, { color: colors.mutedForeground }]}>
+                                        {`${avoidPointCount} point${avoidPointCount === 1 ? '' : 's'} to avoid`}
+                                    </Text>
+                                </View>
+                            ) : null}
+                        </View>
+                    ) : null}
+
+                    <View style={styles.destinationRow}>
+                        <MaterialIcons color={colors.mutedForeground} name="place" size={20} />
+                        <Text style={[styles.destinationName, { color: colors.foreground }]} numberOfLines={1}>
+                            {destinationName}
+                        </Text>
+                    </View>
+
+                    {pico && picoTone ? (
+                        <View
+                            accessible
+                            accessibilityLabel={`${pico.title}. ${pico.body}`}
+                            accessibilityLiveRegion="polite"
+                            style={[
+                                styles.picoRow,
+                                { backgroundColor: picoTone.surface, borderColor: colors.border },
+                            ]}
+                        >
+                            <View style={[styles.picoDisc, { backgroundColor: picoTone.disc }]}>
+                                <MaterialIcons color={picoTone.icon} name={picoTone.glyph} size={18} />
+                            </View>
+                            <View style={styles.picoText}>
+                                <Text style={[styles.picoTitle, { color: colors.foreground }]}>
+                                    {pico.title}
+                                </Text>
+                                <Text style={[styles.picoBody, { color: colors.foreground }]}>
+                                    {pico.body}
+                                </Text>
+                            </View>
+                        </View>
+                    ) : null}
+
+                    {isNavigating && arrived ? (
+                        <View
+                            accessible
+                            accessibilityLabel="You have arrived at your destination. End of the route. Park safely."
+                            accessibilityLiveRegion="polite"
+                            style={[styles.arrivalRow, { backgroundColor: colors.muted, borderColor: colors.border }]}
+                        >
+                            <View style={[styles.arrivalDisc, { backgroundColor: colors.success }]}>
+                                <MaterialIcons color={colors.successForeground} name="place" size={20} />
+                            </View>
+                            <View style={styles.arrivalText}>
+                                <Text style={[styles.arrivalTitle, { color: colors.foreground }]}>
+                                    You have arrived
+                                </Text>
+                                <Text style={[styles.arrivalBody, { color: colors.mutedForeground }]}>
+                                    End of the route. Park safely.
+                                </Text>
+                            </View>
+                        </View>
+                    ) : null}
+
+                    {isComputing ? (
+                        <Text style={[styles.sheetHint, { color: colors.mutedForeground }]}>
+                            Computing route...
+                        </Text>
+                    ) : (
+                        <View style={styles.metricsRow}>
+                            <View
+                                accessible
+                                accessibilityLabel={`${isNavigating ? 'To the destination' : 'Distance'}, ${distanceLabel}`}
+                                style={styles.metric}
+                            >
+                                <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
+                                    {isNavigating ? 'to destination' : 'distance'}
+                                </Text>
+                                <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                                    {distanceLabel}
+                                </Text>
+                            </View>
+                            <View
+                                accessible
+                                accessibilityLabel={`${isNavigating ? 'Time left' : 'Duration'}, ${durationLabel}`}
+                                style={styles.metric}
+                            >
+                                <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
+                                    {isNavigating ? 'time left' : 'duration'}
+                                </Text>
+                                <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                                    {durationLabel}
+                                </Text>
+                            </View>
+                            <View
+                                accessible
+                                accessibilityLabel={`Arrival, ${arrivalLabel ?? 'unknown'}`}
+                                style={styles.metric}
+                            >
+                                <Text style={[styles.metricCaption, { color: colors.mutedForeground }]}>
+                                    arrival
+                                </Text>
+                                <Text style={[styles.metricValue, { color: colors.foreground }]}>
+                                    {arrivalLabel ?? 'Unknown'}
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+
+                    {hasMainRoadsRoute ? (
+                        <View style={styles.variantRow}>
+                            <SegmentedControl
+                                onChange={(value) => onVariantChange(value as RouteVariant)}
+                                options={[
+                                    { value: 'avoiding', label: 'Around cameras' },
+                                    { value: 'mainRoads', label: 'Main roads' },
+                                ]}
+                                value={variant}
+                            />
+                            <Text style={[styles.variantHint, { color: colors.mutedForeground }]}>
+                                {variant === 'mainRoads'
+                                    ? 'Stays on the main roads, with the traffic of the moment.'
+                                    : 'Goes around the cameras and the points you marked.'}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {routeEngine === 'google' ? (
+                        <View style={styles.cameraNoteRow}>
+                            <View style={styles.cameraNoteText}>
+                                <Text style={[styles.cameraNoteLabel, { color: colors.foreground }]}>
+                                    This route does not avoid the cameras.
+                                </Text>
+                            </View>
+                        </View>
+                    ) : null}
+                </>
+            )}
 
             <View style={styles.sheetActions}>
                 <IconLabelButton
@@ -830,6 +983,20 @@ const styles = StyleSheet.create({
         height: 44,
         width: 44,
     },
+    cameraNoteLabel: {
+        ...typography.body,
+    },
+    cameraNoteRow: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'space-between',
+        marginTop: spacing.sm,
+    },
+    cameraNoteText: {
+        flex: 1,
+        minWidth: 0,
+    },
     cameraOrbit: {
         alignItems: 'center',
         bottom: 0,
@@ -919,6 +1086,33 @@ const styles = StyleSheet.create({
         gap: spacing.md,
         marginTop: spacing.md,
     },
+    picoBody: {
+        ...typography.body,
+    },
+    picoDisc: {
+        alignItems: 'center',
+        borderRadius: radii.full,
+        height: 32,
+        justifyContent: 'center',
+        width: 32,
+    },
+    picoRow: {
+        alignItems: 'center',
+        borderRadius: radii.lg,
+        borderWidth: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.md,
+        padding: spacing.md,
+    },
+    picoText: {
+        flex: 1,
+        gap: spacing.xs,
+        minWidth: 0,
+    },
+    picoTitle: {
+        ...typography.label,
+    },
     pin: {
         alignItems: 'center',
         borderRadius: radii.full,
@@ -994,6 +1188,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginTop: spacing.md,
     },
+    sheetHeader: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'space-between',
+        paddingBottom: spacing.xs,
+    },
+    sheetHeaderTitle: {
+        ...typography.subheading,
+        flex: 1,
+        minWidth: 0,
+    },
+    sheetHeaderValue: {
+        ...typography.readout,
+    },
     sheetHint: {
         ...typography.body,
         marginTop: spacing.xs,
@@ -1012,6 +1221,12 @@ const styles = StyleSheet.create({
     },
     sheetTitle: {
         ...typography.subheading,
+    },
+    sheetToggle: {
+        alignItems: 'center',
+        height: 44,
+        justifyContent: 'center',
+        width: 44,
     },
     variantHint: {
         ...typography.caption,

@@ -1,8 +1,10 @@
 import React from 'react';
-import { StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { ThemeSwitch } from '@components/controls';
 import { useTheme } from '@hooks/useTheme';
 import { layout, radii, spacing, typography } from '@config/theme';
+import { formatCount } from '@utils/format';
 
 interface SettingsSectionProps {
     title: string;
@@ -72,10 +74,10 @@ export const SettingsRow = ({
             </View>
             {value ? <Text style={[styles.rowValue, { color: colors.mutedForeground }]}>{value}</Text> : null}
             {switchValue !== undefined && onSwitchChange ? (
-                <Switch
+                <ThemeSwitch
                     accessibilityLabel={label}
+                    accessibilityHint={description}
                     onValueChange={onSwitchChange}
-                    trackColor={{ true: colors.primary, false: colors.muted }}
                     value={switchValue}
                 />
             ) : null}
@@ -89,6 +91,98 @@ interface SettingsChoiceProps {
     selected: boolean;
     onSelect: () => void;
 }
+
+interface SettingsUsageRowProps {
+    label: string;
+    used: number;
+    cap: number;
+    /** the point where the app stops calling google */
+    stopAt: number;
+    estimated?: boolean;
+    /** what takes over when the cap is reached */
+    fallback: string;
+    loading?: boolean;
+    failed?: boolean;
+}
+
+/**
+ * How much of the free monthly quota of a google service is left. The tick is
+ * the point where the app stops calling google and moves to the free service.
+ */
+export const SettingsUsageRow = ({
+    label,
+    used,
+    cap,
+    stopAt,
+    estimated = false,
+    fallback,
+    loading = false,
+    failed = false,
+}: SettingsUsageRowProps) => {
+    const { colors } = useTheme();
+    const left = Math.max(0, stopAt - used);
+    const atCap = !loading && !failed && used >= stopAt;
+    const near = !atCap && !loading && !failed && used >= stopAt * 0.8;
+    const fill = atCap ? colors.error : near ? colors.meterWarning : colors.info;
+    const ratio = loading || failed || cap <= 0 ? 0 : Math.min(1, used / cap);
+    const value = loading || failed ? '--' : atCap ? '0 left' : `${formatCount(left)} left`;
+    const spoken = atCap
+        ? `${formatCount(used)} of ${formatCount(cap)} used. Google is off.`
+        : `${estimated ? 'Estimated count. ' : ''}${formatCount(used)} of ${formatCount(
+            cap,
+        )} used. ${formatCount(left)} left before Google stops.`;
+
+    return (
+        <View
+            accessible
+            accessibilityLabel={label}
+            accessibilityValue={{ text: loading || failed ? label : spoken }}
+            style={[styles.usageRow, { borderBottomColor: colors.border }]}
+        >
+            <View style={styles.usageHead}>
+                <Text style={[styles.usageLabel, { color: colors.foreground }]}>{label}</Text>
+                <Text
+                    style={[
+                        styles.usageValue,
+                        { color: atCap ? colors.error : colors.foreground },
+                    ]}
+                >
+                    {value}
+                </Text>
+            </View>
+            <View style={styles.usageMeter}>
+                <View
+                    style={[
+                        styles.usageTrack,
+                        { backgroundColor: colors.muted, borderColor: colors.border },
+                    ]}
+                >
+                    <View
+                        style={[styles.usageFill, { backgroundColor: fill, width: `${ratio * 100}%` }]}
+                    />
+                </View>
+                <View style={[styles.usageStop, { backgroundColor: colors.foreground }]} />
+            </View>
+            <Text
+                style={[
+                    styles.usageCaption,
+                    { color: failed ? colors.error : colors.mutedForeground },
+                ]}
+            >
+                {loading
+                    ? 'Reading the counters.'
+                    : failed
+                        ? 'The counters could not be read.'
+                        : atCap
+                            ? `Used up. Google is off: ${fallback}`
+                            : `${estimated ? 'Estimated. ' : ''}${formatCount(used)} of ${formatCount(
+                                cap,
+                            )} used. ${near ? 'Almost out, ' : ''
+                            }Google stops at ${formatCount(stopAt)}.`}
+            </Text>
+        </View>
+    );
+};
 
 export const SettingsChoice = ({ label, description, selected, onSelect }: SettingsChoiceProps) => {
     const { colors } = useTheme();
@@ -249,5 +343,52 @@ const styles = StyleSheet.create({
         ...typography.subheading,
         minWidth: 72,
         textAlign: 'center',
+    },
+    usageCaption: {
+        ...typography.caption,
+        marginTop: spacing.xs,
+    },
+    usageFill: {
+        borderRadius: radii.full,
+        height: '100%',
+    },
+    usageHead: {
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'space-between',
+    },
+    usageLabel: {
+        ...typography.body,
+        flex: 1,
+    },
+    usageMeter: {
+        height: 12,
+        justifyContent: 'center',
+        marginTop: spacing.md,
+        position: 'relative',
+    },
+    usageRow: {
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        paddingHorizontal: layout.cardPadding,
+        paddingVertical: spacing.sm,
+    },
+    usageStop: {
+        height: 12,
+        left: '95%',
+        position: 'absolute',
+        top: 0,
+        width: 2,
+    },
+    usageTrack: {
+        borderRadius: radii.full,
+        borderWidth: 1,
+        height: 8,
+        overflow: 'hidden',
+    },
+    usageValue: {
+        ...typography.readout,
+        flexShrink: 1,
+        textAlign: 'right',
     },
 });

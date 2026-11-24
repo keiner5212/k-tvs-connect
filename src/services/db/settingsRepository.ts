@@ -11,6 +11,7 @@ const DEFAULTS: AppSettings = {
     mapStyleUrl: 'https://tiles.openfreemap.org/styles/liberty',
     valhallaBaseUrl: 'https://valhalla1.openstreetmap.de',
     pinEnabled: false,
+    licencePlate: '',
 };
 
 interface SettingRow {
@@ -41,6 +42,7 @@ export const getSettings = async (): Promise<AppSettings> => {
         mapStyleUrl: stored.mapStyleUrl ?? DEFAULTS.mapStyleUrl,
         valhallaBaseUrl: stored.valhallaBaseUrl ?? DEFAULTS.valhallaBaseUrl,
         pinEnabled: stored.pinEnabled ? stored.pinEnabled === 'true' : DEFAULTS.pinEnabled,
+        licencePlate: stored.licencePlate ?? DEFAULTS.licencePlate,
     };
 };
 

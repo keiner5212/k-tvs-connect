@@ -1,8 +1,13 @@
 # Free map, search and routing
 
-Everything the map needs runs without an account, without an api key and without a
-card. The three service urls are settings, so you can move from the public
-instances to your own Docker instance without touching the code.
+The map, the search and the routing run on the free tier of google maps
+platform and on the free instances of valhalla and openfreemap. The three
+service urls are settings, so you can move from the public instances to your
+own Docker instance without touching the code.
+
+Nothing here costs money until a monthly free cap is passed, and the app
+counts every request it makes, so it stops before the cap and moves to the
+free alternative.
 
 ## Map tiles and styles
 
@@ -25,9 +30,15 @@ purpose:
 The tiles key has no application restriction because the tiles are fetched
 outside javascript, by the native maplibre loader, and that loader cannot send
 the `X-Android-Package` and `X-Android-Cert` headers an android restriction
-needs. The protection is the api restriction, the daily quota of **3.225**
-requests (100.000 per month divided by 31, google's own recipe) and a budget
-alert at one dollar. The key can only buy tiles, it cannot touch the search.
+needs. The protection is the api restriction, the monthly quota of **100.000**
+requests (the cap of the free tier of the sku, the price list of google) and a
+budget alert at one dollar. The key can only buy tiles, it cannot touch the
+search.
+
+The tiles are loaded by the native loader, so the app cannot see every request.
+It counts an estimate of **30 tiles** for every viewport that changes, and
+when the count reaches 95% of the monthly cap the app stops using the google
+style and keeps the openfreemap liberty style, with a banner that says so.
 
 Every tile request needs a session token, created with
 `POST https://tile.googleapis.com/v1/createSession`, valid for two weeks. The
@@ -76,8 +87,10 @@ so a request without those headers comes back as `REQUEST_DENIED`.
 
 What the free tier allows, per month: **10.000** geocoding requests (Essentials)
 and **5.000** places text searches (Pro, because the answer carries the name, the
-address and the position). The 1.000 requests of the "Compute Routes Enterprise"
-sku are the two wheeler routing, and the app does not use google for routing.
+address and the position). The app counts both, per sku and per month, and
+stops asking google before the cap. The search then answers from the local
+cache only. The 1.000 requests of the "Compute Routes Enterprise" sku are the
+two wheeler routing, and the app does not use that sku.
 
 Three things that cost quota, and how the app avoids them:
 
@@ -100,15 +113,17 @@ met yet.
 
 ## Routing
 
-Valhalla is the routing engine of OpenStreetMap. The app uses it for three
-things that matter here:
+There are two engines and each one answers what it is good at.
 
-- `motor_scooter` for the short route. It cuts through the barrio on secondary
-  and tertiary streets. `use_distance` is `0.55` and `top_speed` is 70, so a
-  50 km/h barrio avenue beats a 13 km/h alley, and a long highway is not worth
-  it. Service roads, living streets and tracks are penalized. Hierarchy pruning
-  stays off on this profile so a one-block camera dodge is visible. `auto` is
-  the safe route, with hierarchy pruning left on and `use_highways` at 1.
+**Valhalla** is the routing engine of OpenStreetMap. It is the only one that
+can avoid a point, so it answers the shortest route, the one that goes around
+the cameras and the points the rider marked, and it is free. The app uses it
+for three things that matter here:
+
+- `motor_scooter` for the route that goes around the cameras. `use_distance` is
+  `0.8`, so the shortest way wins and it takes the service streets when they
+  are shorter, and the service penalty is `50`, so the alleys are not closed.
+  Service roads and living streets are still penalized, tracks are never.
   `use_highways` only nudges motorway and trunk, so a secondary avenue can
   still be the fastest path and match the short route. The safe request asks
   for two alternates and keeps one with at least 12 points more primary or
@@ -159,7 +174,95 @@ Three things the public instance does not tell you:
 
 The FOSSGIS demo server `https://valhalla1.openstreetmap.de` is open to the public
 with one request per second and asks published apps to send an `X-Client-Id`
-header, which the app does.
+header, which the app does. It also refuses every route longer than **200 km**
+with the error `Path distance exceeds the max distance limit`, so a long trip
+is computed by google.
+
+**Google** answers the safe route.
+`POST https://routes.googleapis.com/directions/v2:computeRoutes` with
+`travelMode: DRIVE` and `routingPreference: TRAFFIC_AWARE` keeps the route on
+the main roads and times it with the traffic of the moment. It cannot avoid a
+point, so it never dodges the cameras and it never dodges the points the rider
+marked.
+
+The request is billed as **Compute Routes Pro**, $10.00 per 1.000 requests,
+with **5.000 free** every month. The two wheeler mode of google is the
+Enterprise sku, $15.00 per 1.000 and only 1.000 free, so the app does not
+use it and applies the motorcycle factor itself. The app counts the requests
+and, when the count reaches 95% of the free cap, the safe route goes back to
+valhalla.
+
+The free caps of every sku the app calls, and the price above the cap:
+
+| sku | free per month | price per 1.000 |
+| --- | --- | --- |
+| Routes: Compute Routes Pro | 5.000 | $10.00 |
+| Map Tiles API: 2D Map Tiles | 100.000 | $0.60 |
+| Geocoding | 10.000 | $5.00 |
+| Places API Text Search Pro | 5.000 | $32.00 |
+
+The caps reset on the first day of the month, midnight pacific time, and the
+app counts them on that clock, so the day it counts is the day google counts.
+The settings screen has one bar per service with what is left of the cap and
+the tick where the app stops calling google.
+
+## Avoiding the cameras
+
+The valhalla route always goes around the cameras: the ones that watch the
+rider from behind become points to avoid and the router is asked again, up to
+four times. It also goes around the points the rider marked. The google route
+never avoids anything, because it cannot, so the cameras that are on it are
+counted and drawn, and the sheet says so.
+
+The switch of the settings, **Avoid cameras on routes**, turns the whole
+feature off for every trip.
+
+## The arrival time
+
+The router gives a free flow time, with no traffic, and the scooter profile
+counts the barrio streets at 20 to 30 km/h. That is why a trip that waze says
+is five hours reads as eleven.
+
+The estimate the app shows is the time of a motorcycle on the same route:
+
+- The scooter route keeps the time valhalla gives for the scooter profile, with
+  a factor of **1.15** when the trip is inside the city, because the city slows
+  the ride down.
+- The safe route of google keeps the time google gives for the car, with the
+  traffic already in it, and a factor of **0.85** when the trip is inside the
+  city, because the motorcycle filters the queue. On a highway the factor is
+  **1**, the motorcycle is not faster there.
+- The safe route of valhalla is a car time without traffic, so it takes the
+  factor **1.1** of the motorcycle against the car and the **1.15** of the
+  city.
+
+The traffic factor comes from the observatory of movilidad de bogota, 23.0 km/h
+in the peak windows and 23.7 km/h all day, measured from waze probes. No
+engine publishes a motorcycle to car ratio, so the factors are the ones the
+app can defend and the times the rider actually took replace them on a saved
+route.
+
+## Pico y placa
+
+No city publishes a machine readable endpoint for the restriction, so the
+rules travel with the app in `src/config/picoYPlaca.ts`, with the official
+page of each city as the reference:
+
+- **Medellin**, the first number of the plate for the motorcycles and the last
+  one for the cars, from 05:00 to 20:00, and the rotation changes twice a year.
+- **Cali**, the last digit, from 06:00 to 19:00, and the motorcycles are
+  exempt.
+- **Bogota**, the parity of the day and the last digit, from 06:00 to 21:00,
+  and only on business days.
+- **Santa Marta**, the last digit, from 07:00 to 19:00, the motorcycles are
+  not exempt, and the rotation does not change in the middle of the year.
+
+The plate is typed in the settings, it stays in the encrypted database and it
+never leaves the phone. A motorcycle plate in colombia is three letters, two
+numbers and a letter at the end, so the number the restriction reads is the
+last one before that letter, except in Medellin, where the decree reads the
+first number for the motorcycles. The sheet of the route says what it means for
+that plate, that city and that hour.
 
 ## Running it locally
 

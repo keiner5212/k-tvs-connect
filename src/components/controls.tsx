@@ -1,5 +1,13 @@
 import React from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+    Alert,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import type { KeyboardTypeOptions } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
@@ -148,10 +156,12 @@ interface TextFieldProps {
     helperText?: string;
     errorText?: string;
     keyboardType?: KeyboardTypeOptions;
-    autoCapitalize?: 'none' | 'sentences' | 'words';
+    autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
     secureTextEntry?: boolean;
     editable?: boolean;
     maxLength?: number;
+    onBlur?: () => void;
+    returnKeyType?: 'done' | 'next' | 'go' | 'search' | 'send';
 }
 
 export const TextField = ({
@@ -166,6 +176,8 @@ export const TextField = ({
     secureTextEntry = false,
     editable = true,
     maxLength,
+    onBlur,
+    returnKeyType,
 }: TextFieldProps) => {
     const { colors } = useTheme();
 
@@ -179,8 +191,10 @@ export const TextField = ({
                 keyboardType={keyboardType}
                 maxLength={maxLength}
                 onChangeText={onChangeText}
+                onBlur={onBlur}
                 placeholder={placeholder}
                 placeholderTextColor={colors.mutedForeground}
+                returnKeyType={returnKeyType}
                 secureTextEntry={secureTextEntry}
                 value={value}
                 style={[
@@ -203,12 +217,59 @@ export const TextField = ({
     );
 };
 
+interface ThemeSwitchProps {
+    value: boolean;
+    onValueChange: (value: boolean) => void;
+    accessibilityLabel: string;
+    accessibilityHint?: string;
+    disabled?: boolean;
+}
+
+/**
+ * The switch of the app. The platform colors the thumb blue, so the thumb and
+ * the track come from the theme and the thumb keeps a 44 by 44 target.
+ */
+export const ThemeSwitch = ({
+    value,
+    onValueChange,
+    accessibilityLabel,
+    accessibilityHint,
+    disabled = false,
+}: ThemeSwitchProps) => {
+    const { colors } = useTheme();
+
+    return (
+        <View style={styles.switchTarget}>
+            <Switch
+                accessibilityHint={accessibilityHint}
+                accessibilityLabel={accessibilityLabel}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: value, disabled }}
+                disabled={disabled}
+                ios_backgroundColor={colors.border}
+                onValueChange={onValueChange}
+                thumbColor={
+                    disabled
+                        ? colors.mutedForeground
+                        : value
+                            ? colors.primaryForeground
+                            : colors.mutedForeground
+                }
+                trackColor={{
+                    true: disabled ? colors.muted : colors.primary,
+                    false: disabled ? colors.muted : colors.border,
+                }}
+                value={value}
+            />
+        </View>
+    );
+};
+
 interface SegmentedControlProps {
     options: { value: string; label: string }[];
     value: string;
     onChange: (value: string) => void;
 }
-
 export const SegmentedControl = ({ options, value, onChange }: SegmentedControlProps) => {
     const { colors } = useTheme();
 
@@ -363,5 +424,11 @@ const styles = StyleSheet.create({
         borderRadius: radii.full,
         flexDirection: 'row',
         padding: spacing.xs,
+    },
+    switchTarget: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 44,
+        minWidth: 44,
     },
 });

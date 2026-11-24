@@ -106,14 +106,14 @@ export const distanceBetween = (a: LatLon, b: LatLon): number => {
 
 /**
  * Where the target sits on the path: the distance along it from the start, the
- * index of the vertex before it, and how far it is from the path. The point is
- * projected on the segment it falls between, so the distance does not jump
- * with the spacing of the vertices.
+ * index of the vertex before it, the point it was projected to and how far it
+ * is from the path. The point is projected on the segment it falls between, so
+ * the distance does not jump with the spacing of the vertices.
  */
 export const projectOntoPath = (
     points: LatLon[],
     target: LatLon,
-): { index: number; distance: number; offset: number } | null => {
+): { index: number; distance: number; offset: number; point: LatLon } | null => {
     if (points.length === 0) {
         return null;
     }
@@ -145,9 +145,15 @@ export const projectOntoPath = (
     }
 
     const segment = cumulative[bestIndex + 1] - cumulative[bestIndex];
+    const start = points[bestIndex];
+    const end = points[bestIndex + 1];
     return {
         index: bestIndex,
         distance: cumulative[bestIndex] + segment * bestRatio,
         offset: bestOffset,
+        point: {
+            lat: start.lat + (end.lat - start.lat) * bestRatio,
+            lon: start.lon + (end.lon - start.lon) * bestRatio,
+        },
     };
 };

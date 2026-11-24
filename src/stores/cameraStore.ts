@@ -32,6 +32,8 @@ let lastLoadPosition: [number, number] | null = null;
 export interface CameraRefreshResult {
     sent: number;
     leftOut: number;
+    /** the cameras the route goes through, when the trip does not dodge them */
+    onRoute: number;
 }
 
 /**
@@ -94,7 +96,7 @@ export const useCameraStore = create<CameraState>((set, get) => ({
     avoidEnabled: true,
     radiusMeters: NEARBY_RADIUS_METERS,
     stale: false,
-    routeSplit: { sent: 0, leftOut: 0 },
+    routeSplit: { sent: 0, leftOut: 0, onRoute: 0 },
     routeCameras: [],
     removedCount: 0,
 
@@ -263,7 +265,7 @@ export const useCameraStore = create<CameraState>((set, get) => ({
                 const onRoad = everyDirection
                     ? offset.distanceMeters <= ROUTE_CORRIDOR_METERS
                     : offset.distanceMeters <= BEHIND_RANGE_METERS &&
-                      Math.abs(offset.crossMeters) <= ROAD_OFFSET_METERS;
+                    Math.abs(offset.crossMeters) <= ROAD_OFFSET_METERS;
                 if (!onRoad) {
                     if (runStart >= 0) {
                         runs.push({ start: runStart, end: index - 1 });
